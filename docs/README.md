@@ -29,7 +29,7 @@
 | [Static App Protocol v1 发布候选摘要](<protocols/Biunivers Static App Protocol v1 发布候选摘要.md>) | 发布候选 | 第三方最小交付、宿主承诺、边界和冻结判断 |
 | [Nassau App Manifest v1](<Nassau App Manifest v1.txt>) | 参考材料 | 内容寻址应用清单参考；不是 Biunivers V1 的直接运行协议 |
 
-## V0.2：施工完成，待合并
+## V0.2：已完成
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
