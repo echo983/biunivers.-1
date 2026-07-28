@@ -4,10 +4,19 @@ import { clampWindowBounds, getInitialWindowBounds } from "./windowBounds";
 
 describe("window bounds", () => {
   it("centers and limits a new window to the available viewport", () => {
-    const bounds = getInitialWindowBounds(defaultApps[2], {
+    const bounds = getInitialWindowBounds(
+      {
+        ...defaultApps[0],
+        defaultWidth: 1100,
+        defaultHeight: 720,
+        minWidth: 700,
+        minHeight: 450,
+      },
+      {
       width: 900,
       height: 600,
-    });
+      },
+    );
 
     expect(bounds).toEqual({
       x: 0,

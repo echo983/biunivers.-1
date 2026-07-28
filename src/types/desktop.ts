@@ -1,4 +1,5 @@
 export type AppKind = "internal" | "iframe" | "external";
+export type ConfigStatus = "loading" | "ready" | "error";
 
 export interface AppDefinition {
   id: string;

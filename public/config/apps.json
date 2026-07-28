@@ -1,18 +1,5 @@
 [
   {
-    "id": "system.about",
-    "name": "关于",
-    "kind": "internal",
-    "icon": "/icons/about.svg",
-    "internalComponent": "about",
-    "defaultWidth": 560,
-    "defaultHeight": 420,
-    "minWidth": 420,
-    "minHeight": 320,
-    "desktop": true,
-    "pinned": false
-  },
-  {
     "id": "files",
     "name": "文件",
     "kind": "iframe",
@@ -39,5 +26,16 @@
     "desktop": true,
     "pinned": true,
     "trusted": true
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "kind": "external",
+    "icon": "/icons/github.svg",
+    "url": "https://github.com",
+    "defaultWidth": 1000,
+    "defaultHeight": 700,
+    "desktop": false,
+    "pinned": false
   }
 ]

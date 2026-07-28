@@ -1,13 +1,22 @@
 import { defaultApps } from "../store/defaults";
 import { useDesktopStore } from "../store/desktopStore";
+import { loadAppConfig } from "../config/loadAppConfig";
 
 let bootstrapped = false;
 
-export function bootstrapDesktop() {
+export async function bootstrapDesktop() {
   if (bootstrapped) {
     return;
   }
 
   bootstrapped = true;
-  useDesktopStore.getState().setApps(defaultApps);
+  const store = useDesktopStore.getState();
+  store.setApps(defaultApps);
+  store.setConfigState("loading");
+
+  const result = await loadAppConfig();
+  useDesktopStore.getState().setApps(result.apps);
+  useDesktopStore
+    .getState()
+    .setConfigState(result.status, result.warnings, result.error);
 }

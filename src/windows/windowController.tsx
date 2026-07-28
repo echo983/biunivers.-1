@@ -9,6 +9,7 @@ import {
   TASKBAR_HEIGHT,
 } from "./windowBounds";
 import { creatingAppIds, windowRuntimeMap } from "./windowRuntimeMap";
+import { openExternalApp } from "../apps/openExternalApp";
 
 function getWindowLayer() {
   const layer = document.getElementById("desktop-window-layer");
@@ -34,7 +35,14 @@ export function openApp(appId: string) {
   const state = useDesktopStore.getState();
   const app = state.apps[appId];
 
-  if (!app || app.kind !== "internal") {
+  if (!app) {
+    return;
+  }
+
+  if (app.kind === "external") {
+    if (app.url) {
+      openExternalApp(app.url);
+    }
     return;
   }
 

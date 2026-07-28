@@ -22,12 +22,12 @@ describe("Desktop", () => {
     const search = screen.getByRole("searchbox", { name: "搜索应用" });
     expect(search).toHaveFocus();
 
-    await user.type(search, "trans");
+    await user.type(search, "set");
     const menu = screen.getByRole("dialog", { name: "App 菜单" });
     expect(
-      within(menu).getByRole("button", { name: "Transmission" }),
+      within(menu).getByRole("button", { name: "设置" }),
     ).toBeVisible();
-    expect(within(menu).queryByRole("button", { name: "文件" })).toBeNull();
+    expect(within(menu).queryByRole("button", { name: "关于" })).toBeNull();
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "App 菜单" })).toBeNull();
@@ -37,14 +37,14 @@ describe("Desktop", () => {
     const user = userEvent.setup();
     const { container } = render(<Desktop />);
     const desktopApps = screen.getByRole("group", { name: "桌面应用" });
-    const files = within(desktopApps).getByRole("button", { name: "文件" });
+    const about = within(desktopApps).getByRole("button", { name: "关于" });
 
-    await user.click(files);
-    expect(files).toHaveAttribute("data-selected", "true");
+    await user.click(about);
+    expect(about).toHaveAttribute("data-selected", "true");
 
     const iconLayer = container.querySelector(".desktop-icon-layer");
     expect(iconLayer).not.toBeNull();
     await user.click(iconLayer as Element);
-    expect(files).toHaveAttribute("data-selected", "false");
+    expect(about).toHaveAttribute("data-selected", "false");
   });
 });

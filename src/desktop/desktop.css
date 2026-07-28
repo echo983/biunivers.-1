@@ -315,6 +315,133 @@
   color: #852e2e;
 }
 
+.iframe-app {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  grid-template-rows: 38px 1fr;
+  background: #fff;
+}
+
+.iframe-app__toolbar {
+  display: flex;
+  min-width: 0;
+  padding: 4px 8px 4px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4b5463;
+  border-bottom: 1px solid #dfe4ed;
+  background: #f4f6fa;
+  font-size: 12px;
+}
+
+.iframe-app__toolbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.iframe-app__toolbar button {
+  padding: 5px 9px;
+  flex: 0 0 auto;
+  color: #334e77;
+  border: 1px solid #bccbe1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.app-iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.settings-app {
+  padding: 24px;
+}
+
+.settings-app h1 {
+  margin: 0;
+}
+
+.settings-app header p {
+  margin: 6px 0 24px;
+  color: #687284;
+}
+
+.settings-app h2 {
+  font-size: 16px;
+}
+
+.settings-app dl {
+  overflow: hidden;
+  border: 1px solid #dfe4ed;
+  border-radius: 9px;
+}
+
+.settings-app dl div {
+  display: grid;
+  padding: 10px 12px;
+  grid-template-columns: 130px 1fr;
+  border-bottom: 1px solid #e8ebf1;
+}
+
+.settings-app dl div:last-child {
+  border-bottom: 0;
+}
+
+.settings-app dt {
+  color: #687284;
+}
+
+.settings-app dd {
+  margin: 0;
+}
+
+.settings-app__error,
+.settings-app__warnings {
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.settings-app__error {
+  color: #812d2d;
+  background: #f9e4e4;
+}
+
+.settings-app__warnings {
+  color: #6e531d;
+  background: #fff4d8;
+}
+
+.settings-app__warnings h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.settings-app__warnings ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.config-error-banner {
+  position: absolute;
+  z-index: 45;
+  top: 12px;
+  left: 50%;
+  max-width: min(680px, calc(100vw - 24px));
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  color: #fff1d1;
+  border: 1px solid rgb(255 217 137 / 38%);
+  border-radius: 8px;
+  background: rgb(99 66 24 / 95%);
+  cursor: pointer;
+}
+
 @media (width < 1024px) {
   .desktop-size-notice {
     position: absolute;

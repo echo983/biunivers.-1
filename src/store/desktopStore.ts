@@ -1,15 +1,27 @@
 import { create } from "zustand";
 import { DEFAULT_WALLPAPER } from "./defaults";
-import type { AppDefinition, WindowState } from "../types/desktop";
+import type {
+  AppDefinition,
+  ConfigStatus,
+  WindowState,
+} from "../types/desktop";
 
 interface DesktopState {
   apps: Record<string, AppDefinition>;
+  configStatus: ConfigStatus;
+  configError?: string;
+  configWarnings: string[];
   windows: Record<string, WindowState>;
   activeAppId: string | null;
   wallpaper: string;
   selectedDesktopAppId: string | null;
   appMenuOpen: boolean;
   setApps: (apps: AppDefinition[]) => void;
+  setConfigState: (
+    status: ConfigStatus,
+    warnings?: string[],
+    error?: string,
+  ) => void;
   addWindow: (window: WindowState) => void;
   removeWindow: (appId: string) => void;
   setActiveApp: (appId: string | null) => void;
@@ -22,6 +34,9 @@ interface DesktopState {
 
 export const useDesktopStore = create<DesktopState>((set) => ({
   apps: {},
+  configStatus: "loading",
+  configError: undefined,
+  configWarnings: [],
   windows: {},
   activeAppId: null,
   wallpaper: DEFAULT_WALLPAPER,
@@ -31,6 +46,8 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     set({
       apps: Object.fromEntries(apps.map((app) => [app.id, app])),
     }),
+  setConfigState: (configStatus, configWarnings = [], configError) =>
+    set({ configStatus, configWarnings, configError }),
   addWindow: (window) =>
     set((state) => ({
       windows: { ...state.windows, [window.appId]: window },
