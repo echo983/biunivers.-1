@@ -12,6 +12,7 @@ import type {
   PreparedRepository,
   RepositorySource,
 } from "../github/githubSource.js";
+import { GitHubSourceError } from "../github/githubSource.js";
 import {
   ManifestValidationError,
   type ManifestValidator,
@@ -224,6 +225,13 @@ export class InspectionService {
       return this.publicResult(inspection);
     } catch (error) {
       await rm(stagingDir, { recursive: true, force: true });
+      if (error instanceof GitHubSourceError) {
+        throw new AppError(
+          error.code,
+          error.message,
+          error.status,
+        );
+      }
       throw error;
     }
   }

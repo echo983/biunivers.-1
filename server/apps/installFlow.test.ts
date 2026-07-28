@@ -18,6 +18,7 @@ import type {
   PreparedRepository,
   RepositorySource,
 } from "../github/githubSource.js";
+import { GitHubSourceError } from "../github/githubSource.js";
 import { createAppServer } from "../http/appServer.js";
 import { createDesktopServer } from "../http/desktopServer.js";
 import { ManifestValidator } from "../manifests/manifestValidator.js";
@@ -144,6 +145,28 @@ afterEach(async () => {
 });
 
 describe("inspect and install flow", () => {
+  it("maps source input failures to a structured application error", async () => {
+    const services = await createServices({
+      async prepare() {
+        throw new GitHubSourceError(
+          "GITHUB_REF_NOT_FOUND",
+          "无法解析 Git ref：GitHub HTTP 404",
+        );
+      },
+    });
+
+    await expect(
+      services.inspections.create(
+        "https://github.com/example/hello",
+        "missing",
+      ),
+    ).rejects.toMatchObject({
+      code: "GITHUB_REF_NOT_FOUND",
+      status: 400,
+      message: "无法解析 Git ref：GitHub HTTP 404",
+    });
+  });
+
   it("installs the template last and serves its entry and public config", async () => {
     const services = await createServices();
     const inspection = await services.inspections.create(

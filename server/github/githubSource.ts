@@ -35,12 +35,25 @@ export interface GitHubSourceOptions {
   maxAppFiles: number;
 }
 
+export class GitHubSourceError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: 400 | 502 = 400,
+  ) {
+    super(message);
+  }
+}
+
 export function parseGitHubRepository(value: string): GitHubRepository {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new Error("仓库地址必须是有效的 GitHub HTTPS URL");
+    throw new GitHubSourceError(
+      "GITHUB_REPOSITORY_INVALID",
+      "仓库地址必须是有效的 GitHub HTTPS URL",
+    );
   }
 
   if (
@@ -51,7 +64,10 @@ export function parseGitHubRepository(value: string): GitHubRepository {
     url.search ||
     url.hash
   ) {
-    throw new Error("仓库地址必须是 github.com 上的公开 HTTPS 仓库");
+    throw new GitHubSourceError(
+      "GITHUB_REPOSITORY_INVALID",
+      "仓库地址必须是 github.com 上的公开 HTTPS 仓库",
+    );
   }
 
   const segments = url.pathname
@@ -59,14 +75,20 @@ export function parseGitHubRepository(value: string): GitHubRepository {
     .filter(Boolean)
     .map((segment) => decodeURIComponent(segment));
   if (segments.length !== 2) {
-    throw new Error("仓库地址必须是 https://github.com/<owner>/<repo>");
+    throw new GitHubSourceError(
+      "GITHUB_REPOSITORY_INVALID",
+      "仓库地址必须是 https://github.com/<owner>/<repo>",
+    );
   }
 
   const owner = segments[0].toLowerCase();
   const name = segments[1].replace(/\.git$/i, "").toLowerCase();
   const namePattern = /^[a-z0-9_.-]+$/;
   if (!name || !namePattern.test(owner) || !namePattern.test(name)) {
-    throw new Error("GitHub owner 或仓库名称无效");
+    throw new GitHubSourceError(
+      "GITHUB_REPOSITORY_INVALID",
+      "GitHub owner 或仓库名称无效",
+    );
   }
 
   return {
@@ -79,7 +101,11 @@ export function parseGitHubRepository(value: string): GitHubRepository {
 function safeRedirect(current: URL, location: string) {
   const next = new URL(location, current);
   if (next.protocol !== "https:" || !GITHUB_HOSTS.has(next.hostname)) {
-    throw new Error("GitHub 下载被重定向到不允许的地址");
+    throw new GitHubSourceError(
+      "GITHUB_RESPONSE_INVALID",
+      "GitHub 下载被重定向到不允许的地址",
+      502,
+    );
   }
   return next;
 }
@@ -107,14 +133,22 @@ export class GitHubSource implements RepositorySource {
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
         if (!location) {
-          throw new Error("GitHub 返回了没有 location 的重定向");
+          throw new GitHubSourceError(
+            "GITHUB_RESPONSE_INVALID",
+            "GitHub 返回了没有 location 的重定向",
+            502,
+          );
         }
         current = safeRedirect(current, location);
         continue;
       }
       return response;
     }
-    throw new Error("GitHub 下载重定向次数过多");
+    throw new GitHubSourceError(
+      "GITHUB_RESPONSE_INVALID",
+      "GitHub 下载重定向次数过多",
+      502,
+    );
   }
 
   async prepare(
@@ -129,7 +163,7 @@ export class GitHubSource implements RepositorySource {
       return code < 32 || code === 127;
     });
     if (!ref || ref.length > 255 || containsControlCharacter) {
-      throw new Error("Git ref 无效");
+      throw new GitHubSourceError("GITHUB_REF_INVALID", "Git ref 无效");
     }
 
     const commitResponse = await this.fetchGitHub(
@@ -138,14 +172,21 @@ export class GitHubSource implements RepositorySource {
       ),
     );
     if (!commitResponse.ok) {
-      throw new Error(`无法解析 Git ref：GitHub HTTP ${commitResponse.status}`);
+      throw new GitHubSourceError(
+        "GITHUB_REF_NOT_FOUND",
+        `无法解析 Git ref：GitHub HTTP ${commitResponse.status}`,
+      );
     }
     const commitValue = (await commitResponse.json()) as { sha?: unknown };
     if (
       typeof commitValue.sha !== "string" ||
       !/^[0-9a-f]{40}$/.test(commitValue.sha)
     ) {
-      throw new Error("GitHub 没有返回有效的完整 commit SHA");
+      throw new GitHubSourceError(
+        "GITHUB_RESPONSE_INVALID",
+        "GitHub 没有返回有效的完整 commit SHA",
+        502,
+      );
     }
 
     await mkdir(stagingDir, { recursive: true });
@@ -159,7 +200,11 @@ export class GitHubSource implements RepositorySource {
       ),
     );
     if (!archiveResponse.ok || !archiveResponse.body) {
-      throw new Error(`无法下载仓库：GitHub HTTP ${archiveResponse.status}`);
+      throw new GitHubSourceError(
+        "GITHUB_DOWNLOAD_FAILED",
+        `无法下载仓库：GitHub HTTP ${archiveResponse.status}`,
+        502,
+      );
     }
 
     const declaredLength = Number(

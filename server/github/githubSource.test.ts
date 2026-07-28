@@ -13,6 +13,7 @@ import * as tar from "tar";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GitHubSource,
+  GitHubSourceError,
   parseGitHubRepository,
 } from "./githubSource.js";
 
@@ -91,5 +92,29 @@ describe("parseGitHubRepository", () => {
     expect(prepared.commitSha).toBe(sha);
     await expect(readFile(join(prepared.rootDir, "index.html"), "utf8"))
       .resolves.toContain("Hello");
+  });
+
+  it("classifies an unknown ref as a correctable repository error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 404 })),
+    );
+    const source = new GitHubSource({
+      maxArchiveBytes: 1024,
+      maxAppBytes: 1024,
+      maxAppFiles: 10,
+    });
+
+    await expect(
+      source.prepare(
+        "https://github.com/example/hello",
+        "missing",
+        join(tmpdir(), "unused-staging"),
+      ),
+    ).rejects.toMatchObject<Partial<GitHubSourceError>>({
+      code: "GITHUB_REF_NOT_FOUND",
+      status: 400,
+      message: "无法解析 Git ref：GitHub HTTP 404",
+    });
   });
 });
