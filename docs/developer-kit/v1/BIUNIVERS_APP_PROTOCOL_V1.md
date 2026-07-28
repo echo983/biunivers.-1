@@ -6,6 +6,8 @@
 
 固定文件名：`BIUNIVERS_APP_PROTOCOL_V1.md`
 
+规范性质：第三方适配时必须原文复制
+
 ## 1. 目标
 
 本协议定义第三方静态 Web 应用接入 Biunivers 所需的最小约定。

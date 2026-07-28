@@ -1,0 +1,28 @@
+{
+  "formatVersion": 1,
+  "protocol": "biunivers.static-app/1",
+  "appId": "io.github.example.hello",
+  "version": "1.0.0",
+  "name": "Biunivers Hello",
+  "description": "A minimal Biunivers static application.",
+  "license": "MIT",
+  "icon": "icon.svg",
+  "window": {
+    "defaultWidth": 640,
+    "defaultHeight": 480,
+    "minWidth": 320,
+    "minHeight": 240,
+    "desktop": true,
+    "pinned": false
+  },
+  "configuration": [
+    {
+      "key": "greeting",
+      "label": "问候语",
+      "description": "应用打开后显示的公开文本。",
+      "type": "string",
+      "required": false,
+      "default": "你好，Biunivers"
+    }
+  ]
+}
