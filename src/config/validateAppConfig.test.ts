@@ -51,7 +51,6 @@ describe("validateAppConfig", () => {
         ...validIframe,
         id: "system.unknown",
         kind: "internal",
-        internalComponent: "unknown",
       },
       {
         ...validIframe,
@@ -64,5 +63,6 @@ describe("validateAppConfig", () => {
 
     expect(result.apps.map((app) => app.id)).toEqual(["website"]);
     expect(result.warnings).toHaveLength(2);
+    expect(result.warnings[1]).toContain("internal 仅允许编译期注册");
   });
 });

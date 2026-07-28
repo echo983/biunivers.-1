@@ -8,11 +8,11 @@ interface AppRendererProps {
 }
 
 export function AppRenderer({ app }: AppRendererProps) {
-  if (app.kind === "internal" && app.internalComponent === "about") {
+  if (app.kind === "internal" && app.id === "system.about") {
     return <AboutApp />;
   }
 
-  if (app.kind === "internal" && app.internalComponent === "settings") {
+  if (app.kind === "internal" && app.id === "system.settings") {
     return <SettingsApp />;
   }
 

@@ -1,16 +1,16 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 面向单用户和可信应用，支持内建应用、iframe 自托管服务和新标签页外部应用。
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持内建应用、iframe 自托管服务和新标签页外部应用；V0.2 正在增加第三方静态应用安装与管理能力。
 
 ## 项目状态
 
-V0.1 已完成并归档，对应 `main` 基线提交：
+V0.1 已完成并归档，对应 `main` 历史基线提交：
 
 ```text
 8586732 implement browser desktop V0.1
 ```
 
-需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结；新功能应在新的版本需求或变更文档中描述。
+V0.2 正在 `agent/static-app-ecosystem-v0-2` 分支施工。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
 
 ## 环境要求
 
@@ -30,8 +30,14 @@ npm run dev
 
 ```bash
 npm run build
-npm run preview
+BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+BIUNIVERS_DATA_DIR="./data" \
+npm start
 ```
+
+Desktop Origin 为 `http://localhost:8080`，第三方 App Origin 为 `http://localhost:8081`。V0.2 要求两者不同。
 
 质量检查：
 
@@ -54,13 +60,14 @@ E2E 默认使用系统安装的 Google Chrome。
 
 该文件在页面启动时读取，不编译进 JavaScript，因此部署时可以直接替换。支持的类型：
 
-- `internal`：内建 React 应用，目前支持 `about` 和 `settings`；
 - `iframe`：在桌面窗口中打开可信 Web 服务，必须设置 `trusted: true`；
 - `external`：通过用户点击在新标签页打开。
 
+`internal` 只允许由源码中的编译期白名单注册，目前包含“设置”和“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
+
 ID 只允许小写字母、数字、点和短横线。iframe 和 external URL 支持 `/` 开头的同源路径以及 HTTP(S) 地址。
 
-无效条目会被跳过；其他有效应用继续加载。整个配置请求失败时，桌面仍提供内建“设置”和“关于”应用。
+无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面保留其他可用来源，内建“设置”和“关于”始终存在。
 
 ## iframe 与反向代理
 
@@ -82,26 +89,42 @@ https://desktop.example.com/services/transmission/
 
 ## Docker
 
-构建并运行：
+V0.2 使用 Node.js 单容器提供桌面、管理 API 和第三方应用静态文件。构建并运行：
 
 ```bash
-docker build -t biunivers:v0.1 .
-docker run --rm -p 8080:80 --name biunivers biunivers:v0.1
+docker build -t biunivers:v0.2-dev .
+docker run --rm \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+  -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+  -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+  -v biunivers-data:/data \
+  --name biunivers \
+  biunivers:v0.2-dev
 ```
 
-访问 `http://localhost:8080`。健康检查地址为 `/health.txt`。
+桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
 
 运行时替换应用配置：
 
 ```bash
-docker run --rm -p 8080:80 \
-  -v "$PWD/apps.json:/usr/share/nginx/html/config/apps.json:ro" \
-  --name biunivers biunivers:v0.1
+docker run --rm \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+  -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+  -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+  -v "$PWD/apps.json:/app/dist/client/config/apps.json:ro" \
+  -v biunivers-data:/data \
+  --name biunivers \
+  biunivers:v0.2-dev
 ```
 
-也可复制 `compose.example.yml`，在同目录准备 `apps.json` 后执行：
+也可复制 `compose.example.yml`，在同目录准备 `apps.json` 并设置管理员 token：
 
 ```bash
+export BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值"
 docker compose -f compose.example.yml up -d --build
 ```
 
@@ -117,4 +140,4 @@ biunivers.desktop.v1
 
 ## 当前范围
 
-V0.1 不提供账号、多用户、服务端状态同步、文件系统、应用商店、多桌面、移动端窗口模式或任意第三方 URL 安装能力。详细范围与设计参见 `docs` 目录。
+V0.2 仍不提供账号、多用户、文件系统、应用商店、多桌面、Host API 或应用间资源交换。当前施工范围和进度参见 `docs` 目录。
