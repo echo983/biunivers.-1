@@ -1,0 +1,50 @@
+import type { AppDefinition } from "../types/desktop";
+
+export const DEFAULT_WALLPAPER = "/wallpapers/default.svg";
+
+export const defaultApps: AppDefinition[] = [
+  {
+    id: "system.about",
+    name: "关于",
+    kind: "internal",
+    icon: "/icons/about.svg",
+    description: "查看桌面版本和基本信息",
+    internalComponent: "about",
+    defaultWidth: 560,
+    defaultHeight: 420,
+    minWidth: 420,
+    minHeight: 320,
+    desktop: true,
+    pinned: false,
+  },
+  {
+    id: "files",
+    name: "文件",
+    kind: "iframe",
+    icon: "/icons/files.svg",
+    description: "访问自托管文件服务",
+    url: "/services/files/",
+    defaultWidth: 1000,
+    defaultHeight: 700,
+    minWidth: 600,
+    minHeight: 400,
+    desktop: true,
+    pinned: true,
+    trusted: true,
+  },
+  {
+    id: "transmission",
+    name: "Transmission",
+    kind: "iframe",
+    icon: "/icons/transmission.svg",
+    description: "管理下载任务",
+    url: "/services/transmission/",
+    defaultWidth: 1100,
+    defaultHeight: 720,
+    minWidth: 700,
+    minHeight: 450,
+    desktop: true,
+    pinned: true,
+    trusted: true,
+  },
+];

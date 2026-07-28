@@ -1,0 +1,52 @@
+import { useEffect } from "react";
+import { bootstrapDesktop } from "../app/bootstrap";
+import { useDesktopStore } from "../store/desktopStore";
+import { AppMenu } from "./AppMenu";
+import { DesktopIcons } from "./DesktopIcons";
+import { Taskbar } from "./Taskbar";
+import "./desktop.css";
+
+export function Desktop() {
+  const wallpaper = useDesktopStore((state) => state.wallpaper);
+  const closeAppMenu = useDesktopStore((state) => state.closeAppMenu);
+  const selectDesktopApp = useDesktopStore(
+    (state) => state.selectDesktopApp,
+  );
+
+  useEffect(() => {
+    bootstrapDesktop();
+  }, []);
+
+  const clearDesktopSelection = () => {
+    selectDesktopApp(null);
+    closeAppMenu();
+  };
+
+  return (
+    <main className="desktop" aria-label="个人桌面">
+      <div
+        className="wallpaper-layer"
+        style={{ backgroundImage: `url("${wallpaper}")` }}
+        aria-hidden="true"
+      />
+      <div
+        className="desktop-icon-layer"
+        onMouseDown={(event) => {
+          if (event.target === event.currentTarget) {
+            clearDesktopSelection();
+          }
+        }}
+      >
+        <DesktopIcons />
+      </div>
+      <div className="window-layer" id="desktop-window-layer" />
+      <div className="app-menu-layer">
+        <AppMenu />
+      </div>
+      <Taskbar />
+      <div className="desktop-size-notice" role="status">
+        当前版本建议使用桌面浏览器访问。
+      </div>
+    </main>
+  );
+}
