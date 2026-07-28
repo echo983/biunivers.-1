@@ -28,6 +28,14 @@
 | [Biunivers App Management Protocol v1](<protocols/Biunivers App Management Protocol v1.md>) | 草案 | GitHub 安装、固定 commit、可靠注册、更新、停用、卸载和基本恢复 |
 | [Nassau App Manifest v1](<Nassau App Manifest v1.txt>) | 参考材料 | 内容寻址应用清单参考；不是 Biunivers V1 的直接运行协议 |
 
+## V0.2：设计中
+
+| 文档 | 状态 | 内容 |
+|---|---|---|
+| [V0.2 需求方案](<浏览器云端个人桌面 V0.2 需求方案.md>) | 草案 | 第三方静态应用检查、安装、运行和生命周期的产品闭环与验收场景 |
+| [V0.2 技术设计](<浏览器云端个人桌面 V0.2 技术设计.md>) | 草案 | 单进程双 origin、管理 API、GitHub source、JSON 持久化和前端集成 |
+| [V0.2 施工计划](<浏览器云端个人桌面 V0.2 施工计划.md>) | 待施工 | 七阶段任务、出口条件、测试矩阵和人工验收 |
+
 ## 归档规则
 
 - V0.1 文档用于解释已经交付的行为和当时的设计决策；
