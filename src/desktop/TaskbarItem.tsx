@@ -38,6 +38,7 @@ export function TaskbarItem({
         type="button"
         title={app.name}
         aria-label={app.name}
+        onMouseDown={(event) => event.stopPropagation()}
         onClick={() => activateTaskbarApp(app.id)}
         onContextMenu={(event) => {
           event.preventDefault();

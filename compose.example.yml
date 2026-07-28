@@ -1,0 +1,8 @@
+services:
+  desktop:
+    build: .
+    ports:
+      - "8080:80"
+    volumes:
+      - ./apps.json:/usr/share/nginx/html/config/apps.json:ro
+    restart: unless-stopped

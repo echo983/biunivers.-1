@@ -383,6 +383,12 @@
   padding: 24px;
 }
 
+.settings-app section {
+  margin-top: 28px;
+  padding-top: 4px;
+  border-top: 1px solid #dfe4ed;
+}
+
 .settings-app h1 {
   margin: 0;
 }
@@ -445,6 +451,58 @@
 .settings-app__warnings ul {
   margin: 0;
   padding-left: 20px;
+}
+
+.settings-app button {
+  padding: 7px 10px;
+  color: #334e77;
+  border: 1px solid #bccbe1;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.settings-app__wallpaper label {
+  display: block;
+  margin-bottom: 6px;
+  color: #687284;
+}
+
+.settings-app__wallpaper > div {
+  display: flex;
+  margin-bottom: 8px;
+  gap: 6px;
+}
+
+.settings-app__wallpaper input {
+  min-width: 0;
+  padding: 7px 9px;
+  flex: 1;
+  border: 1px solid #bcc5d3;
+  border-radius: 6px;
+}
+
+.settings-app__wallpaper p {
+  color: #812d2d;
+}
+
+.settings-app__app-list {
+  padding: 0;
+  list-style: none;
+}
+
+.settings-app__app-list li {
+  display: flex;
+  padding: 7px 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-app .settings-app__danger {
+  margin-top: 18px;
+  color: #8b2929;
+  border-color: #dda8a8;
 }
 
 .config-error-banner {

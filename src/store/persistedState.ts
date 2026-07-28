@@ -163,6 +163,12 @@ export function stopDesktopPersistence() {
   removePagehideListener = undefined;
 }
 
+export function clearLocalDesktopData() {
+  stopDesktopPersistence();
+  localStorage.removeItem(DESKTOP_STORAGE_KEY);
+  window.location.reload();
+}
+
 function reconcilePersistedState(
   persisted: PersistedDesktopState,
   apps: AppDefinition[],

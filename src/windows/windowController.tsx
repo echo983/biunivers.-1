@@ -179,6 +179,13 @@ export function closeApp(appId: string) {
   windowRuntimeMap.get(appId)?.winbox.close();
 }
 
+export function resetDesktopWindows() {
+  for (const appId of [...windowRuntimeMap.keys()]) {
+    closeApp(appId);
+  }
+  useDesktopStore.getState().clearWindowState();
+}
+
 export function activateTaskbarApp(appId: string) {
   const runtime = windowRuntimeMap.get(appId);
   if (!runtime) {

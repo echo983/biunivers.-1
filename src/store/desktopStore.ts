@@ -28,6 +28,7 @@ interface DesktopState {
   initializePinnedApps: (appIds: string[]) => void;
   pinApp: (appId: string) => void;
   unpinApp: (appId: string) => void;
+  resetPinnedApps: (appIds: string[]) => void;
   addWindow: (window: WindowState) => void;
   removeWindow: (appId: string) => void;
   setActiveApp: (appId: string | null) => void;
@@ -40,6 +41,7 @@ interface DesktopState {
     runningAppIds: string[];
     activeAppId: string | null;
   }) => void;
+  clearWindowState: () => void;
   selectDesktopApp: (appId: string | null) => void;
   openAppMenu: () => void;
   closeAppMenu: () => void;
@@ -86,6 +88,11 @@ export const useDesktopStore = create<DesktopState>((set) => ({
       pinnedAppIds: state.pinnedAppIds.filter((id) => id !== appId),
       pinnedInitialized: true,
     })),
+  resetPinnedApps: (appIds) =>
+    set({
+      pinnedAppIds: [...new Set(appIds)],
+      pinnedInitialized: true,
+    }),
   addWindow: (window) =>
     set((state) => ({
       windows: { ...state.windows, [window.appId]: window },
@@ -118,6 +125,12 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     set({
       ...desktop,
       pinnedInitialized: true,
+    }),
+  clearWindowState: () =>
+    set({
+      windows: {},
+      runningAppIds: [],
+      activeAppId: null,
     }),
   setActiveApp: (appId) =>
     set((state) => ({
