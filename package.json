@@ -13,6 +13,7 @@
   "dependencies": {
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "winbox": "0.2.82",
     "zustand": "5.0.14"
   },
   "devDependencies": {

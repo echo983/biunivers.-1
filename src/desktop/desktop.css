@@ -32,6 +32,10 @@
   pointer-events: none;
 }
 
+.window-layer .winbox {
+  pointer-events: auto;
+}
+
 .app-menu-layer {
   z-index: 40;
   pointer-events: none;
@@ -226,6 +230,89 @@
 
 .desktop-size-notice {
   display: none;
+}
+
+.app-window-root,
+.app-window-root__content {
+  width: 100%;
+  height: 100%;
+}
+
+.app-window-root {
+  overflow: auto;
+  color: #202632;
+  background: #f4f6fa;
+}
+
+.about-app {
+  display: grid;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 34px;
+  grid-template-columns: auto 1fr;
+  align-content: start;
+  gap: 8px 20px;
+}
+
+.about-app__mark {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  grid-row: span 2;
+  place-items: center;
+  color: #fff;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #4f76af, #293d61);
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.about-app h1 {
+  margin: 5px 0 2px;
+  font-size: 24px;
+}
+
+.about-app p {
+  grid-column: 1 / -1;
+  color: #596274;
+  line-height: 1.6;
+}
+
+.about-app__version {
+  margin: 0;
+  grid-column: auto !important;
+}
+
+.about-app dl {
+  display: grid;
+  margin: 12px 0 0;
+  grid-column: 1 / -1;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid #dfe4ed;
+  border-radius: 10px;
+  background: #dfe4ed;
+}
+
+.about-app dl div {
+  display: grid;
+  padding: 10px 12px;
+  grid-template-columns: 110px 1fr;
+  background: #fff;
+}
+
+.about-app dt {
+  color: #6c7482;
+}
+
+.about-app dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.window-error {
+  padding: 24px;
+  color: #852e2e;
 }
 
 @media (width < 1024px) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "../components/AppIcon";
 import { useDesktopStore } from "../store/desktopStore";
+import { openApp } from "../windows/windowController";
 
 export function AppMenu() {
   const appMenuOpen = useDesktopStore((state) => state.appMenuOpen);
@@ -89,11 +90,7 @@ export function AppMenu() {
               type="button"
               onClick={() => {
                 closeAppMenu();
-                window.dispatchEvent(
-                  new CustomEvent("desktop:open-placeholder", {
-                    detail: `${app.name} 将在窗口阶段接入`,
-                  }),
-                );
+                openApp(app.id);
               }}
             >
               <AppIcon app={app} compact />

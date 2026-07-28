@@ -4,6 +4,7 @@ import { useDesktopStore } from "../store/desktopStore";
 import { AppMenu } from "./AppMenu";
 import { DesktopIcons } from "./DesktopIcons";
 import { Taskbar } from "./Taskbar";
+import { clampOpenWindows } from "../windows/windowController";
 import "./desktop.css";
 
 export function Desktop() {
@@ -15,6 +16,20 @@ export function Desktop() {
 
   useEffect(() => {
     bootstrapDesktop();
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: number | undefined;
+    const handleResize = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(clampOpenWindows, 100);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.clearTimeout(timeoutId);
+    };
   }, []);
 
   const clearDesktopSelection = () => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppIcon } from "../components/AppIcon";
 import { useDesktopStore } from "../store/desktopStore";
+import { openApp } from "../windows/windowController";
 
 function formatTime() {
   return new Intl.DateTimeFormat(undefined, {
@@ -55,11 +56,7 @@ export function Taskbar() {
             type="button"
             title={app.name}
             onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("desktop:open-placeholder", {
-                  detail: `${app.name} 将在窗口阶段接入`,
-                }),
-              );
+              openApp(app.id);
             }}
           >
             <AppIcon app={app} compact />

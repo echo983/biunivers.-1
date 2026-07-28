@@ -16,3 +16,15 @@ export interface AppDefinition {
   pinned: boolean;
   trusted?: boolean;
 }
+
+export interface WindowState {
+  appId: string;
+  hidden: boolean;
+  maximized: boolean;
+  active: boolean;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  openedAt: number;
+}

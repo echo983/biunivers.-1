@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app/App";
 import "./styles/variables.css";
 import "./styles/global.css";
+import "winbox/dist/css/winbox.min.css";
 
 const rootElement = document.getElementById("root");
 

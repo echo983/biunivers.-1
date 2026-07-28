@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useDesktopStore } from "../store/desktopStore";
 import { AppIcon } from "../components/AppIcon";
+import { openApp } from "../windows/windowController";
 
 export function DesktopIcons() {
   const appRegistry = useDesktopStore((state) => state.apps);
@@ -15,13 +16,9 @@ export function DesktopIcons() {
 
   const desktopApps = apps.filter((app) => app.desktop);
 
-  const openPlaceholder = (appName: string) => {
+  const launchApp = (appId: string) => {
     closeAppMenu();
-    window.dispatchEvent(
-      new CustomEvent("desktop:open-placeholder", {
-        detail: `${appName} 将在窗口阶段接入`,
-      }),
-    );
+    openApp(appId);
   };
 
   return (
@@ -36,10 +33,10 @@ export function DesktopIcons() {
             event.stopPropagation();
             selectDesktopApp(app.id);
           }}
-          onDoubleClick={() => openPlaceholder(app.name)}
+          onDoubleClick={() => launchApp(app.id)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
-              openPlaceholder(app.name);
+              launchApp(app.id);
             }
           }}
         >
