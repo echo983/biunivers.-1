@@ -18,5 +18,10 @@ export async function bootstrapDesktop() {
   useDesktopStore.getState().setApps(result.apps);
   useDesktopStore
     .getState()
+    .initializePinnedApps(
+      result.apps.filter((app) => app.pinned).map((app) => app.id),
+    );
+  useDesktopStore
+    .getState()
     .setConfigState(result.status, result.warnings, result.error);
 }

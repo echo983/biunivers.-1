@@ -107,6 +107,10 @@ export function openApp(appId: string) {
         useDesktopStore
           .getState()
           .updateWindow(appId, { maximized: false }),
+      onhide: () =>
+        useDesktopStore.getState().updateWindow(appId, { hidden: true }),
+      onshow: () =>
+        useDesktopStore.getState().updateWindow(appId, { hidden: false }),
       onclose: () => {
         finalizeClose(appId);
         return false;
@@ -132,6 +136,34 @@ export function openApp(appId: string) {
 
 export function closeApp(appId: string) {
   windowRuntimeMap.get(appId)?.winbox.close();
+}
+
+export function activateTaskbarApp(appId: string) {
+  const runtime = windowRuntimeMap.get(appId);
+  if (!runtime) {
+    openApp(appId);
+    return;
+  }
+
+  if (runtime.winbox.hidden) {
+    runtime.winbox.show();
+    runtime.winbox.focus();
+    useDesktopStore.getState().updateWindow(appId, { hidden: false });
+    return;
+  }
+
+  if (runtime.winbox.focused) {
+    runtime.winbox.hide();
+    runtime.winbox.blur();
+    useDesktopStore.getState().updateWindow(appId, {
+      hidden: true,
+      active: false,
+    });
+    useDesktopStore.getState().setActiveApp(null);
+    return;
+  }
+
+  runtime.winbox.focus();
 }
 
 export function clampOpenWindows() {

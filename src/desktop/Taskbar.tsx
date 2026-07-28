@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { AppIcon } from "../components/AppIcon";
 import { useDesktopStore } from "../store/desktopStore";
-import { openApp } from "../windows/windowController";
+import { TaskbarItem } from "./TaskbarItem";
 
 function formatTime() {
   return new Intl.DateTimeFormat(undefined, {
@@ -14,7 +13,8 @@ export function Taskbar() {
   const toggleAppMenu = useDesktopStore((state) => state.toggleAppMenu);
   const appMenuOpen = useDesktopStore((state) => state.appMenuOpen);
   const appRegistry = useDesktopStore((state) => state.apps);
-  const apps = useMemo(() => Object.values(appRegistry), [appRegistry]);
+  const windows = useDesktopStore((state) => state.windows);
+  const pinnedAppIds = useDesktopStore((state) => state.pinnedAppIds);
   const [time, setTime] = useState(formatTime);
 
   useEffect(() => {
@@ -33,7 +33,15 @@ export function Taskbar() {
     };
   }, []);
 
-  const pinnedApps = apps.filter((app) => app.pinned);
+  const taskbarApps = useMemo(() => {
+    const ids = [
+      ...pinnedAppIds,
+      ...Object.keys(windows).filter((id) => !pinnedAppIds.includes(id)),
+    ];
+    return ids
+      .map((id) => appRegistry[id])
+      .filter((app): app is NonNullable<typeof app> => Boolean(app));
+  }, [appRegistry, pinnedAppIds, windows]);
 
   return (
     <footer className="taskbar">
@@ -49,18 +57,13 @@ export function Taskbar() {
         <span aria-hidden="true">◆</span>
       </button>
       <div className="taskbar__apps" aria-label="固定应用">
-        {pinnedApps.map((app) => (
-          <button
-            className="taskbar__app"
+        {taskbarApps.map((app) => (
+          <TaskbarItem
             key={app.id}
-            type="button"
-            title={app.name}
-            onClick={() => {
-              openApp(app.id);
-            }}
-          >
-            <AppIcon app={app} compact />
-          </button>
+            app={app}
+            windowState={windows[app.id]}
+            pinned={pinnedAppIds.includes(app.id)}
+          />
         ))}
       </div>
       <time className="taskbar__clock">{time}</time>

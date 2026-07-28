@@ -11,6 +11,8 @@ interface DesktopState {
   configStatus: ConfigStatus;
   configError?: string;
   configWarnings: string[];
+  pinnedAppIds: string[];
+  pinnedInitialized: boolean;
   windows: Record<string, WindowState>;
   activeAppId: string | null;
   wallpaper: string;
@@ -22,6 +24,9 @@ interface DesktopState {
     warnings?: string[],
     error?: string,
   ) => void;
+  initializePinnedApps: (appIds: string[]) => void;
+  pinApp: (appId: string) => void;
+  unpinApp: (appId: string) => void;
   addWindow: (window: WindowState) => void;
   removeWindow: (appId: string) => void;
   setActiveApp: (appId: string | null) => void;
@@ -37,6 +42,8 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   configStatus: "loading",
   configError: undefined,
   configWarnings: [],
+  pinnedAppIds: [],
+  pinnedInitialized: false,
   windows: {},
   activeAppId: null,
   wallpaper: DEFAULT_WALLPAPER,
@@ -48,6 +55,27 @@ export const useDesktopStore = create<DesktopState>((set) => ({
     }),
   setConfigState: (configStatus, configWarnings = [], configError) =>
     set({ configStatus, configWarnings, configError }),
+  initializePinnedApps: (appIds) =>
+    set((state) =>
+      state.pinnedInitialized
+        ? state
+        : {
+            pinnedAppIds: [...new Set(appIds)],
+            pinnedInitialized: true,
+          },
+    ),
+  pinApp: (appId) =>
+    set((state) => ({
+      pinnedAppIds: state.pinnedAppIds.includes(appId)
+        ? state.pinnedAppIds
+        : [...state.pinnedAppIds, appId],
+      pinnedInitialized: true,
+    })),
+  unpinApp: (appId) =>
+    set((state) => ({
+      pinnedAppIds: state.pinnedAppIds.filter((id) => id !== appId),
+      pinnedInitialized: true,
+    })),
   addWindow: (window) =>
     set((state) => ({
       windows: { ...state.windows, [window.appId]: window },

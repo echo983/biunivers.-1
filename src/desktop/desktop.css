@@ -194,6 +194,7 @@
 
 .taskbar__start,
 .taskbar__app {
+  position: relative;
   display: grid;
   width: 40px;
   height: 40px;
@@ -210,6 +211,25 @@
 .taskbar__start[data-active="true"],
 .taskbar__app:hover {
   background: rgb(255 255 255 / 10%);
+}
+
+.taskbar__app[data-running="true"]::after {
+  position: absolute;
+  right: 10px;
+  bottom: 1px;
+  left: 10px;
+  height: 2px;
+  content: "";
+  border-radius: 2px;
+  background: #87b8ff;
+}
+
+.taskbar__app[data-active="true"] {
+  background: rgb(255 255 255 / 13%);
+}
+
+.taskbar__app[data-hidden="true"] {
+  opacity: 0.62;
 }
 
 .taskbar__apps {
@@ -440,6 +460,34 @@
   border-radius: 8px;
   background: rgb(99 66 24 / 95%);
   cursor: pointer;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  min-width: 190px;
+  padding: 5px;
+  gap: 2px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-bg);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+}
+
+.context-menu button {
+  padding: 8px 10px;
+  color: var(--text-primary);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.context-menu button:hover,
+.context-menu button:focus-visible {
+  background: rgb(255 255 255 / 10%);
 }
 
 @media (width < 1024px) {

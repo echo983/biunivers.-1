@@ -22,13 +22,30 @@ vi.mock("winbox/src/js/winbox.js", () => ({
     hidden = false;
     focused = true;
     options: Record<string, unknown>;
-    show = vi.fn();
+    show = vi.fn(() => {
+      this.hidden = false;
+      const onshow = this.options.onshow as (() => void) | undefined;
+      onshow?.();
+      return this;
+    });
     focus = vi.fn(() => {
+      this.focused = true;
       const onfocus = this.options.onfocus as (() => void) | undefined;
       onfocus?.();
       return this;
     });
-    blur = vi.fn(() => this);
+    blur = vi.fn(() => {
+      this.focused = false;
+      const onblur = this.options.onblur as (() => void) | undefined;
+      onblur?.();
+      return this;
+    });
+    hide = vi.fn(() => {
+      this.hidden = true;
+      const onhide = this.options.onhide as (() => void) | undefined;
+      onhide?.();
+      return this;
+    });
     maximize = vi.fn(() => this);
     restore = vi.fn(() => this);
     resize = vi.fn(() => this);
@@ -46,7 +63,11 @@ vi.mock("winbox/src/js/winbox.js", () => ({
   },
 }));
 
-import { closeApp, openApp } from "./windowController";
+import {
+  activateTaskbarApp,
+  closeApp,
+  openApp,
+} from "./windowController";
 import { creatingAppIds, windowRuntimeMap } from "./windowRuntimeMap";
 
 describe("window controller", () => {
@@ -90,5 +111,17 @@ describe("window controller", () => {
     expect(windowRuntimeMap.has("system.about")).toBe(false);
     expect(useDesktopStore.getState().windows["system.about"]).toBeUndefined();
     expect(useDesktopStore.getState().activeAppId).toBeNull();
+  });
+
+  it("hides the active window and restores it from the taskbar", () => {
+    act(() => openApp("system.about"));
+
+    act(() => activateTaskbarApp("system.about"));
+    expect(useDesktopStore.getState().windows["system.about"].hidden).toBe(true);
+    expect(useDesktopStore.getState().activeAppId).toBeNull();
+
+    act(() => activateTaskbarApp("system.about"));
+    expect(useDesktopStore.getState().windows["system.about"].hidden).toBe(false);
+    expect(useDesktopStore.getState().activeAppId).toBe("system.about");
   });
 });

@@ -19,6 +19,8 @@ declare module "winbox/src/js/winbox.js" {
     onresize?: (width: number, height: number) => void;
     onmaximize?: () => void;
     onrestore?: () => void;
+    onhide?: () => void;
+    onshow?: () => void;
     onclose?: (force?: boolean) => boolean | void;
   }
 
