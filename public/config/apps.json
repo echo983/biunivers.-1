@@ -1,0 +1,41 @@
+[
+  {
+    "id": "files",
+    "name": "文件",
+    "kind": "iframe",
+    "icon": "/icons/files.svg",
+    "url": "/services/files/",
+    "defaultWidth": 1000,
+    "defaultHeight": 700,
+    "minWidth": 600,
+    "minHeight": 400,
+    "desktop": true,
+    "pinned": true,
+    "trusted": true
+  },
+  {
+    "id": "transmission",
+    "name": "Transmission",
+    "kind": "iframe",
+    "icon": "/icons/transmission.svg",
+    "url": "/services/transmission/",
+    "defaultWidth": 1100,
+    "defaultHeight": 720,
+    "minWidth": 700,
+    "minHeight": 450,
+    "desktop": true,
+    "pinned": true,
+    "trusted": true
+  },
+  {
+    "id": "github",
+    "name": "GitHub",
+    "kind": "external",
+    "icon": "/icons/github.svg",
+    "url": "https://github.com",
+    "defaultWidth": 1000,
+    "defaultHeight": 700,
+    "desktop": false,
+    "pinned": false
+  }
+]
