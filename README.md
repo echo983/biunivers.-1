@@ -1,6 +1,6 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持内建应用、iframe 自托管服务和新标签页外部应用；V0.2 正在增加第三方静态应用安装与管理能力。
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持内建应用、iframe 自托管服务和新标签页外部应用；V0.2 已实现第三方静态应用安装与管理闭环。
 
 ## 项目状态
 
@@ -10,7 +10,7 @@ V0.1 已完成并归档，对应 `main` 历史基线提交：
 8586732 implement browser desktop V0.1
 ```
 
-V0.2 正在 `agent/static-app-ecosystem-v0-2` 分支施工。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
+V0.2 已在 `agent/static-app-ecosystem-v0-2` 分支完成施工和人工验收，等待里程碑合并。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
 
 ## 环境要求
 
@@ -38,6 +38,20 @@ npm start
 ```
 
 Desktop Origin 为 `http://localhost:8080`，第三方 App Origin 为 `http://localhost:8081`。V0.2 要求两者不同。
+
+## 管理第三方应用
+
+1. 打开内建“设置”应用；
+2. 在“应用管理”中输入部署时设置的 `BIUNIVERS_ADMIN_TOKEN`；
+3. 填写公开 GitHub 仓库 URL 和 branch、tag 或 commit；
+4. 检查应用身份、许可证、固定 commit 和公开配置；
+5. 确认安装。
+
+管理员 token 只保存在当前设置窗口的内存中。安装配置会由 App Origin
+发送给浏览器，因此不能填写密码、私钥或长期 token。
+
+已安装应用可以在同一页面修改配置、更新、停用、启用和卸载。更新失败不会替换当前版本；
+卸载会删除服务器端文件和配置，但不能保证清除第三方应用已经写入浏览器的站点数据。
 
 质量检查：
 
@@ -106,6 +120,39 @@ docker run --rm \
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
 
+公网部署必须为两个 origin 分配不同的主机名。例如 Nginx：
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name desktop.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  listen 443 ssl;
+  server_name apps.desktop.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8081;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+对应环境变量：
+
+```text
+BIUNIVERS_DESKTOP_ORIGIN=https://desktop.example.com
+BIUNIVERS_APP_ORIGIN=https://apps.desktop.example.com
+```
+
 运行时替换应用配置：
 
 ```bash
@@ -138,6 +185,13 @@ biunivers.desktop.v1
 
 设置应用可以分别恢复默认壁纸、默认固定应用、默认窗口状态，或确认后清除本产品的全部本地数据。项目不会调用 `localStorage.clear()`。
 
-## 当前范围
+## 已知限制
 
-V0.2 仍不提供账号、多用户、文件系统、应用商店、多桌面、Host API 或应用间资源交换。当前施工范围和进度参见 `docs` 目录。
+- 只安装公开 `github.com` 仓库根目录中的应用；
+- 安装期间不执行依赖安装或构建脚本；
+- 配置是公开浏览器配置，不是 secret 存储；
+- 单进程 JSON 状态适合个人部署，不支持多副本并发写入；
+- 第三方应用使用独立 App Origin，但 V0.2 不提供细粒度 capability 系统；
+- 不提供账号、多用户、文件系统、应用商店、多桌面、Host API 或应用间资源交换。
+
+当前范围和验收记录参见 [`docs/`](docs/)。
