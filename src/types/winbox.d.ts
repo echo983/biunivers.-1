@@ -26,6 +26,7 @@ declare module "winbox/src/js/winbox.js" {
 
   export default class WinBox {
     constructor(options?: WinBoxOptions);
+    window: HTMLElement;
     x: number;
     y: number;
     width: number;

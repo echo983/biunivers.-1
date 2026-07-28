@@ -18,6 +18,7 @@ vi.mock("winbox/src/js/winbox.js", () => ({
     y = 0;
     width = 560;
     height = 420;
+    window = document.createElement("div");
     max = false;
     hidden = false;
     focused = true;
@@ -53,6 +54,8 @@ vi.mock("winbox/src/js/winbox.js", () => ({
 
     constructor(options: Record<string, unknown>) {
       this.options = options;
+      this.window.innerHTML =
+        '<span class="wb-min"></span><span class="wb-max"></span><span class="wb-close"></span>';
       winboxMock.instances.push(this);
     }
 

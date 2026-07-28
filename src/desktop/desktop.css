@@ -36,6 +36,21 @@
   pointer-events: auto;
 }
 
+.window-layer .winbox:not(.max) .wb-max {
+  background-image: url("/icons/window-maximize.svg");
+  background-size: 15px;
+}
+
+.window-layer .winbox.max .wb-max {
+  background-image: url("/icons/window-restore.svg");
+  background-size: 17px;
+}
+
+.window-layer .wb-control [role="button"]:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 85%);
+  outline-offset: -4px;
+}
+
 .app-menu-layer {
   z-index: 40;
   pointer-events: none;

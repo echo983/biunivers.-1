@@ -21,10 +21,24 @@ test("opens, controls, closes, and restores an internal window", async ({
   await expect(aboutWindow).toBeVisible();
   await expect(aboutWindow.getByRole("heading", { name: "Biunivers 桌面" })).toBeVisible();
 
+  const maximizeButton = aboutWindow.getByRole("button", { name: "最大化" });
+  await expect(maximizeButton).toHaveAttribute("title", "最大化");
+  await maximizeButton.click();
+  await expect(aboutWindow).toHaveClass(/max/);
+  const restoreButton = aboutWindow.getByRole("button", { name: "还原" });
+  await expect(restoreButton).toHaveAttribute("title", "还原");
+  await restoreButton.click();
+  await expect(aboutWindow).not.toHaveClass(/max/);
+
   const aboutTaskbar = page
     .locator(".taskbar")
     .getByRole("button", { name: "关于" });
   await aboutTaskbar.click();
+  await expect(aboutWindow).toBeHidden();
+  await aboutTaskbar.click();
+  await expect(aboutWindow).toBeVisible();
+
+  await aboutWindow.getByRole("button", { name: "最小化" }).click();
   await expect(aboutWindow).toBeHidden();
   await aboutTaskbar.click();
   await expect(aboutWindow).toBeVisible();

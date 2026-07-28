@@ -25,6 +25,89 @@ function getWindowLayer() {
   return layer;
 }
 
+function setWindowControlLabels(winbox: WinBox) {
+  const minimizeControl = winbox.window.querySelector<HTMLElement>(".wb-min");
+  const maximizeControl = winbox.window.querySelector<HTMLElement>(".wb-max");
+  const closeControl = winbox.window.querySelector<HTMLElement>(".wb-close");
+
+  if (minimizeControl) {
+    minimizeControl.title = "最小化";
+    minimizeControl.setAttribute("role", "button");
+    minimizeControl.setAttribute("aria-label", "最小化");
+    minimizeControl.tabIndex = 0;
+  }
+  if (maximizeControl) {
+    const label = winbox.max ? "还原" : "最大化";
+    maximizeControl.title = label;
+    maximizeControl.setAttribute("role", "button");
+    maximizeControl.setAttribute("aria-label", label);
+    maximizeControl.tabIndex = 0;
+  }
+  if (closeControl) {
+    closeControl.title = "关闭";
+    closeControl.setAttribute("role", "button");
+    closeControl.setAttribute("aria-label", "关闭");
+    closeControl.tabIndex = 0;
+  }
+}
+
+function hideWindow(appId: string) {
+  const runtime = windowRuntimeMap.get(appId);
+  if (!runtime) {
+    return;
+  }
+  runtime.winbox.hide();
+  runtime.winbox.blur();
+  useDesktopStore.getState().updateWindow(appId, {
+    hidden: true,
+    active: false,
+  });
+  if (useDesktopStore.getState().activeAppId === appId) {
+    useDesktopStore.getState().setActiveApp(null);
+  }
+}
+
+function wireWindowControls(appId: string, winbox: WinBox) {
+  const minimizeControl = winbox.window.querySelector<HTMLElement>(".wb-min");
+  const maximizeControl = winbox.window.querySelector<HTMLElement>(".wb-max");
+  const closeControl = winbox.window.querySelector<HTMLElement>(".wb-close");
+
+  const minimize = (event: Event) => {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    hideWindow(appId);
+  };
+  const activateOnKeyboard = (
+    event: KeyboardEvent,
+    action: () => void,
+  ) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      action();
+    }
+  };
+
+  minimizeControl?.addEventListener("click", minimize, true);
+  minimizeControl?.addEventListener("keydown", (event) =>
+    activateOnKeyboard(event, () => hideWindow(appId)),
+  );
+  maximizeControl?.addEventListener("keydown", (event) =>
+    activateOnKeyboard(event, () => {
+      if (winbox.max) {
+        winbox.restore().focus();
+      } else {
+        winbox.maximize().focus();
+      }
+    }),
+  );
+  closeControl?.addEventListener("keydown", (event) =>
+    activateOnKeyboard(event, () => {
+      winbox.close();
+    }),
+  );
+  setWindowControlLabels(winbox);
+}
+
 function finalizeClose(appId: string) {
   const runtime = windowRuntimeMap.get(appId);
   if (!runtime || runtime.closing) {
@@ -106,7 +189,7 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
       icon: app.icon,
       root: getWindowLayer(),
       mount: container,
-      class: ["no-min", "no-full"],
+      class: ["no-full"],
       x: bounds.x,
       y: bounds.y,
       width: bounds.width,
@@ -126,18 +209,26 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
         useDesktopStore
           .getState()
           .updateWindow(appId, { width, height }),
-      onmaximize: () =>
+      onmaximize: () => {
         useDesktopStore.getState().updateWindow(appId, {
           maximized: true,
           x: winboxRef.current?.x ?? bounds.x,
           y: winboxRef.current?.y ?? bounds.y,
           width: winboxRef.current?.width ?? bounds.width,
           height: winboxRef.current?.height ?? bounds.height,
-        }),
-      onrestore: () =>
+        });
+        if (winboxRef.current) {
+          setWindowControlLabels(winboxRef.current);
+        }
+      },
+      onrestore: () => {
         useDesktopStore
           .getState()
-          .updateWindow(appId, { maximized: false }),
+          .updateWindow(appId, { maximized: false });
+        if (winboxRef.current) {
+          setWindowControlLabels(winboxRef.current);
+        }
+      },
       onhide: () =>
         useDesktopStore.getState().updateWindow(appId, { hidden: true }),
       onshow: () =>
@@ -155,6 +246,7 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
       container,
       closing: false,
     });
+    wireWindowControls(appId, winbox);
     reactRoot.render(<WindowContent app={app} />);
     if (restoredState.maximized) {
       winbox.maximize(true);
@@ -201,13 +293,7 @@ export function activateTaskbarApp(appId: string) {
   }
 
   if (runtime.winbox.focused) {
-    runtime.winbox.hide();
-    runtime.winbox.blur();
-    useDesktopStore.getState().updateWindow(appId, {
-      hidden: true,
-      active: false,
-    });
-    useDesktopStore.getState().setActiveApp(null);
+    hideWindow(appId);
     return;
   }
 
