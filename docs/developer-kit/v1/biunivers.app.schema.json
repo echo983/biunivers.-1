@@ -134,6 +134,15 @@
           "type": "string",
           "maxLength": 300
         },
+        "type": {
+          "enum": [
+            "string",
+            "boolean",
+            "integer",
+            "number",
+            "select"
+          ]
+        },
         "required": {
           "type": "boolean"
         }

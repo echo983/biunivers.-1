@@ -520,6 +520,136 @@
   border-color: #dda8a8;
 }
 
+.app-management__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.app-management__heading h2,
+.app-management__heading p {
+  margin: 0;
+}
+
+.app-management__heading p {
+  margin-top: 5px;
+  color: #687284;
+}
+
+.app-management h3 {
+  margin: 20px 0 10px;
+  font-size: 14px;
+}
+
+.app-management__field {
+  display: grid;
+  margin: 10px 0;
+  gap: 5px;
+}
+
+.app-management__field > span {
+  color: #566176;
+}
+
+.app-management__field input,
+.app-management__field select {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #bcc5d3;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.app-management__field small,
+.app-management__checkbox small {
+  display: block;
+  margin-top: 3px;
+  color: #687284;
+}
+
+.app-management__checkbox {
+  display: flex;
+  margin: 12px 0;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.app-management__inspection {
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #d6dde8;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.app-management__inspection dl {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.app-management__notice {
+  padding: 9px 11px;
+  color: #6e531d;
+  border-radius: 7px;
+  background: #fff4d8;
+}
+
+.app-management__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.app-management__success {
+  padding: 10px 12px;
+  color: #225f3a;
+  border-radius: 8px;
+  background: #e1f4e8;
+}
+
+.app-management__installed ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-management__installed li {
+  display: flex;
+  padding: 10px 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e8ebf1;
+}
+
+.app-management__installed li div {
+  display: grid;
+  gap: 2px;
+}
+
+.app-management__installed span,
+.app-management__installed small {
+  overflow-wrap: anywhere;
+  color: #687284;
+}
+
+.app-management__item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.settings-app .app-management__item-actions .settings-app__danger {
+  margin-top: 0;
+}
+
+.app-management button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
 .config-error-banner {
   position: absolute;
   z-index: 45;

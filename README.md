@@ -1,16 +1,16 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 面向单用户和可信应用，支持内建应用、iframe 自托管服务和新标签页外部应用。
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持内建应用、iframe 自托管服务和新标签页外部应用；V0.2 已实现第三方静态应用安装与管理闭环。
 
 ## 项目状态
 
-V0.1 已完成并归档，对应 `main` 基线提交：
+V0.1 已完成并归档，对应 `main` 历史基线提交：
 
 ```text
 8586732 implement browser desktop V0.1
 ```
 
-需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结；新功能应在新的版本需求或变更文档中描述。
+V0.2 已完成施工和人工验收，并作为 `v0.2.0` 里程碑交付。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
 
 ## 环境要求
 
@@ -30,8 +30,28 @@ npm run dev
 
 ```bash
 npm run build
-npm run preview
+BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+BIUNIVERS_DATA_DIR="./data" \
+npm start
 ```
+
+Desktop Origin 为 `http://localhost:8080`，第三方 App Origin 为 `http://localhost:8081`。V0.2 要求两者不同。
+
+## 管理第三方应用
+
+1. 打开内建“设置”应用；
+2. 在“应用管理”中输入部署时设置的 `BIUNIVERS_ADMIN_TOKEN`；
+3. 填写公开 GitHub 仓库 URL 和 branch、tag 或 commit；
+4. 检查应用身份、许可证、固定 commit 和公开配置；
+5. 确认安装。
+
+管理员 token 只保存在当前设置窗口的内存中。安装配置会由 App Origin
+发送给浏览器，因此不能填写密码、私钥或长期 token。
+
+已安装应用可以在同一页面修改配置、更新、停用、启用和卸载。更新失败不会替换当前版本；
+卸载会删除服务器端文件和配置，但不能保证清除第三方应用已经写入浏览器的站点数据。
 
 质量检查：
 
@@ -54,13 +74,14 @@ E2E 默认使用系统安装的 Google Chrome。
 
 该文件在页面启动时读取，不编译进 JavaScript，因此部署时可以直接替换。支持的类型：
 
-- `internal`：内建 React 应用，目前支持 `about` 和 `settings`；
 - `iframe`：在桌面窗口中打开可信 Web 服务，必须设置 `trusted: true`；
 - `external`：通过用户点击在新标签页打开。
 
+`internal` 只允许由源码中的编译期白名单注册，目前包含“设置”和“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
+
 ID 只允许小写字母、数字、点和短横线。iframe 和 external URL 支持 `/` 开头的同源路径以及 HTTP(S) 地址。
 
-无效条目会被跳过；其他有效应用继续加载。整个配置请求失败时，桌面仍提供内建“设置”和“关于”应用。
+无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面保留其他可用来源，内建“设置”和“关于”始终存在。
 
 ## iframe 与反向代理
 
@@ -82,26 +103,75 @@ https://desktop.example.com/services/transmission/
 
 ## Docker
 
-构建并运行：
+V0.2 使用 Node.js 单容器提供桌面、管理 API 和第三方应用静态文件。构建并运行：
 
 ```bash
-docker build -t biunivers:v0.1 .
-docker run --rm -p 8080:80 --name biunivers biunivers:v0.1
+docker build -t biunivers:v0.2-dev .
+docker run --rm \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+  -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+  -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+  -v biunivers-data:/data \
+  --name biunivers \
+  biunivers:v0.2-dev
 ```
 
-访问 `http://localhost:8080`。健康检查地址为 `/health.txt`。
+桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
+
+公网部署必须为两个 origin 分配不同的主机名。例如 Nginx：
+
+```nginx
+server {
+  listen 443 ssl;
+  server_name desktop.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+
+server {
+  listen 443 ssl;
+  server_name apps.desktop.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8081;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+}
+```
+
+对应环境变量：
+
+```text
+BIUNIVERS_DESKTOP_ORIGIN=https://desktop.example.com
+BIUNIVERS_APP_ORIGIN=https://apps.desktop.example.com
+```
 
 运行时替换应用配置：
 
 ```bash
-docker run --rm -p 8080:80 \
-  -v "$PWD/apps.json:/usr/share/nginx/html/config/apps.json:ro" \
-  --name biunivers biunivers:v0.1
+docker run --rm \
+  -p 8080:8080 \
+  -p 8081:8081 \
+  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
+  -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
+  -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
+  -v "$PWD/apps.json:/app/dist/client/config/apps.json:ro" \
+  -v biunivers-data:/data \
+  --name biunivers \
+  biunivers:v0.2-dev
 ```
 
-也可复制 `compose.example.yml`，在同目录准备 `apps.json` 后执行：
+也可复制 `compose.example.yml`，在同目录准备 `apps.json` 并设置管理员 token：
 
 ```bash
+export BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值"
 docker compose -f compose.example.yml up -d --build
 ```
 
@@ -115,6 +185,13 @@ biunivers.desktop.v1
 
 设置应用可以分别恢复默认壁纸、默认固定应用、默认窗口状态，或确认后清除本产品的全部本地数据。项目不会调用 `localStorage.clear()`。
 
-## 当前范围
+## 已知限制
 
-V0.1 不提供账号、多用户、服务端状态同步、文件系统、应用商店、多桌面、移动端窗口模式或任意第三方 URL 安装能力。详细范围与设计参见 `docs` 目录。
+- 只安装公开 `github.com` 仓库根目录中的应用；
+- 安装期间不执行依赖安装或构建脚本；
+- 配置是公开浏览器配置，不是 secret 存储；
+- 单进程 JSON 状态适合个人部署，不支持多副本并发写入；
+- 第三方应用使用独立 App Origin，但 V0.2 不提供细粒度 capability 系统；
+- 不提供账号、多用户、文件系统、应用商店、多桌面、Host API 或应用间资源交换。
+
+当前范围和验收记录参见 [`docs/`](docs/)。

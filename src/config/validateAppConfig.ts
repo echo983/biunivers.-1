@@ -1,8 +1,7 @@
 import type { AppDefinition, AppKind } from "../types/desktop";
 
 const APP_ID_PATTERN = /^[a-z0-9.-]+$/;
-const APP_KINDS = new Set<AppKind>(["internal", "iframe", "external"]);
-const INTERNAL_COMPONENTS = new Set(["about", "settings"]);
+const CONFIG_APP_KINDS = new Set<AppKind>(["iframe", "external"]);
 
 export type AppValidationResult =
   | { ok: true; app: AppDefinition }
@@ -66,8 +65,8 @@ export function validateAppConfigEntry(
   if (!isNonEmptyString(icon)) {
     issues.push("icon 必须是非空字符串");
   }
-  if (typeof kind !== "string" || !APP_KINDS.has(kind as AppKind)) {
-    issues.push("kind 必须是 internal、iframe 或 external");
+  if (typeof kind !== "string" || !CONFIG_APP_KINDS.has(kind as AppKind)) {
+    issues.push("kind 必须是 iframe 或 external；internal 仅允许编译期注册");
   }
   if (!isPositiveNumber(defaultWidth)) {
     issues.push("defaultWidth 必须是正数");
@@ -102,15 +101,6 @@ export function validateAppConfigEntry(
     issues.push("pinned 必须是 boolean");
   }
 
-  if (kind === "internal") {
-    if (
-      !isNonEmptyString(value.internalComponent) ||
-      !INTERNAL_COMPONENTS.has(value.internalComponent)
-    ) {
-      issues.push("internalComponent 不是允许的内建应用");
-    }
-  }
-
   if (kind === "iframe" || kind === "external") {
     if (!isNonEmptyString(value.url) || !isSupportedUrl(value.url)) {
       issues.push("url 必须是同源绝对路径或 HTTP(S) URL");
@@ -136,9 +126,6 @@ export function validateAppConfigEntry(
         ? value.description
         : undefined,
       url: isNonEmptyString(value.url) ? value.url : undefined,
-      internalComponent: isNonEmptyString(value.internalComponent)
-        ? value.internalComponent
-        : undefined,
       defaultWidth: defaultWidth as number,
       defaultHeight: defaultHeight as number,
       minWidth: isPositiveNumber(minWidth) ? minWidth : undefined,

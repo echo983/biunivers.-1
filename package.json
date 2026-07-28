@@ -5,15 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:client && npm run build:server",
+    "build:client": "tsc -b && vite build",
+    "build:server": "tsc -p tsconfig.server.json",
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node dist/server/index.js"
   },
   "dependencies": {
+    "ajv": "8.20.0",
+    "express": "5.1.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "tar": "7.5.22",
     "winbox": "0.2.82",
     "zustand": "5.0.14"
   },
@@ -23,6 +29,7 @@
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",
+    "@types/express": "5.0.3",
     "@types/node": "24.10.14",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

@@ -3,6 +3,7 @@ import { useDesktopStore } from "../../store/desktopStore";
 import { DEFAULT_WALLPAPER } from "../../store/defaults";
 import { clearLocalDesktopData } from "../../store/persistedState";
 import { resetDesktopWindows } from "../../windows/windowController";
+import { AppManagement } from "./AppManagement";
 
 function isWallpaperUrl(value: string) {
   if (value.startsWith("/") && !value.startsWith("//")) {
@@ -35,7 +36,7 @@ export function SettingsApp() {
   const statusLabel = {
     loading: "正在加载",
     ready: "已就绪",
-    error: "加载失败，正在使用内建应用",
+    error: "部分或全部应用来源加载失败",
   }[configStatus];
 
   const applyWallpaper = (event: FormEvent) => {
@@ -122,6 +123,8 @@ export function SettingsApp() {
           恢复默认桌面状态
         </button>
       </section>
+
+      <AppManagement />
 
       <section>
         <h2>系统</h2>

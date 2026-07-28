@@ -8,7 +8,6 @@ export interface AppDefinition {
   icon: string;
   description?: string;
   url?: string;
-  internalComponent?: string;
   defaultWidth: number;
   defaultHeight: number;
   minWidth?: number;

@@ -6,12 +6,27 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.28-alpine
+FROM node:20-alpine AS runtime
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist /usr/share/nginx/html
+ENV NODE_ENV=production
+WORKDIR /app
 
-EXPOSE 80
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \
+  ./docs/developer-kit/v1/biunivers.app.schema.json
+COPY --from=build /app/docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md \
+  ./docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md
+
+RUN mkdir -p /data && chown node:node /data
+
+USER node
+
+EXPOSE 8080 8081
+VOLUME ["/data"]
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -q -O /dev/null http://127.0.0.1/health.txt || exit 1
+  CMD node -e "fetch('http://127.0.0.1:8080/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+
+CMD ["node", "dist/server/index.js"]
