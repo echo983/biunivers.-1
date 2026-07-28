@@ -14,6 +14,7 @@ export function Taskbar() {
   const appMenuOpen = useDesktopStore((state) => state.appMenuOpen);
   const appRegistry = useDesktopStore((state) => state.apps);
   const windows = useDesktopStore((state) => state.windows);
+  const runningAppIds = useDesktopStore((state) => state.runningAppIds);
   const pinnedAppIds = useDesktopStore((state) => state.pinnedAppIds);
   const [time, setTime] = useState(formatTime);
 
@@ -36,12 +37,12 @@ export function Taskbar() {
   const taskbarApps = useMemo(() => {
     const ids = [
       ...pinnedAppIds,
-      ...Object.keys(windows).filter((id) => !pinnedAppIds.includes(id)),
+      ...runningAppIds.filter((id) => !pinnedAppIds.includes(id)),
     ];
     return ids
       .map((id) => appRegistry[id])
       .filter((app): app is NonNullable<typeof app> => Boolean(app));
-  }, [appRegistry, pinnedAppIds, windows]);
+  }, [appRegistry, pinnedAppIds, runningAppIds]);
 
   return (
     <footer className="taskbar">
@@ -61,7 +62,9 @@ export function Taskbar() {
           <TaskbarItem
             key={app.id}
             app={app}
-            windowState={windows[app.id]}
+            windowState={
+              runningAppIds.includes(app.id) ? windows[app.id] : undefined
+            }
             pinned={pinnedAppIds.includes(app.id)}
           />
         ))}

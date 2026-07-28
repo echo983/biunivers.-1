@@ -1,6 +1,10 @@
 import { defaultApps } from "../store/defaults";
 import { useDesktopStore } from "../store/desktopStore";
 import { loadAppConfig } from "../config/loadAppConfig";
+import {
+  readPersistedDesktopState,
+  restoreDesktopSession,
+} from "../store/persistedState";
 
 let bootstrapped = false;
 
@@ -10,6 +14,7 @@ export async function bootstrapDesktop() {
   }
 
   bootstrapped = true;
+  const persisted = readPersistedDesktopState();
   const store = useDesktopStore.getState();
   store.setApps(defaultApps);
   store.setConfigState("loading");
@@ -24,4 +29,5 @@ export async function bootstrapDesktop() {
   useDesktopStore
     .getState()
     .setConfigState(result.status, result.warnings, result.error);
+  await restoreDesktopSession(persisted, result.apps);
 }

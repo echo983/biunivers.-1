@@ -29,3 +29,23 @@ export interface WindowState {
   height: number;
   openedAt: number;
 }
+
+export interface PersistedDesktopState {
+  schemaVersion: 1;
+  preferencesInitialized: true;
+  wallpaper: string;
+  pinnedAppIds: string[];
+  runningAppIds: string[];
+  activeAppId: string | null;
+  windows: Record<
+    string,
+    {
+      hidden: boolean;
+      maximized: boolean;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
+  >;
+}

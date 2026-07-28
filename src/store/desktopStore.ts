@@ -14,6 +14,7 @@ interface DesktopState {
   pinnedAppIds: string[];
   pinnedInitialized: boolean;
   windows: Record<string, WindowState>;
+  runningAppIds: string[];
   activeAppId: string | null;
   wallpaper: string;
   selectedDesktopAppId: string | null;
@@ -31,6 +32,14 @@ interface DesktopState {
   removeWindow: (appId: string) => void;
   setActiveApp: (appId: string | null) => void;
   updateWindow: (appId: string, update: Partial<WindowState>) => void;
+  setWallpaper: (wallpaper: string) => void;
+  hydrateDesktop: (state: {
+    wallpaper: string;
+    pinnedAppIds: string[];
+    windows: Record<string, WindowState>;
+    runningAppIds: string[];
+    activeAppId: string | null;
+  }) => void;
   selectDesktopApp: (appId: string | null) => void;
   openAppMenu: () => void;
   closeAppMenu: () => void;
@@ -45,6 +54,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   pinnedAppIds: [],
   pinnedInitialized: false,
   windows: {},
+  runningAppIds: [],
   activeAppId: null,
   wallpaper: DEFAULT_WALLPAPER,
   selectedDesktopAppId: null,
@@ -79,16 +89,35 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   addWindow: (window) =>
     set((state) => ({
       windows: { ...state.windows, [window.appId]: window },
+      runningAppIds: state.runningAppIds.includes(window.appId)
+        ? state.runningAppIds
+        : [...state.runningAppIds, window.appId],
     })),
   removeWindow: (appId) =>
     set((state) => {
-      const windows = { ...state.windows };
-      delete windows[appId];
+      const current = state.windows[appId];
       return {
-        windows,
+        windows: current
+          ? {
+              ...state.windows,
+              [appId]: {
+                ...current,
+                hidden: false,
+                maximized: false,
+                active: false,
+              },
+            }
+          : state.windows,
+        runningAppIds: state.runningAppIds.filter((id) => id !== appId),
         activeAppId:
           state.activeAppId === appId ? null : state.activeAppId,
       };
+    }),
+  setWallpaper: (wallpaper) => set({ wallpaper }),
+  hydrateDesktop: (desktop) =>
+    set({
+      ...desktop,
+      pinnedInitialized: true,
     }),
   setActiveApp: (appId) =>
     set((state) => ({

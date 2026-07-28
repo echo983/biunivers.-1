@@ -79,6 +79,7 @@ describe("window controller", () => {
     useDesktopStore.setState({
       apps: Object.fromEntries(defaultApps.map((app) => [app.id, app])),
       windows: {},
+      runningAppIds: [],
       activeAppId: null,
     });
   });
@@ -91,11 +92,14 @@ describe("window controller", () => {
 
   it("reuses the existing window for a single-instance app", () => {
     act(() => openApp("system.about"));
+    const instance = winboxMock.instances[0];
+    instance.show.mockClear();
+    instance.focus.mockClear();
     act(() => openApp("system.about"));
 
     expect(winboxMock.instances).toHaveLength(1);
-    expect(winboxMock.instances[0].show).toHaveBeenCalledOnce();
-    expect(winboxMock.instances[0].focus).toHaveBeenCalledOnce();
+    expect(instance.show).toHaveBeenCalledOnce();
+    expect(instance.focus).toHaveBeenCalledOnce();
     expect(windowRuntimeMap.has("system.about")).toBe(true);
   });
 
@@ -109,7 +113,10 @@ describe("window controller", () => {
     });
 
     expect(windowRuntimeMap.has("system.about")).toBe(false);
-    expect(useDesktopStore.getState().windows["system.about"]).toBeUndefined();
+    expect(
+      useDesktopStore.getState().runningAppIds.includes("system.about"),
+    ).toBe(false);
+    expect(useDesktopStore.getState().windows["system.about"]).toBeDefined();
     expect(useDesktopStore.getState().activeAppId).toBeNull();
   });
 

@@ -10,6 +10,12 @@ import {
 } from "./windowBounds";
 import { creatingAppIds, windowRuntimeMap } from "./windowRuntimeMap";
 import { openExternalApp } from "../apps/openExternalApp";
+import type { WindowState } from "../types/desktop";
+
+interface OpenAppOptions {
+  restoreState?: boolean;
+  focus?: boolean;
+}
 
 function getWindowLayer() {
   const layer = document.getElementById("desktop-window-layer");
@@ -26,12 +32,18 @@ function finalizeClose(appId: string) {
   }
 
   runtime.closing = true;
+  useDesktopStore.getState().updateWindow(appId, {
+    x: runtime.winbox.x,
+    y: runtime.winbox.y,
+    width: runtime.winbox.width,
+    height: runtime.winbox.height,
+  });
   windowRuntimeMap.delete(appId);
   runtime.reactRoot.unmount();
   useDesktopStore.getState().removeWindow(appId);
 }
 
-export function openApp(appId: string) {
+export function openApp(appId: string, options: OpenAppOptions = {}) {
   const state = useDesktopStore.getState();
   const app = state.apps[appId];
 
@@ -61,18 +73,33 @@ export function openApp(appId: string) {
   const container = document.createElement("div");
   container.className = "app-window-root";
   const reactRoot = createRoot(container);
-  const bounds = getInitialWindowBounds(app);
+  const savedWindow = state.windows[appId];
+  const bounds = savedWindow
+    ? clampWindowBounds({
+        x: savedWindow.x,
+        y: savedWindow.y,
+        width: savedWindow.width,
+        height: savedWindow.height,
+      })
+    : getInitialWindowBounds(app);
+  const restoredState: Pick<WindowState, "hidden" | "maximized"> =
+    options.restoreState && savedWindow
+      ? {
+          hidden: savedWindow.hidden,
+          maximized: savedWindow.maximized,
+        }
+      : { hidden: false, maximized: false };
 
   state.addWindow({
     appId,
-    hidden: false,
-    maximized: false,
+    ...restoredState,
     active: false,
     ...bounds,
     openedAt: Date.now(),
   });
 
   try {
+    const winboxRef: { current?: WinBox } = {};
     const winbox = new WinBox({
       id: `app-${app.id}`,
       title: app.name,
@@ -100,9 +127,13 @@ export function openApp(appId: string) {
           .getState()
           .updateWindow(appId, { width, height }),
       onmaximize: () =>
-        useDesktopStore
-          .getState()
-          .updateWindow(appId, { maximized: true }),
+        useDesktopStore.getState().updateWindow(appId, {
+          maximized: true,
+          x: winboxRef.current?.x ?? bounds.x,
+          y: winboxRef.current?.y ?? bounds.y,
+          width: winboxRef.current?.width ?? bounds.width,
+          height: winboxRef.current?.height ?? bounds.height,
+        }),
       onrestore: () =>
         useDesktopStore
           .getState()
@@ -116,6 +147,7 @@ export function openApp(appId: string) {
         return false;
       },
     });
+    winboxRef.current = winbox;
 
     windowRuntimeMap.set(appId, {
       winbox,
@@ -124,7 +156,16 @@ export function openApp(appId: string) {
       closing: false,
     });
     reactRoot.render(<WindowContent app={app} />);
-    useDesktopStore.getState().setActiveApp(appId);
+    if (restoredState.maximized) {
+      winbox.maximize(true);
+    }
+    if (restoredState.hidden) {
+      winbox.hide(true);
+      winbox.blur();
+    } else if (options.focus !== false) {
+      winbox.focus();
+      useDesktopStore.getState().setActiveApp(appId);
+    }
   } catch (error) {
     reactRoot.unmount();
     useDesktopStore.getState().removeWindow(appId);
