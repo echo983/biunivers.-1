@@ -25,6 +25,12 @@ export type CreateObjectResult = "created" | "already-exists-identical";
 export interface ImmutableObjectStore {
   create(key: ObjectKey, completeBytes: Uint8Array): Promise<CreateObjectResult>;
   get(key: ObjectKey): Promise<Uint8Array>;
+  getRange?(
+    key: ObjectKey,
+    start: number,
+    endInclusive: number,
+    expectedSize: number,
+  ): Promise<Uint8Array>;
   head(key: ObjectKey): Promise<ObjectMetadata>;
   list(namespace: string, kind?: ObjectKind): Promise<ObjectListItem[]>;
 }

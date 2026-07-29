@@ -77,6 +77,38 @@ export class LocalWormObjectStore implements ImmutableObjectStore {
     }
   }
 
+  async getRange(
+    key: ObjectKey,
+    start: number,
+    endInclusive: number,
+    expectedSize: number,
+  ): Promise<Uint8Array> {
+    validateObjectKey(key);
+    const handle = await open(this.#objectPath(key), "r").catch((error) => {
+      throw mapNotFound(error, key);
+    });
+    try {
+      const metadata = await handle.stat();
+      if (metadata.size !== expectedSize) {
+        throw new ObjectStoreError(
+          "OBJECT_INTEGRITY_FAILURE",
+          "Immutable object size does not match its expected size.",
+        );
+      }
+      const result = new Uint8Array(endInclusive - start + 1);
+      const { bytesRead } = await handle.read(result, 0, result.length, start);
+      if (bytesRead !== result.length) {
+        throw new ObjectStoreError(
+          "OBJECT_INTEGRITY_FAILURE",
+          "Immutable object range was truncated.",
+        );
+      }
+      return result;
+    } finally {
+      await handle.close();
+    }
+  }
+
   async head(key: ObjectKey): Promise<ObjectMetadata> {
     validateObjectKey(key);
     try {

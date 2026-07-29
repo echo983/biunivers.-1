@@ -45,6 +45,46 @@ export class ImmutableObjectRepository {
     return bytes;
   }
 
+  async getRange(
+    kind: ObjectKind,
+    fidHex: string,
+    start: number,
+    endInclusive: number,
+    expectedSize: number,
+  ): Promise<Uint8Array> {
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(endInclusive) ||
+      !Number.isSafeInteger(expectedSize) ||
+      start < 0 ||
+      endInclusive < start ||
+      endInclusive >= expectedSize
+    ) {
+      throw new ObjectStoreError(
+        "OBJECT_INVALID",
+        "Immutable object byte range is invalid.",
+      );
+    }
+    validatePersistenceSize(kind, expectedSize);
+    const key: ObjectKey = { namespace: this.namespace, kind, fidHex };
+    if (!this.store.getRange) {
+      return (await this.get(kind, fidHex)).subarray(start, endInclusive + 1);
+    }
+    const bytes = await this.store.getRange(
+      key,
+      start,
+      endInclusive,
+      expectedSize,
+    );
+    if (bytes.byteLength !== endInclusive - start + 1) {
+      throw new ObjectStoreError(
+        "OBJECT_INTEGRITY_FAILURE",
+        "Immutable object range length does not match its request.",
+      );
+    }
+    return bytes;
+  }
+
   async list(kind?: ObjectKind): Promise<ObjectListItem[]> {
     return await this.store.list(this.namespace, kind);
   }

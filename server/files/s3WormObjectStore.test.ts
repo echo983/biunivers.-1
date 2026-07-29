@@ -95,6 +95,26 @@ describe("S3WormObjectStore", () => {
     expect(send.mock.calls[0]?.[0]).toBeInstanceOf(HeadObjectCommand);
   });
 
+  it("passes exact byte ranges through to S3", async () => {
+    const send = vi.fn().mockResolvedValue({
+      ContentLength: 4,
+      ContentRange: "bytes 10-13/64",
+      Body: {
+        transformToByteArray: async () => Uint8Array.from([10, 11, 12, 13]),
+      },
+    });
+    await expect(createStore(send).getRange(key, 10, 13, 64)).resolves.toEqual(
+      Uint8Array.from([10, 11, 12, 13]),
+    );
+    const command = send.mock.calls[0]?.[0];
+    expect(command).toBeInstanceOf(GetObjectCommand);
+    expect(command.input).toMatchObject({
+      Bucket: "test-bucket",
+      Key: objectKey,
+      Range: "bytes=10-13",
+    });
+  });
+
   it("paginates diagnostic lists and ignores malformed keys", async () => {
     const send = vi
       .fn()
