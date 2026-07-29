@@ -339,6 +339,8 @@ export function IframeApp({ app }: IframeAppProps) {
         className="app-iframe"
         src={app.url}
         title={app.name}
+        allow="fullscreen"
+        allowFullScreen
         onLoad={notifyResourceAvailable}
       />
       {!isActive && (

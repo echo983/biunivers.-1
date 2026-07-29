@@ -208,11 +208,13 @@ export class FileContentStore {
     }
 
     if (content.kind === "chunk") {
-      const bytes = await this.repository.get("chunks", content.fidHex);
-      if (bytes.byteLength !== content.size) {
-        throw integrityFailure("Chunk length does not match the file metadata.");
-      }
-      yield bytes.subarray(start, endInclusive + 1);
+      yield await this.repository.getRange(
+        "chunks",
+        content.fidHex,
+        start,
+        endInclusive,
+        content.size,
+      );
       return;
     }
 
@@ -269,14 +271,16 @@ export class FileContentStore {
       ) {
         continue;
       }
-      const chunk = await this.repository.get("chunks", descriptor.fidHex);
-      if (chunk.byteLength !== descriptor.length) {
-        throw integrityFailure("Chunk length does not match its Manifest.");
-      }
       const localStart = Math.max(start, descriptor.start) - descriptor.start;
       const localEnd =
         Math.min(endInclusive, descriptor.endInclusive) - descriptor.start;
-      const result = chunk.subarray(localStart, localEnd + 1);
+      const result = await this.repository.getRange(
+        "chunks",
+        descriptor.fidHex,
+        localStart,
+        localEnd,
+        descriptor.length,
+      );
       yielded += result.byteLength;
       yield result;
     }

@@ -164,9 +164,11 @@ S3、网络和 File Service 必须位于受信任边界内；未来不可信分�
 应用。第三方应用不能自行提交可信 FID、访问任意对象或获得 S3 凭据。
 
 仓库内 `ImmutableObjectRepository` 是强制完整性边界：调用方 PUT 时不能提供 FID，Repository
-根据最终字节计算 FID 后才调用 ObjectStore；GET 后重新计算并在不匹配时返回
-`OBJECT_INTEGRITY_FAILURE`。ObjectStore 的 `FID_COLLISION` 只表示同 Key 已存在不同字节，
-两类错误不能混用。
+根据最终字节计算 FID 后才调用 ObjectStore；完整 GET 后重新计算并在不匹配时返回
+`OBJECT_INTEGRITY_FAILURE`。Range GET 无法仅凭局部字节重算完整对象 FID，因此必须校验
+请求边界、已知对象长度、`Content-Range`、`Content-Length` 和实际返回长度，并依赖受信任
+S3 边界与对象不可变性。需要重新证明完整 FID 时必须执行完整读取。ObjectStore 的
+`FID_COLLISION` 只表示同 Key 已存在不同字节，两类错误不能混用。
 
 V1 的精确字段编号、确定性编码规则和黄金向量由
 [`protocols/PVLogS3Lite CBOR v1.md`](./protocols/PVLogS3Lite%20CBOR%20v1.md) 定义。
@@ -284,6 +286,11 @@ CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 
 大小写入 Chunk 并由 WASM 生成 Manifest。读取 Manifest 后从 WASM 取得文件长度、Chunk FID
 和长度，随后逐 Chunk 读回并验证 FID、单块长度及总长度。2026-07-29 已在真实 R2 隔离前缀
 验证 64 MiB + 1 字节得到两个 Chunk 和一个 Manifest，并完成逐块读回。
+
+Resource Session 的局部读取走独立 Range 路径：Manifest 仍完整读取并验证，Chunk 只请求
+与逻辑文件区间相交的对象字节。S3 实现必须发送 `GetObject Range` 并严格校验响应范围，
+本地实现使用定位读取。2026-07-29 已通过真实 R2 视频 Seek 验收，确认不再为小范围请求
+完整下载 64 MiB Chunk。
 
 文件系统变更由 `FileSystemTransactions` 按不可变顺序发布：读取并验证当前
 `Ref → Head → Checkpoint`，由 WASM 编码 Segment 并应用到状态，依次持久化 Segment、

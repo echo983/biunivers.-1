@@ -90,6 +90,42 @@ export class S3WormObjectStore implements ImmutableObjectStore {
     }
   }
 
+  async getRange(
+    key: ObjectKey,
+    start: number,
+    endInclusive: number,
+    expectedSize: number,
+  ): Promise<Uint8Array> {
+    validateObjectKey(key);
+    const range = `bytes=${start}-${endInclusive}`;
+    try {
+      const response = await this.#client.send(
+        new GetObjectCommand({
+          Bucket: this.#bucket,
+          Key: this.#objectKey(key),
+          Range: range,
+        }),
+      );
+      if (!response.Body) {
+        throw new Error("S3 returned an object range without a response body.");
+      }
+      const expectedContentRange =
+        `bytes ${start}-${endInclusive}/${expectedSize}`;
+      if (
+        response.ContentRange !== expectedContentRange ||
+        response.ContentLength !== endInclusive - start + 1
+      ) {
+        throw new ObjectStoreError(
+          "OBJECT_INTEGRITY_FAILURE",
+          "S3 returned inconsistent object range metadata.",
+        );
+      }
+      return await response.Body.transformToByteArray();
+    } catch (error) {
+      throw mapNotFound(error, key);
+    }
+  }
+
   async head(key: ObjectKey): Promise<ObjectMetadata> {
     validateObjectKey(key);
     try {

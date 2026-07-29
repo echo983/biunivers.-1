@@ -15,6 +15,11 @@ import type {
 class MemoryStore implements ImmutableObjectStore {
   readonly objects = new Map<string, Uint8Array>();
   readonly getKeys: ObjectKey[] = [];
+  readonly rangeKeys: Array<{
+    key: ObjectKey;
+    start: number;
+    endInclusive: number;
+  }> = [];
 
   async create(
     key: ObjectKey,
@@ -31,6 +36,17 @@ class MemoryStore implements ImmutableObjectStore {
       throw new Error("missing");
     }
     return bytes;
+  }
+
+  async getRange(
+    key: ObjectKey,
+    start: number,
+    endInclusive: number,
+  ): Promise<Uint8Array> {
+    this.rangeKeys.push({ key, start, endInclusive });
+    const bytes = this.objects.get(JSON.stringify(key));
+    if (!bytes) throw new Error("missing");
+    return bytes.subarray(start, endInclusive + 1);
   }
 
   async head(key: ObjectKey): Promise<ObjectMetadata> {
@@ -164,7 +180,7 @@ describe("FileContentStore", () => {
   });
 
   it("reads an exact range from a direct Chunk", async () => {
-    const { contentStore } = createContentStore();
+    const { contentStore, objectStore } = createContentStore();
     const content = await contentStore.putBytes(
       Uint8Array.from([0, 1, 2, 3, 4, 5]),
     );
@@ -173,6 +189,13 @@ describe("FileContentStore", () => {
       parts.push(...part);
     }
     expect(parts).toEqual([2, 3, 4]);
+    expect(objectStore.rangeKeys).toEqual([
+      {
+        key: expect.objectContaining({ kind: "chunks" }),
+        start: 2,
+        endInclusive: 4,
+      },
+    ]);
   });
 
   it("reads only Manifest chunks intersecting a cross-boundary range", async () => {
@@ -195,10 +218,14 @@ describe("FileContentStore", () => {
     }
 
     expect(parts).toEqual([10, 11, 12, 13]);
-    expect(objectStore.getKeys.map((key) => key.kind)).toEqual([
-      "manifests",
-      "chunks",
-      "chunks",
+    expect(objectStore.getKeys.map((key) => key.kind)).toEqual(["manifests"]);
+    expect(objectStore.rangeKeys).toHaveLength(2);
+    expect(objectStore.rangeKeys.map(({ start, endInclusive }) => [
+      start,
+      endInclusive,
+    ])).toEqual([
+      [MAX_CHUNK_BYTES - 2, MAX_CHUNK_BYTES - 1],
+      [0, 1],
     ]);
   });
 
@@ -220,9 +247,13 @@ describe("FileContentStore", () => {
     }
 
     expect(parts).toEqual([21, 22]);
-    expect(objectStore.getKeys.map((key) => key.kind)).toEqual([
-      "manifests",
-      "chunks",
+    expect(objectStore.getKeys.map((key) => key.kind)).toEqual(["manifests"]);
+    expect(objectStore.rangeKeys).toEqual([
+      {
+        key: expect.objectContaining({ kind: "chunks" }),
+        start: 1,
+        endInclusive: 2,
+      },
     ]);
   });
 

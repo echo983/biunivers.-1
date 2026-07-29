@@ -83,6 +83,9 @@ describe("IframeApp Open Resource delivery", () => {
 
   it("shields an inactive iframe and exposes it after activation", async () => {
     render(<IframeApp app={app} />);
+    const iframe = screen.getByTitle("Notes");
+    expect(iframe).toHaveAttribute("allow", "fullscreen");
+    expect(iframe).toHaveAttribute("allowfullscreen");
     expect(screen.getByTestId("iframe-activation-shield")).toBeInTheDocument();
 
     act(() => useDesktopStore.getState().setActiveApp(app.id));

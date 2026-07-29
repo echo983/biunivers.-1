@@ -310,7 +310,8 @@ File Service 的用户操作映射为 PVLogS3Lite Operation：
   → 计算 Manifest FID
 ```
 
-所有对象由 File Service 写前计算 FID，读后重新校验。
+所有对象由 File Service 写前计算 FID；完整读取后重新校验。局部 Range 读取校验对象已知
+长度、请求边界和返回范围，完整 FID 复核由完整读取与恢复/审计路径承担。
 
 ### 8.2 发布
 
