@@ -82,19 +82,18 @@ E2E 默认使用系统安装的 Google Chrome。
 - `iframe`：在桌面窗口中打开可信 Web 服务，必须设置 `trusted: true`；
 - `external`：通过用户点击在新标签页打开。
 
-`internal` 只允许由源码中的编译期白名单注册，目前包含“设置”和“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
+`internal` 只允许由源码中的编译期白名单注册，目前包含“文件”、“设置”和“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
 
 ID 只允许小写字母、数字、点和短横线。iframe 和 external URL 支持 `/` 开头的同源路径以及 HTTP(S) 地址。
 
-无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面保留其他可用来源，内建“设置”和“关于”始终存在。
+无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面保留其他可用来源，内建“文件”、“设置”和“关于”始终存在。
 
 ## iframe 与反向代理
 
 推荐把自托管应用代理到桌面同一域名：
 
 ```text
-https://desktop.example.com/services/files/
-https://desktop.example.com/services/transmission/
+https://desktop.example.com/services/example/
 ```
 
 目标服务必须允许 iframe 嵌入。请检查：

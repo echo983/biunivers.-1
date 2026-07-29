@@ -4,6 +4,19 @@ export const DEFAULT_WALLPAPER = "/wallpapers/default.svg";
 
 export const defaultApps: AppDefinition[] = [
   {
+    id: "system.files",
+    name: "文件",
+    kind: "internal",
+    icon: "/icons/files.svg",
+    description: "浏览和管理文件",
+    defaultWidth: 840,
+    defaultHeight: 560,
+    minWidth: 560,
+    minHeight: 360,
+    desktop: true,
+    pinned: true,
+  },
+  {
     id: "system.settings",
     name: "设置",
     kind: "internal",

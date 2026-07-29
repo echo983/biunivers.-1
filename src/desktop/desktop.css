@@ -756,6 +756,199 @@
   margin-top: 0;
 }
 
+.file-manager-app {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  color: #202938;
+  background: #f7f9fc;
+}
+
+.file-manager-app__toolbar {
+  display: grid;
+  padding: 10px 12px;
+  gap: 9px;
+  border-bottom: 1px solid #d8dee8;
+  background: #fff;
+}
+
+.file-manager-app__breadcrumbs,
+.file-manager-app__breadcrumbs span,
+.file-manager-app__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-manager-app__breadcrumbs {
+  overflow-x: auto;
+}
+
+.file-manager-app__breadcrumbs button {
+  padding: 2px 4px;
+  color: #285d9f;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.file-manager-app__actions {
+  flex-wrap: wrap;
+}
+
+.file-manager-app__actions button,
+.file-manager-dialog button {
+  padding: 6px 10px;
+  border: 1px solid #b9c3d2;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.file-manager-app__actions button:disabled,
+.file-manager-dialog button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.file-manager-app__error {
+  padding: 8px 12px;
+  color: #782d2d;
+  border-bottom: 1px solid #e4b6b6;
+  background: #fff0f0;
+}
+
+.file-manager-app__notice {
+  padding: 8px 12px;
+  color: #275c3b;
+  border-bottom: 1px solid #b9dcc5;
+  background: #edf9f1;
+}
+
+.file-manager-app__content {
+  overflow: auto;
+}
+
+.file-manager-app table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.file-manager-app th,
+.file-manager-app td {
+  padding: 9px 12px;
+  overflow: hidden;
+  border-bottom: 1px solid #e3e7ee;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-manager-app th:first-child {
+  width: 52%;
+}
+
+.file-manager-app th:nth-child(2) {
+  width: 18%;
+}
+
+.file-manager-app tbody tr {
+  cursor: default;
+}
+
+.file-manager-app tbody tr:hover,
+.file-manager-app tbody tr:focus-visible {
+  background: #edf4ff;
+}
+
+.file-manager-app tbody tr.is-selected {
+  background: #dceaff;
+}
+
+.file-manager-app__empty {
+  margin: 0;
+  padding: 30px 18px;
+  color: #697386;
+  text-align: center;
+}
+
+.file-manager-dialog {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  padding: 18px;
+  place-items: center;
+  background: rgb(18 26 38 / 38%);
+}
+
+.file-manager-dialog form,
+.file-manager-dialog > section {
+  display: grid;
+  width: min(420px, 100%);
+  max-height: 90%;
+  padding: 18px;
+  overflow: auto;
+  gap: 14px;
+  border: 1px solid #c9d1dd;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 16px 40px rgb(20 31 48 / 30%);
+}
+
+.file-manager-dialog h2,
+.file-manager-dialog p {
+  margin: 0;
+}
+
+.file-manager-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.file-manager-dialog input {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #aeb9c9;
+  border-radius: 6px;
+}
+
+.file-manager-dialog form > div,
+.file-manager-dialog section > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.file-manager-dialog nav {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.file-manager-dialog nav button,
+.file-manager-dialog__directories button {
+  padding: 3px;
+  color: #285d9f;
+  border: 0;
+  background: transparent;
+}
+
+.file-manager-dialog__directories {
+  min-height: 90px;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid #dbe0e8;
+  border-radius: 6px;
+  list-style: none;
+}
+
+.file-manager-dialog__directories li {
+  padding: 3px;
+}
+
 .app-management button:disabled {
   opacity: 0.55;
   cursor: wait;

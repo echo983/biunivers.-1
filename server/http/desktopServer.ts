@@ -14,11 +14,17 @@ import {
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
 import type { FileServiceBackupResult } from "../files/fileServiceBackup.js";
 import type { FileServiceGcReport } from "../files/fileServiceGcScanner.js";
+import type { InternalFileManagerService } from "../files/internalFileManagerService.js";
 import type { FileHostService } from "../files/fileHostService.js";
 import {
   createFileTransferRouter,
   type FileTransferExecutor,
 } from "./fileTransferRouter.js";
+
+type InternalFileManagerExecutor = Pick<
+  InternalFileManagerService,
+  "createDirectory" | "moveEntry" | "removeEntry"
+>;
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -37,6 +43,8 @@ interface DesktopServerDependencies {
   fileServiceGcScanner?: {
     scan(): Promise<FileServiceGcReport>;
   };
+  internalFileAppIds?: ReadonlySet<string>;
+  internalFileManager?: InternalFileManagerExecutor;
 }
 
 export function createDesktopServer({
@@ -52,6 +60,8 @@ export function createDesktopServer({
   fileHost,
   fileServiceBackup,
   fileServiceGcScanner,
+  internalFileAppIds = new Set(),
+  internalFileManager,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -97,12 +107,11 @@ export function createDesktopServer({
         );
       }
       const state = await appStore.read();
-      if (
-        !state.apps.some(
-          (installed) =>
-            installed.appId === appId && installed.status === "active",
-        )
-      ) {
+      const activeManagedApp = state.apps.some(
+        (installed) =>
+          installed.appId === appId && installed.status === "active",
+      );
+      if (!activeManagedApp && !internalFileAppIds.has(appId)) {
         throw new AppError("APP_NOT_FOUND", "应用不存在或未启用", 404);
       }
       response
@@ -281,11 +290,121 @@ export function createDesktopServer({
       "/api/v1/files/transfers",
       createFileTransferRouter({
         appOrigin: config.appOrigin,
+        desktopOrigin: config.desktopOrigin,
+        internalFileAppIds,
         capabilities: fileCapabilities,
         transfers: fileTransfers,
       }),
     );
   }
+
+  app.post(
+    "/api/v1/internal/files/directories",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { parentEntryId, name, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof parentEntryId !== "string" ||
+          typeof name !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "parentEntryId、name 和 expectedRevision 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.createDirectory(instanceToken, {
+              parentEntryId,
+              name,
+              expectedRevision,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.patch(
+    "/api/v1/internal/files/entries/:entryId",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { newParentEntryId, newName, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof newParentEntryId !== "string" ||
+          typeof newName !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "newParentEntryId、newName 和 expectedRevision 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.moveEntry(
+              instanceToken,
+              request.params.entryId,
+              { newParentEntryId, newName, expectedRevision },
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.delete(
+    "/api/v1/internal/files/entries/:entryId",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { recursive, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof recursive !== "boolean" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "recursive 和 expectedRevision 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.removeEntry(
+              instanceToken,
+              request.params.entryId,
+              { recursive, expectedRevision },
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.use("/api/v1/admin", createAdminAuth(config.adminToken));
 
@@ -588,4 +707,24 @@ function requireFileHost(
     service: fileHost,
     instanceToken: readInstanceToken(request),
   };
+}
+
+function requireInternalFileManager(
+  request: express.Request,
+  config: ServerConfig,
+  service: InternalFileManagerExecutor | undefined,
+): { service: InternalFileManagerExecutor; instanceToken: string } {
+  requireDesktopOrigin(request, config.desktopOrigin);
+  if (!service) {
+    throw new AppError(
+      "HOST_API_UNSUPPORTED",
+      "当前宿主尚未启用文件管理能力",
+      503,
+    );
+  }
+  return { service, instanceToken: readInstanceToken(request) };
+}
+
+function isRevision(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
 }

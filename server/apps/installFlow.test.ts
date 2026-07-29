@@ -135,7 +135,11 @@ async function createServices(source: RepositorySource = new FixtureSource()) {
     dataDir,
     maxAppBytes: 10 * 1024 * 1024,
     maxAppFiles: 100,
-    reservedAppIds: new Set(["system.settings", "system.about"]),
+    reservedAppIds: new Set([
+      "system.settings",
+      "system.about",
+      "system.files",
+    ]),
   });
   const appService = new AppService({
     appStore,

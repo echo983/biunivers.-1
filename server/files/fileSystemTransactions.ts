@@ -4,6 +4,7 @@ import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import { ObjectStoreError } from "./objectStore.js";
 import { loadPvlogCore, type PvlogCore } from "./pvlogCore.js";
 import {
+  RefStoreError,
   SqliteRefStore,
   type FilesystemRef,
 } from "./sqliteRefStore.js";
@@ -36,6 +37,7 @@ export interface CreateDirectoryInput {
   parentEntryIdHex: string;
   name: string;
   mtimeMs?: number;
+  expectedRevision?: number;
 }
 
 export interface MoveEntryInput {
@@ -43,12 +45,14 @@ export interface MoveEntryInput {
   newParentEntryIdHex: string;
   newName: string;
   timestampMs?: number;
+  expectedRevision?: number;
 }
 
 export interface RemoveEntryInput {
   entryIdHex: string;
   recursive: boolean;
   timestampMs?: number;
+  expectedRevision?: number;
 }
 
 export interface PublishedFileSystemTransaction {
@@ -151,7 +155,7 @@ export class FileSystemTransactions {
   async createDirectory(
     input: CreateDirectoryInput,
   ): Promise<PublishedFileSystemTransaction> {
-    const state = await this.#loadCurrentState();
+    const state = await this.#loadCurrentState(input.expectedRevision);
     const entryId = requireId(this.#randomId(), "Entry ID");
     const transactionId = requireId(this.#randomId(), "transaction ID");
     const timestamp = input.mtimeMs ?? this.#now();
@@ -180,7 +184,7 @@ export class FileSystemTransactions {
   async moveEntry(
     input: MoveEntryInput,
   ): Promise<PublishedFileSystemTransaction> {
-    const state = await this.#loadCurrentState();
+    const state = await this.#loadCurrentState(input.expectedRevision);
     const transactionId = requireId(this.#randomId(), "transaction ID");
     const timestamp = input.timestampMs ?? this.#now();
     validateTimestamp(timestamp);
@@ -207,7 +211,7 @@ export class FileSystemTransactions {
   async removeEntry(
     input: RemoveEntryInput,
   ): Promise<PublishedFileSystemTransaction> {
-    const state = await this.#loadCurrentState();
+    const state = await this.#loadCurrentState(input.expectedRevision);
     const transactionId = requireId(this.#randomId(), "transaction ID");
     const timestamp = input.timestampMs ?? this.#now();
     validateTimestamp(timestamp);
@@ -230,8 +234,19 @@ export class FileSystemTransactions {
     );
   }
 
-  async #loadCurrentState(): Promise<CurrentFileSystemState> {
+  async #loadCurrentState(
+    expectedRevision?: number,
+  ): Promise<CurrentFileSystemState> {
     const ref = this.#refStore.getRef("main");
+    if (
+      expectedRevision !== undefined &&
+      ref.revision !== expectedRevision
+    ) {
+      throw new RefStoreError(
+        "REF_CONFLICT",
+        "Ref main changed before the transaction started.",
+      );
+    }
     const headBytes = await this.#repository.get("heads", ref.headFidHex);
     this.#core.validateHead(headBytes);
     const headRevision = Number(this.#core.headRevision(headBytes));

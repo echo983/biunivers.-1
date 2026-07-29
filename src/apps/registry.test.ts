@@ -28,6 +28,7 @@ describe("mergeAppSources", () => {
     const apps = mergeAppSources([legacyApp], [managedApp], warnings);
 
     expect(apps.map((app) => app.id)).toEqual([
+      "system.files",
       "system.settings",
       "system.about",
       "legacy.files",
@@ -50,5 +51,20 @@ describe("mergeAppSources", () => {
     expect(apps.find((app) => app.id === "legacy.files")?.name).toBe("Hello");
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain("传统配置");
+  });
+
+  it("does not allow runtime sources to replace the internal file manager", () => {
+    const warnings: string[] = [];
+    const apps = mergeAppSources(
+      [{ ...legacyApp, id: "system.files" }],
+      [{ ...managedApp, id: "system.files" }],
+      warnings,
+    );
+
+    expect(apps.find((app) => app.id === "system.files")).toMatchObject({
+      kind: "internal",
+      name: "文件",
+    });
+    expect(warnings).toHaveLength(2);
   });
 });
