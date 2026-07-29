@@ -6,6 +6,7 @@ import {
 } from "./fileCapabilityRegistry.js";
 import {
   loadCurrentEntryIndex,
+  type EntryIndex,
   type IndexedEntry,
 } from "./entryIndex.js";
 import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
@@ -64,6 +65,7 @@ export class FileHostService {
       revision: index.revision,
       rootEntryId: index.rootEntryIdHex,
       parent: publicEntry(parent),
+      breadcrumbs: buildDirectoryBreadcrumbs(index, parent),
       entries: index.listChildren(parentId).map(publicEntry),
     };
   }
@@ -185,6 +187,35 @@ export class FileHostService {
       method === "PUT" ? this.#maxWriteBytes : 0,
     );
   }
+}
+
+export function buildDirectoryBreadcrumbs(
+  index: EntryIndex,
+  directory: IndexedEntry,
+) {
+  const breadcrumbs: PublicFileEntry[] = [];
+  let current = directory;
+  const visited = new Set<string>();
+  while (current.entryIdHex !== index.rootEntryIdHex) {
+    if (visited.has(current.entryIdHex)) {
+      throw new FileCapabilityError(
+        "HANDLE_NOT_FOUND",
+        "Directory ancestry is invalid.",
+      );
+    }
+    visited.add(current.entryIdHex);
+    breadcrumbs.push(publicEntry(current));
+    const parentId = current.parentEntryIdHex;
+    const parent = parentId ? index.get(parentId) : undefined;
+    if (!parent || parent.kind !== "directory") {
+      throw new FileCapabilityError(
+        "HANDLE_NOT_FOUND",
+        "Directory ancestry is invalid.",
+      );
+    }
+    current = parent;
+  }
+  return breadcrumbs.reverse();
 }
 
 function publicEntry(entry: IndexedEntry): PublicFileEntry {

@@ -132,7 +132,14 @@ export function FileManagerBrowser({
         if (!active) return;
         setListing(value);
         setSelected(undefined);
-        if (directoryId) {
+        if (value.breadcrumbs) {
+          setBreadcrumbs(
+            value.breadcrumbs.map((entry) => ({
+              entryId: entry.entryId,
+              name: entry.name,
+            })),
+          );
+        } else if (directoryId) {
           setBreadcrumbs((current) =>
             current.length === 0
               ? [

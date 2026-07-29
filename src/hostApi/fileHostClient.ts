@@ -10,6 +10,7 @@ export interface DirectoryListing {
   revision: number;
   rootEntryId: string;
   parent: FileEntry;
+  breadcrumbs?: FileEntry[];
   entries: FileEntry[];
 }
 

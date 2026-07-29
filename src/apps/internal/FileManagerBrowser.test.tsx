@@ -27,6 +27,7 @@ vi.mock("../../windows/windowController", () => windowMocks);
 
 const rootId = "1".repeat(32);
 const directoryId = "2".repeat(32);
+const deepDirectoryId = "3".repeat(32);
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -39,7 +40,7 @@ afterEach(() => {
 });
 
 describe("FileManagerBrowser", () => {
-  it("shows the launched desktop directory in breadcrumbs", async () => {
+  it("shows the complete launched desktop directory ancestry", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -47,16 +48,30 @@ describe("FileManagerBrowser", () => {
           revision: 3,
           rootEntryId: rootId,
           parent: {
-            entryId: directoryId,
-            name: "Documents",
+            entryId: deepDirectoryId,
+            name: "Notes",
             kind: "directory",
             mtimeMs: 0,
           },
+          breadcrumbs: [
+            {
+              entryId: directoryId,
+              name: "Documents",
+              kind: "directory",
+              mtimeMs: 0,
+            },
+            {
+              entryId: deepDirectoryId,
+              name: "Notes",
+              kind: "directory",
+              mtimeMs: 0,
+            },
+          ],
           entries: [],
         }),
       ),
     );
-    queueDirectoryLaunch(directoryId, "Documents");
+    queueDirectoryLaunch(deepDirectoryId, "Notes");
 
     render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
 
@@ -66,8 +81,11 @@ describe("FileManagerBrowser", () => {
     expect(
       within(breadcrumbs).getByRole("button", { name: "Documents" }),
     ).toBeVisible();
+    expect(
+      within(breadcrumbs).getByRole("button", { name: "Notes" }),
+    ).toBeVisible();
     expect(fetch).toHaveBeenCalledWith(
-      `/api/v1/host/files?parent=${directoryId}`,
+      `/api/v1/host/files?parent=${deepDirectoryId}`,
       expect.objectContaining({
         headers: expect.any(Headers),
       }),
