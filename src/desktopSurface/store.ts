@@ -71,9 +71,51 @@ export const useDesktopSurfaceStore = create<DesktopSurfaceState>(
     },
     move: async (moves) => {
       const { surface } = get();
-      await runMutation(set, () =>
-        moveDesktopItems(moves, surface.revision),
+      const positions = new Map(
+        moves.map((move) => [move.itemId, move.position]),
       );
+      set({
+        error: undefined,
+        surface: {
+          ...surface,
+          items: surface.items.map((item) => ({
+            ...item,
+            position: positions.get(item.id) ?? item.position,
+          })),
+        },
+      });
+      try {
+        set({
+          status: "ready",
+          surface: await moveDesktopItems(moves, surface.revision),
+        });
+      } catch (error) {
+        if (
+          error instanceof DesktopSurfaceClientError &&
+          error.code === "DESKTOP_SURFACE_CONFLICT"
+        ) {
+          try {
+            set({
+              status: "ready",
+              surface: await readDesktopSurface(),
+              error: "桌面已在其他页面中发生变化，请重新操作。",
+            });
+          } catch {
+            set({
+              status: "error",
+              surface,
+              error: messageOf(error),
+            });
+          }
+        } else {
+          set({
+            status: "error",
+            surface,
+            error: messageOf(error),
+          });
+        }
+        throw error;
+      }
     },
     remove: async (itemIds) => {
       const { surface } = get();
