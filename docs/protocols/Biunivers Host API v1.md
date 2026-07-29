@@ -1,7 +1,7 @@
 # Biunivers Host API v1
 
 - 协议标识：`biunivers.host-api/1`
-- 状态：实现中；已有文件的打开、读取、覆盖保存、元数据和释放可用
+- 状态：实现中；打开、读取、覆盖保存、另存为、元数据和释放可用
 - 传输：受管 iframe 与父窗口之间的 `postMessage`
 
 Host API 是可选宿主能力，不是静态应用安装协议的一部分。应用必须能处理
@@ -100,7 +100,18 @@ window.parent.postMessage(
 
 ### `file.saveAs`
 
-方法名已保留，但当前返回 `HOST_API_UNSUPPORTED`。应用必须保留自身内容并允许用户稍后重试。
+显示宿主保存对话框，选择目录和文件名：
+
+```json
+{
+  "suggestedName": "未命名.md",
+  "mediaType": "text/markdown"
+}
+```
+
+返回可写的待保存句柄。此时文件系统中还没有空文件；应用必须申请 `file.writeTransfer` 并
+完成 PUT，宿主才会原子创建文件。用户取消返回 `USER_CANCELLED`，传输失败或句柄过期不会
+留下可见文件。V0.1 接受 `mediaType` 作为应用提示，但不把它持久化为文件身份字段。
 
 ## 3. 使用传输
 

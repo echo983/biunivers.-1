@@ -67,6 +67,34 @@ describe("Host API dispatcher", () => {
     });
   });
 
+  it("creates a pending save handle only after the user chooses a target", async () => {
+    const createSaveHandle = vi
+      .fn()
+      .mockResolvedValue({ handleId: "pending-handle" });
+    await expect(
+      dispatchHostRequest(
+        request("file.saveAs", { suggestedName: "notes.md" }),
+        "instance-token",
+        {
+          selectFile: vi.fn(),
+          selectSaveTarget: vi.fn().mockResolvedValue({
+            parentEntryId: "11".repeat(16),
+            name: "notes.md",
+          }),
+          createSaveHandle,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: { handleId: "pending-handle" },
+    });
+    expect(createSaveHandle).toHaveBeenCalledWith(
+      "instance-token",
+      "11".repeat(16),
+      "notes.md",
+    );
+  });
+
   it("correlates cancellation and invalid params without throwing", async () => {
     await expect(
       dispatchHostRequest(

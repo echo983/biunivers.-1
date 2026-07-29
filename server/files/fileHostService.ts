@@ -94,6 +94,24 @@ export class FileHostService {
       instanceToken,
       handleId,
     );
+    if (handle.pendingParentEntryIdHex && handle.pendingName) {
+      return {
+        name: handle.pendingName,
+        kind: "file" as const,
+        size: 0,
+        mtimeMs: 0,
+        revision: handle.issuedAtRevision,
+        writable: true,
+        changed: false,
+        pending: true,
+      };
+    }
+    if (!handle.entryIdHex) {
+      throw new FileCapabilityError(
+        "HANDLE_EXPIRED",
+        "File handle is invalid.",
+      );
+    }
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
@@ -110,7 +128,44 @@ export class FileHostService {
       revision: index.revision,
       writable: handle.writable,
       changed: entry.content?.fidHex !== handle.expectedContentFidHex,
+      pending: false,
     };
+  }
+
+  async issueSaveHandle(
+    instanceToken: string,
+    parentEntryId: string,
+    name: string,
+  ): Promise<PublicFileHandle> {
+    this.#capabilities.authorizeInstance(instanceToken);
+    validateEntryName(name);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+    );
+    const parent = index.get(parentEntryId);
+    if (!parent || parent.kind !== "directory") {
+      throw new FileCapabilityError(
+        "HANDLE_NOT_FOUND",
+        "Save directory not found.",
+      );
+    }
+    if (
+      index
+        .listChildren(parentEntryId)
+        .some((entry) => entry.name === name)
+    ) {
+      throw new FileCapabilityError(
+        "REQUEST_INVALID",
+        "A file with this name already exists.",
+      );
+    }
+    return this.#capabilities.issuePendingFileHandle(
+      instanceToken,
+      parentEntryId,
+      name,
+      index.revision,
+    );
   }
 
   releaseHandle(instanceToken: string, handleId: string): void {
@@ -127,6 +182,29 @@ export class FileHostService {
       handleId,
       method,
       method === "PUT" ? this.#maxWriteBytes : 0,
+    );
+  }
+}
+
+function validateEntryName(name: string): void {
+  if (
+    !name ||
+    Buffer.byteLength(name, "utf8") > 255 ||
+    name === "." ||
+    name === ".." ||
+    name.normalize("NFC") !== name ||
+    [...name].some((character) => {
+      const codePoint = character.codePointAt(0)!;
+      return (
+        character === "/" ||
+        codePoint <= 0x1f ||
+        (codePoint >= 0x7f && codePoint <= 0x9f)
+      );
+    })
+  ) {
+    throw new FileCapabilityError(
+      "REQUEST_INVALID",
+      "File name is invalid.",
     );
   }
 }

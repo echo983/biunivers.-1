@@ -17,7 +17,10 @@ export interface FileHandleGrant {
   handleId: string;
   writable: boolean;
   expiresAt: string;
-  metadata: FileEntry & { revision: number };
+  metadata: Omit<FileEntry, "entryId"> & {
+    entryId?: string;
+    revision: number;
+  };
 }
 
 export interface FileTransfer {
@@ -58,6 +61,17 @@ export async function openFileHandle(
   return hostFetch("/api/v1/host/handles", instanceToken, {
     method: "POST",
     body: JSON.stringify({ entryId, writable }),
+  });
+}
+
+export async function createSaveHandle(
+  instanceToken: string,
+  parentEntryId: string,
+  name: string,
+): Promise<FileHandleGrant> {
+  return hostFetch("/api/v1/host/save-handles", instanceToken, {
+    method: "POST",
+    body: JSON.stringify({ parentEntryId, name }),
   });
 }
 

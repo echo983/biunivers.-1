@@ -59,6 +59,12 @@ export class FileTransferService {
         this.#repository,
         this.#refStore,
       );
+      if (!transfer.entryIdHex) {
+        throw new FileCapabilityError(
+          "HANDLE_EXPIRED",
+          "Pending files cannot be read before their first save.",
+        );
+      }
       const entry = index.get(transfer.entryIdHex);
       if (
         !entry ||
@@ -95,40 +101,69 @@ export class FileTransferService {
       contentLength,
     );
     try {
-      const before = await loadCurrentEntryIndex(
-        this.#repository,
-        this.#refStore,
-      );
-      const entry = before.get(transfer.entryIdHex);
-      if (
-        !entry ||
-        entry.kind !== "file" ||
-        !entry.content ||
-        entry.content.fidHex !== transfer.expectedContentFidHex
-      ) {
-        throw new FileCapabilityError(
-          "HANDLE_EXPIRED",
-          "File changed after this handle was issued.",
+      const pending =
+        transfer.pendingParentEntryIdHex && transfer.pendingName
+          ? {
+              parentEntryIdHex: transfer.pendingParentEntryIdHex,
+              name: transfer.pendingName,
+            }
+          : null;
+      if (!pending) {
+        if (!transfer.entryIdHex) {
+          throw new FileCapabilityError(
+            "HANDLE_EXPIRED",
+            "File handle is invalid.",
+          );
+        }
+        const before = await loadCurrentEntryIndex(
+          this.#repository,
+          this.#refStore,
         );
+        const entry = before.get(transfer.entryIdHex);
+        if (
+          !entry ||
+          entry.kind !== "file" ||
+          !entry.content ||
+          entry.content.fidHex !== transfer.expectedContentFidHex
+        ) {
+          throw new FileCapabilityError(
+            "HANDLE_EXPIRED",
+            "File changed after this handle was issued.",
+          );
+        }
       }
       const content = await this.#contentStore.putStream(
         source,
         transfer.maxBytes,
       );
-      const published = await this.#transactions.setFileContent({
-        entryIdHex: transfer.entryIdHex,
-        expectedContentFidHex: transfer.expectedContentFidHex,
-        content,
-      });
+      const published = pending
+        ? await this.#transactions.createFile({
+            parentEntryIdHex: pending.parentEntryIdHex,
+            name: pending.name,
+            content,
+          })
+        : await this.#transactions.setFileContent({
+            entryIdHex: transfer.entryIdHex!,
+            expectedContentFidHex: transfer.expectedContentFidHex!,
+            content,
+          });
       const after = await loadCurrentEntryIndex(
         this.#repository,
         this.#refStore,
       );
-      const updated = after.get(transfer.entryIdHex);
+      const updated = after.get(published.entryIdHex);
       if (!updated || updated.kind !== "file") {
         throw new ObjectStoreError(
           "OBJECT_INTEGRITY_FAILURE",
           "Published file is missing from the current index.",
+        );
+      }
+      if (pending) {
+        this.#capabilities.commitPendingFileHandle(
+          instanceToken,
+          transfer.handleId,
+          updated,
+          published.ref.revision,
         );
       }
       return {

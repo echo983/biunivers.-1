@@ -162,6 +162,38 @@ export function createDesktopServer({
     }
   });
 
+  app.post("/api/v1/host/save-handles", async (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      const { parentEntryId, name } = request.body as Record<string, unknown>;
+      if (
+        typeof parentEntryId !== "string" ||
+        typeof name !== "string"
+      ) {
+        throw new AppError(
+          "REQUEST_INVALID",
+          "parentEntryId 和 name 必须是字符串",
+        );
+      }
+      response
+        .status(201)
+        .set("Cache-Control", "no-store")
+        .json(
+          await service.issueSaveHandle(
+            instanceToken,
+            parentEntryId,
+            name,
+          ),
+        );
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.get("/api/v1/host/handles/:handleId", async (request, response, next) => {
     try {
       const { service, instanceToken } = requireFileHost(

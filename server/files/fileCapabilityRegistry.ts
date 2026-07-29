@@ -31,7 +31,9 @@ interface InstanceRecord {
 interface HandleRecord {
   handleId: string;
   instanceToken: string;
-  entryIdHex: string;
+  entryIdHex?: string;
+  pendingParentEntryIdHex?: string;
+  pendingName?: string;
   writable: boolean;
   issuedAtRevision: number;
   expectedContentFidHex?: string;
@@ -54,7 +56,7 @@ export interface PublicFileHandle {
   writable: boolean;
   expiresAt: string;
   metadata: {
-    entryId: string;
+    entryId?: string;
     name: string;
     kind: "directory" | "file";
     size?: number;
@@ -66,7 +68,9 @@ export interface PublicFileHandle {
 export interface AuthorizedFileHandle {
   appId: string;
   windowInstanceId: string;
-  entryIdHex: string;
+  entryIdHex?: string;
+  pendingParentEntryIdHex?: string;
+  pendingName?: string;
   writable: boolean;
   issuedAtRevision: number;
   expectedContentFidHex?: string;
@@ -81,6 +85,7 @@ export interface PublicFileTransfer {
 }
 
 export interface AuthorizedFileTransfer extends AuthorizedFileHandle {
+  handleId: string;
   transferId: string;
   method: "GET" | "PUT";
   maxBytes: number;
@@ -250,6 +255,75 @@ export class FileCapabilityRegistry {
     };
   }
 
+  issuePendingFileHandle(
+    instanceToken: string,
+    parentEntryIdHex: string,
+    name: string,
+    revision: number,
+  ): PublicFileHandle {
+    this.#requireInstance(instanceToken);
+    if (
+      !ENTRY_ID_PATTERN.test(parentEntryIdHex) ||
+      !Number.isSafeInteger(revision) ||
+      revision < 0
+    ) {
+      throw invalid("Parent identity or revision is invalid.");
+    }
+    this.prune();
+    if (this.#handles.size >= this.#maxHandles) {
+      throw limit("The active file handle limit has been reached.");
+    }
+    const handleId = this.#newUniqueToken();
+    const expiresAtMs = this.#now() + this.#handleTtlMs;
+    this.#handles.set(handleId, {
+      handleId,
+      instanceToken,
+      pendingParentEntryIdHex: parentEntryIdHex,
+      pendingName: name,
+      writable: true,
+      issuedAtRevision: revision,
+      expiresAtMs,
+    });
+    return {
+      handleId,
+      writable: true,
+      expiresAt: new Date(expiresAtMs).toISOString(),
+      metadata: {
+        name,
+        kind: "file",
+        size: 0,
+        mtimeMs: 0,
+        revision,
+      },
+    };
+  }
+
+  commitPendingFileHandle(
+    instanceToken: string,
+    handleId: string,
+    entry: IndexedEntry,
+    revision: number,
+  ): void {
+    this.#requireInstance(instanceToken);
+    const handle = this.#handles.get(handleId);
+    if (
+      !handle ||
+      handle.instanceToken !== instanceToken ||
+      !handle.pendingParentEntryIdHex ||
+      !handle.pendingName ||
+      entry.kind !== "file" ||
+      !entry.content
+    ) {
+      throw notFound();
+    }
+    handle.entryIdHex = entry.entryIdHex;
+    handle.expectedContentFidHex = entry.content.fidHex;
+    handle.contentSize = entry.content.size;
+    handle.issuedAtRevision = revision;
+    delete handle.pendingParentEntryIdHex;
+    delete handle.pendingName;
+  }
+
   inspectTransfer(transferId: string): FileTransferIdentity {
     if (!TOKEN_PATTERN.test(transferId)) {
       throw transferNotFound();
@@ -300,6 +374,8 @@ export class FileCapabilityRegistry {
       appId: instance.appId,
       windowInstanceId: instance.windowInstanceId,
       entryIdHex: handle.entryIdHex,
+      pendingParentEntryIdHex: handle.pendingParentEntryIdHex,
+      pendingName: handle.pendingName,
       writable: handle.writable,
       issuedAtRevision: handle.issuedAtRevision,
       expectedContentFidHex: handle.expectedContentFidHex,
@@ -414,6 +490,7 @@ export class FileCapabilityRegistry {
     transfer.active = true;
     return {
       ...handle,
+      handleId: transfer.handleId,
       transferId,
       method,
       maxBytes: transfer.maxBytes,

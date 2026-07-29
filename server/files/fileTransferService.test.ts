@@ -228,6 +228,58 @@ describe("FileTransferService", () => {
     fixture.refStore.close();
   });
 
+  it("creates no file until a saveAs handle receives a complete PUT", async () => {
+    const fixture = await setup();
+    const before = await fixture.host.listDirectory(fixture.instanceToken);
+    const pending = await fixture.host.issueSaveHandle(
+      fixture.instanceToken,
+      before.rootEntryId,
+      "new-note.md",
+    );
+    expect(before.entries.map((entry) => entry.name)).not.toContain(
+      "new-note.md",
+    );
+    await expect(
+      fixture.host.getMetadata(fixture.instanceToken, pending.handleId),
+    ).resolves.toMatchObject({
+      name: "new-note.md",
+      pending: true,
+      size: 0,
+    });
+
+    const transfer = fixture.host.issueTransfer(
+      fixture.instanceToken,
+      pending.handleId,
+      "PUT",
+    );
+    async function* source() {
+      yield Buffer.from("new content");
+    }
+    const result = await fixture.service.write(
+      fixture.instanceToken,
+      transfer.transferId,
+      source(),
+      11,
+    );
+    expect(result).toMatchObject({ revision: 2, size: 11 });
+    const after = await fixture.host.listDirectory(fixture.instanceToken);
+    expect(after.entries).toContainEqual(
+      expect.objectContaining({
+        entryId: result.entryId,
+        name: "new-note.md",
+        size: 11,
+      }),
+    );
+    await expect(
+      fixture.host.getMetadata(fixture.instanceToken, pending.handleId),
+    ).resolves.toMatchObject({
+      entryId: result.entryId,
+      pending: false,
+      changed: false,
+    });
+    fixture.refStore.close();
+  });
+
   it("rejects stale handles before reading or publishing", async () => {
     const fixture = await setup();
     const handle = fixture.capabilities.issueHandle(

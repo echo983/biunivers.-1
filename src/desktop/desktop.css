@@ -492,6 +492,19 @@
   color: #748094;
 }
 
+.host-file-picker__panel footer.host-save-dialog__footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.host-save-dialog__footer input {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #bfc9d8;
+  border-radius: 6px;
+  font: inherit;
+}
+
 .settings-app {
   padding: 24px;
 }

@@ -1,5 +1,6 @@
 import {
   createFileTransfer,
+  createSaveHandle,
   FileHostClientError,
   getFileMetadata,
   openFileHandle,
@@ -13,7 +14,11 @@ import {
 
 interface DispatcherDependencies {
   selectFile: (writable: boolean) => Promise<string | null>;
+  selectSaveTarget?: (
+    suggestedName: string,
+  ) => Promise<{ parentEntryId: string; name: string } | null>;
   openHandle?: typeof openFileHandle;
+  createSaveHandle?: typeof createSaveHandle;
   createTransfer?: typeof createFileTransfer;
   getMetadata?: typeof getFileMetadata;
   releaseHandle?: typeof releaseFileHandle;
@@ -75,11 +80,36 @@ export async function dispatchHostRequest(
         );
         break;
       case "file.saveAs":
-        return failure(
-          request,
-          "HOST_API_UNSUPPORTED",
-          "另存为尚未启用",
-        );
+        if (!dependencies.selectSaveTarget) {
+          return failure(
+            request,
+            "HOST_API_UNSUPPORTED",
+            "另存为尚未启用",
+          );
+        }
+        {
+          const suggestedName =
+            params.suggestedName === undefined
+              ? "未命名.txt"
+              : requireString(params.suggestedName, "suggestedName");
+          const target =
+            await dependencies.selectSaveTarget(suggestedName);
+          if (!target) {
+            return failure(
+              request,
+              "USER_CANCELLED",
+              "用户取消了保存",
+            );
+          }
+          result = await (
+            dependencies.createSaveHandle ?? createSaveHandle
+          )(
+            instanceToken,
+            target.parentEntryId,
+            target.name,
+          );
+        }
+        break;
       default:
         return failure(request, "REQUEST_INVALID", "Host API 方法无效");
     }

@@ -10,6 +10,7 @@ import {
 } from "../hostApi/instanceClient";
 import { dispatchHostRequest } from "../hostApi/dispatcher";
 import { HostFilePicker } from "../hostApi/HostFilePicker";
+import { HostSaveDialog } from "../hostApi/HostSaveDialog";
 import type { AppDefinition } from "../types/desktop";
 import { openExternalApp } from "./openExternalApp";
 
@@ -24,16 +25,27 @@ export function IframeApp({ app }: IframeAppProps) {
   const pickerResolverRef = useRef<((entryId: string | null) => void) | null>(
     null,
   );
+  const saveResolverRef = useRef<
+    ((target: { parentEntryId: string; name: string } | null) => void) | null
+  >(null);
   const [picker, setPicker] = useState<{
     instanceToken: string;
     writable: boolean;
+  } | null>(null);
+  const [saveDialog, setSaveDialog] = useState<{
+    instanceToken: string;
+    suggestedName: string;
   } | null>(null);
   const appOrigin = app.url ? new URL(app.url).origin : null;
 
   const selectFile = useCallback(
     (writable: boolean): Promise<string | null> => {
       const instanceToken = instanceTokenRef.current;
-      if (!instanceToken || pickerResolverRef.current) {
+      if (
+        !instanceToken ||
+        pickerResolverRef.current ||
+        saveResolverRef.current
+      ) {
         return Promise.resolve(null);
       }
       setPicker({ instanceToken, writable });
@@ -51,10 +63,42 @@ export function IframeApp({ app }: IframeAppProps) {
     resolve?.(entryId);
   }, []);
 
+  const selectSaveTarget = useCallback(
+    (
+      suggestedName: string,
+    ): Promise<{ parentEntryId: string; name: string } | null> => {
+      const instanceToken = instanceTokenRef.current;
+      if (
+        !instanceToken ||
+        pickerResolverRef.current ||
+        saveResolverRef.current
+      ) {
+        return Promise.resolve(null);
+      }
+      setSaveDialog({ instanceToken, suggestedName });
+      return new Promise((resolve) => {
+        saveResolverRef.current = resolve;
+      });
+    },
+    [],
+  );
+
+  const finishSaveDialog = useCallback(
+    (target: { parentEntryId: string; name: string } | null) => {
+      const resolve = saveResolverRef.current;
+      saveResolverRef.current = null;
+      setSaveDialog(null);
+      resolve?.(target);
+    },
+    [],
+  );
+
   useEffect(
     () => () => {
       pickerResolverRef.current?.(null);
       pickerResolverRef.current = null;
+      saveResolverRef.current?.(null);
+      saveResolverRef.current = null;
     },
     [],
   );
@@ -107,18 +151,19 @@ export function IframeApp({ app }: IframeAppProps) {
         iframeWindow?.postMessage(unsupportedResponse(request), appOrigin);
         return;
       }
-      void dispatchHostRequest(request, instanceToken, { selectFile }).then(
-        (response) => {
-          if (iframeRef.current?.contentWindow === iframeWindow) {
-            iframeWindow?.postMessage(response, appOrigin);
-          }
-        },
-      );
+      void dispatchHostRequest(request, instanceToken, {
+        selectFile,
+        selectSaveTarget,
+      }).then((response) => {
+        if (iframeRef.current?.contentWindow === iframeWindow) {
+          iframeWindow?.postMessage(response, appOrigin);
+        }
+      });
     };
 
     window.addEventListener("message", receiveRequest);
     return () => window.removeEventListener("message", receiveRequest);
-  }, [appOrigin, selectFile]);
+  }, [appOrigin, selectFile, selectSaveTarget]);
 
   if (!app.url) {
     return (
@@ -147,6 +192,13 @@ export function IframeApp({ app }: IframeAppProps) {
           instanceToken={picker.instanceToken}
           writable={picker.writable}
           onSelect={finishPicker}
+        />
+      ) : null}
+      {saveDialog ? (
+        <HostSaveDialog
+          instanceToken={saveDialog.instanceToken}
+          suggestedName={saveDialog.suggestedName}
+          onFinish={finishSaveDialog}
         />
       ) : null}
     </div>
