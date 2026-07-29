@@ -168,10 +168,11 @@ export function FileManagerBrowser({
     if (entry.kind !== "directory") return;
     setError(undefined);
     setLoading(true);
-    setBreadcrumbs((current) => [
-      ...current,
-      { entryId: entry.entryId, name: entry.name },
-    ]);
+    setBreadcrumbs((current) =>
+      current.at(-1)?.entryId === entry.entryId
+        ? current
+        : [...current, { entryId: entry.entryId, name: entry.name }],
+    );
     setDirectoryId(entry.entryId);
   };
 

@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileManagerBrowser } from "./FileManagerBrowser";
@@ -75,11 +81,12 @@ describe("FileManagerBrowser", () => {
     render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
 
     const directory = await screen.findByText("Documents");
-    await user.dblClick(directory);
+    fireEvent.doubleClick(directory);
+    fireEvent.doubleClick(directory);
     expect(await screen.findByText("此文件夹为空。")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Documents" }),
-    ).toBeInTheDocument();
+      screen.getAllByRole("button", { name: "Documents" }),
+    ).toHaveLength(1);
 
     await user.click(screen.getByRole("button", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("名称"), "Drafts");
