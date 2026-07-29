@@ -312,6 +312,88 @@ describe("desktop and app origins", () => {
     expect(forbidden.status).toBe(403);
   });
 
+  it("creates and claims resource launches through protected host APIs", async () => {
+    const dependencies = await createDependencies();
+    const createLaunch = vi.fn(async () => ({
+      targetAppId: "io.github.example.notes",
+      launchId: "b".repeat(43),
+      expiresAt: "2026-07-29T12:05:00.000Z",
+    }));
+    const claimLaunch = vi.fn(async () => ({
+      action: "edit",
+      resource: {
+        handleId: "c".repeat(43),
+        name: "note.txt",
+        permissions: ["read", "write"],
+      },
+    }));
+    const cancelTarget = vi.fn();
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        openResourceLaunchService: {
+          create: createLaunch,
+          claim: claimLaunch,
+          cancelTarget,
+        },
+      }).listen(0, "127.0.0.1"),
+    );
+    const headers = {
+      authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+      "content-type": "application/json",
+      origin: dependencies.config.desktopOrigin,
+      "sec-fetch-site": "same-origin",
+    };
+
+    const created = await fetch(
+      `${origin}/api/v1/internal/open-resources`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          entryId: "22".repeat(16),
+          expectedRevision: 3,
+          targetAppId: "io.github.example.notes",
+          handlerId: "text",
+          action: "edit",
+        }),
+      },
+    );
+    expect(created.status).toBe(201);
+    expect(createLaunch).toHaveBeenCalledWith("a".repeat(43), {
+      entryId: "22".repeat(16),
+      expectedRevision: 3,
+      targetAppId: "io.github.example.notes",
+      handlerId: "text",
+      action: "edit",
+    });
+
+    const claimed = await fetch(
+      `${origin}/api/v1/host/open-resources/claim`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ launchId: "b".repeat(43) }),
+      },
+    );
+    expect(claimed.status).toBe(200);
+    expect(claimLaunch).toHaveBeenCalledWith(
+      "a".repeat(43),
+      "b".repeat(43),
+    );
+    expect(claimed.headers.get("cache-control")).toBe("no-store");
+
+    const forbidden = await fetch(
+      `${origin}/api/v1/internal/open-resources`,
+      {
+        method: "POST",
+        headers: { ...headers, origin: "https://attacker.example" },
+        body: "{}",
+      },
+    );
+    expect(forbidden.status).toBe(403);
+  });
+
   it("bootstraps file instances only for the trusted desktop and active apps", async () => {
     const dependencies = await createDependencies();
     await dependencies.appStore.write({

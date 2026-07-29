@@ -17,6 +17,8 @@ import type { FileServiceGcReport } from "../files/fileServiceGcScanner.js";
 import type { InternalFileManagerService } from "../files/internalFileManagerService.js";
 import type { FileHostService } from "../files/fileHostService.js";
 import type { OpenResourceResolver } from "../openResource/openResourceResolver.js";
+import type { OpenResourceLaunchService } from "../openResource/openResourceLaunchService.js";
+import { OpenResourceError } from "../openResource/openResourceLaunchRegistry.js";
 import {
   createFileTransferRouter,
   type FileTransferExecutor,
@@ -27,6 +29,10 @@ type InternalFileManagerExecutor = Pick<
   "createDirectory" | "moveEntry" | "removeEntry"
 >;
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
+type OpenResourceLaunchExecutor = Pick<
+  OpenResourceLaunchService,
+  "create" | "claim" | "cancelTarget"
+>;
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -48,6 +54,7 @@ interface DesktopServerDependencies {
   internalFileAppIds?: ReadonlySet<string>;
   internalFileManager?: InternalFileManagerExecutor;
   openResourceResolver?: OpenResourceResolverExecutor;
+  openResourceLaunchService?: OpenResourceLaunchExecutor;
 }
 
 export function createDesktopServer({
@@ -66,6 +73,7 @@ export function createDesktopServer({
   internalFileAppIds = new Set(),
   internalFileManager,
   openResourceResolver,
+  openResourceLaunchService,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -138,6 +146,8 @@ export function createDesktopServer({
         );
       }
       const instanceToken = readInstanceToken(request);
+      const identity = fileCapabilities.authorizeInstance(instanceToken);
+      openResourceLaunchService?.cancelTarget(identity.appId);
       fileCapabilities.closeInstance(instanceToken);
       response.set("Cache-Control", "no-store").status(204).end();
     } catch (error) {
@@ -450,6 +460,87 @@ export function createDesktopServer({
     },
   );
 
+  app.post(
+    "/api/v1/internal/open-resources",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceLaunchService) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用资源打开能力",
+            503,
+          );
+        }
+        const instanceToken = readInstanceToken(request);
+        const {
+          entryId,
+          expectedRevision,
+          targetAppId,
+          handlerId,
+          action,
+        } = request.body as Record<string, unknown>;
+        if (
+          typeof entryId !== "string" ||
+          !isRevision(expectedRevision) ||
+          typeof targetAppId !== "string" ||
+          typeof handlerId !== "string" ||
+          (action !== "open" && action !== "edit")
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryId、expectedRevision、targetAppId、handlerId 和 action 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await openResourceLaunchService.create(instanceToken, {
+              entryId,
+              expectedRevision,
+              targetAppId,
+              handlerId,
+              action,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/open-resources/claim",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceLaunchService) {
+          throw new AppError(
+            "OPEN_RESOURCE_UNSUPPORTED",
+            "当前宿主尚未启用资源打开能力",
+            503,
+          );
+        }
+        const instanceToken = readInstanceToken(request);
+        const { launchId } = request.body as Record<string, unknown>;
+        if (typeof launchId !== "string") {
+          throw new AppError("REQUEST_INVALID", "launchId 必填");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await openResourceLaunchService.claim(
+              instanceToken,
+              launchId,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.use("/api/v1/admin", createAdminAuth(config.adminToken));
 
   app.get("/api/v1/admin/apps", async (_request, response, next) => {
@@ -569,13 +660,13 @@ export function createDesktopServer({
               "inspectionId 必须是字符串",
             );
           }
-          response.json(
-            await appService.update(
+          const updated = await appService.update(
               request.params.appId,
               inspectionId,
               configuration ?? {},
-            ),
-          );
+            );
+          openResourceLaunchService?.cancelTarget(request.params.appId);
+          response.json(updated);
         } catch (error) {
           next(error);
         }
@@ -603,16 +694,18 @@ export function createDesktopServer({
               `不支持的字段：${unknownKeys.join("、")}`,
             );
           }
-          response.json(
-            await appService.patch(request.params.appId, {
+          const updated = await appService.patch(request.params.appId, {
               ...(Object.hasOwn(body, "configuration")
                 ? { configuration: body.configuration }
                 : {}),
               ...(Object.hasOwn(body, "status")
                 ? { status: body.status }
                 : {}),
-            }),
-          );
+            });
+          if (updated.status === "disabled") {
+            openResourceLaunchService?.cancelTarget(request.params.appId);
+          }
+          response.json(updated);
         } catch (error) {
           next(error);
         }
@@ -624,6 +717,7 @@ export function createDesktopServer({
       async (request, response, next) => {
         try {
           await appService.uninstall(request.params.appId);
+          openResourceLaunchService?.cancelTarget(request.params.appId);
           response.status(204).end();
         } catch (error) {
           next(error);
@@ -681,6 +775,22 @@ export function createDesktopServer({
               message: error.message,
             },
           });
+        return;
+      }
+      if (error instanceof OpenResourceError) {
+        const status = {
+          LAUNCH_CONTEXT_EXPIRED: 410,
+          NO_LAUNCH_CONTEXT: 404,
+          RESOURCE_OPEN_BUSY: 409,
+          HANDLER_NOT_AVAILABLE: 409,
+          CAPABILITY_LIMIT_REACHED: 429,
+        }[error.code];
+        response.status(status).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
         return;
       }
       console.error("Desktop server request failed", error);
