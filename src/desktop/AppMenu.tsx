@@ -2,12 +2,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AppIcon } from "../components/AppIcon";
 import { useDesktopStore } from "../store/desktopStore";
 import { openApp } from "../windows/windowController";
+import { useDesktopSurfaceStore } from "../desktopSurface/store";
 
 export function AppMenu() {
   const appMenuOpen = useDesktopStore((state) => state.appMenuOpen);
   const closeAppMenu = useDesktopStore((state) => state.closeAppMenu);
   const appRegistry = useDesktopStore((state) => state.apps);
   const apps = useMemo(() => Object.values(appRegistry), [appRegistry]);
+  const desktopItems = useDesktopSurfaceStore(
+    (state) => state.surface.items,
+  );
+  const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -84,7 +89,7 @@ export function AppMenu() {
       </label>
       <div className="app-menu__list" role="list">
         {visibleApps.map((app) => (
-          <div role="listitem" key={app.id}>
+          <div className="app-menu__row" role="listitem" key={app.id}>
             <button
               className="app-menu__item"
               type="button"
@@ -95,6 +100,30 @@ export function AppMenu() {
             >
               <AppIcon app={app} compact />
               <span>{app.name}</span>
+            </button>
+            <button
+              className="app-menu__desktop-action"
+              type="button"
+              aria-label={`将“${app.name}”添加到桌面`}
+              title={
+                desktopItems.some(
+                  (item) =>
+                    item.target.type === "app" &&
+                    item.target.handle === app.id,
+                )
+                  ? "已在桌面"
+                  : "添加到桌面"
+              }
+              disabled={desktopItems.some(
+                (item) =>
+                  item.target.type === "app" &&
+                  item.target.handle === app.id,
+              )}
+              onClick={() =>
+                void addDesktopItem({ type: "app", handle: app.id })
+              }
+            >
+              ＋
             </button>
           </div>
         ))}

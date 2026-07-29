@@ -32,6 +32,11 @@ import {
 } from "../../openResource/defaultResourceHandlers";
 import { useDesktopStore } from "../../store/desktopStore";
 import { openApp } from "../../windows/windowController";
+import { useDesktopSurfaceStore } from "../../desktopSurface/store";
+import {
+  consumeDirectoryLaunch,
+  subscribeDirectoryLaunch,
+} from "../../desktopSurface/directoryLaunchBroker";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -52,6 +57,7 @@ type ToolbarIconName =
   | "upload"
   | "download"
   | "open-with"
+  | "add-desktop"
   | "refresh";
 
 type EditDialog =
@@ -91,11 +97,30 @@ export function FileManagerBrowser({
   const setDefaultResourceHandler = useDesktopStore(
     (state) => state.setDefaultResourceHandler,
   );
+  const desktopItems = useDesktopSurfaceStore(
+    (state) => state.surface.items,
+  );
+  const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
 
   const refresh = useCallback(() => {
     setLoading(true);
     setListing(undefined);
     setRefreshKey((value) => value + 1);
+  }, []);
+
+  useEffect(() => {
+    const navigatePending = () => {
+      const entryId = consumeDirectoryLaunch();
+      if (!entryId) return;
+      directoryNavigationPendingRef.current = true;
+      setError(undefined);
+      setLoading(true);
+      setListing(undefined);
+      setBreadcrumbs([]);
+      setDirectoryId(entryId);
+    };
+    navigatePending();
+    return subscribeDirectoryLaunch(navigatePending);
   }, []);
 
   useEffect(() => {
@@ -472,6 +497,36 @@ export function FileManagerBrowser({
             </button>
           </div>
           <div role="group" aria-label="打开与刷新">
+            <button
+              type="button"
+              aria-label="添加到桌面"
+              title="添加到桌面"
+              disabled={
+                !selected ||
+                working ||
+                desktopItems.some(
+                  (item) =>
+                    item.target.type === selected.kind &&
+                    item.target.handle === selected.entryId,
+                )
+              }
+              onClick={() => {
+                if (!selected) return;
+                setError(undefined);
+                void addDesktopItem({
+                  type: selected.kind,
+                  handle: selected.entryId,
+                })
+                  .then(() =>
+                    setNotice(`已将“${selected.name}”添加到桌面。`),
+                  )
+                  .catch((reason: unknown) =>
+                    setError(messageOf(reason)),
+                  );
+              }}
+            >
+              <ToolbarIcon kind="add-desktop" />
+            </button>
             <button
               type="button"
               aria-label="打开方式"
@@ -1022,6 +1077,13 @@ function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
       "M14 3h7v7",
       "M10 14L21 3",
       "M21 14v7H3V3h7",
+    ],
+    "add-desktop": [
+      "M4 5h16v12H4z",
+      "M8 21h8",
+      "M12 17v4",
+      "M12 8v6",
+      "M9 11h6",
     ],
     refresh: [
       "M20 7v5h-5",

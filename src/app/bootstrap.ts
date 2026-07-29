@@ -9,6 +9,7 @@ import {
   readPersistedDesktopState,
   restoreDesktopSession,
 } from "../store/persistedState";
+import { useDesktopSurfaceStore } from "../desktopSurface/store";
 
 let bootstrapped = false;
 
@@ -50,4 +51,5 @@ export async function bootstrapDesktop() {
       apps.filter((app) => app.pinned).map((app) => app.id),
     );
   await restoreDesktopSession(persisted, apps);
+  await useDesktopSurfaceStore.getState().load();
 }

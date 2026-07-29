@@ -57,17 +57,18 @@
 }
 
 .desktop-icons {
-  display: grid;
-  grid-auto-flow: column;
-  grid-template-rows: repeat(auto-fill, var(--desktop-icon-height));
-  grid-auto-columns: var(--desktop-icon-width);
-  gap: 6px;
+  position: relative;
   height: 100%;
-  width: max-content;
+  width: 100%;
   padding: 14px 10px;
+  user-select: none;
+  touch-action: none;
 }
 
 .desktop-icon {
+  position: absolute;
+  top: 14px;
+  left: 10px;
   display: flex;
   width: var(--desktop-icon-width);
   height: var(--desktop-icon-height);
@@ -81,6 +82,8 @@
   background: transparent;
   text-shadow: 0 1px 3px rgb(0 0 0 / 80%);
   cursor: default;
+  user-select: none;
+  touch-action: none;
 }
 
 .desktop-icon:hover,
@@ -90,7 +93,8 @@
 }
 
 .app-icon,
-.default-app-icon {
+.default-app-icon,
+.desktop-target-icon {
   display: grid;
   width: 48px;
   height: 48px;
@@ -98,6 +102,55 @@
   place-items: center;
   object-fit: contain;
   border-radius: 11px;
+}
+
+.desktop-target-icon {
+  font-size: 38px;
+  line-height: 48px;
+  text-shadow: none;
+}
+
+.desktop-icon[data-available="false"] {
+  opacity: 0.62;
+  filter: grayscale(0.75);
+}
+
+.desktop-icons__status {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  border: 0;
+  border-radius: 7px;
+  background: rgb(20 23 30 / 75%);
+}
+
+.desktop-icons__status--error {
+  cursor: pointer;
+}
+
+.desktop-marquee {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid rgb(137 183 255 / 92%);
+  background: rgb(93 155 245 / 22%);
+  pointer-events: none;
+}
+
+.desktop-drag-count {
+  position: fixed;
+  z-index: 12;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgb(32 45 67 / 88%);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 30%);
 }
 
 .app-icon--compact,
@@ -179,6 +232,34 @@
   background: transparent;
   cursor: pointer;
   text-align: left;
+}
+
+.app-menu__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 3px;
+}
+
+.app-menu__desktop-action {
+  width: 36px;
+  height: 36px;
+  color: inherit;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.app-menu__desktop-action:hover:not(:disabled),
+.app-menu__desktop-action:focus-visible {
+  background: rgb(255 255 255 / 9%);
+}
+
+.app-menu__desktop-action:disabled {
+  cursor: default;
+  opacity: 0.35;
 }
 
 .app-menu__item:hover,

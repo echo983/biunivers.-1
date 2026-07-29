@@ -9,14 +9,21 @@ import {
   openApp,
 } from "../windows/windowController";
 import "./desktop.css";
+import { useDesktopSurfaceStore } from "../desktopSurface/store";
+import { ContextMenu } from "../components/ContextMenu";
+import { useState } from "react";
 
 export function Desktop() {
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+  }>();
   const wallpaper = useDesktopStore((state) => state.wallpaper);
   const configStatus = useDesktopStore((state) => state.configStatus);
   const configError = useDesktopStore((state) => state.configError);
   const closeAppMenu = useDesktopStore((state) => state.closeAppMenu);
-  const selectDesktopApp = useDesktopStore(
-    (state) => state.selectDesktopApp,
+  const clearSurfaceSelection = useDesktopSurfaceStore(
+    (state) => state.clearSelection,
   );
 
   useEffect(() => {
@@ -38,8 +45,9 @@ export function Desktop() {
   }, []);
 
   const clearDesktopSelection = () => {
-    selectDesktopApp(null);
+    clearSurfaceSelection();
     closeAppMenu();
+    setContextMenu(undefined);
   };
 
   return (
@@ -51,13 +59,33 @@ export function Desktop() {
       />
       <div
         className="desktop-icon-layer"
-        onMouseDown={(event) => {
+        onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
             clearDesktopSelection();
           }
         }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          closeAppMenu();
+          setContextMenu({ x: event.clientX, y: event.clientY });
+        }}
       >
         <DesktopIcons />
+        {contextMenu && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(undefined)}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => setContextMenu(undefined)}
+            >
+              刷新
+            </button>
+          </ContextMenu>
+        )}
       </div>
       <div className="window-layer" id="desktop-window-layer" />
       <div className="app-menu-layer">

@@ -4,6 +4,7 @@ import { DEFAULT_WALLPAPER } from "../../store/defaults";
 import { clearLocalDesktopData } from "../../store/persistedState";
 import { resetDesktopWindows } from "../../windows/windowController";
 import { AppManagement } from "./AppManagement";
+import { useDesktopSurfaceStore } from "../../desktopSurface/store";
 
 function isWallpaperUrl(value: string) {
   if (value.startsWith("/") && !value.startsWith("//")) {
@@ -38,6 +39,16 @@ export function SettingsApp() {
   const apps = useMemo(() => Object.values(appRegistry), [appRegistry]);
   const [wallpaperInput, setWallpaperInput] = useState(wallpaper);
   const [wallpaperError, setWallpaperError] = useState<string | null>(null);
+  const desktopSurface = useDesktopSurfaceStore((state) => state.surface);
+  const desktopSurfaceError = useDesktopSurfaceStore(
+    (state) => state.error,
+  );
+  const removeDesktopItems = useDesktopSurfaceStore(
+    (state) => state.remove,
+  );
+  const resetDesktopSurface = useDesktopSurfaceStore(
+    (state) => state.reset,
+  );
 
   const statusLabel = {
     loading: "正在加载",
@@ -119,12 +130,39 @@ export function SettingsApp() {
 
       <section>
         <h2>桌面</h2>
-        <p>
-          桌面应用：{apps.filter((app) => app.desktop).map((app) => app.name).join("、")}
-        </p>
+        {desktopSurface.items.length > 0 ? (
+          <ul className="settings-app__app-list">
+            {desktopSurface.items.map((item) => (
+              <li key={item.id}>
+                <span>
+                  {item.resolved.name}
+                  {!item.resolved.available && "（失效）"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void removeDesktopItems([item.id])}
+                >
+                  从桌面移除
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p>当前桌面没有项目。</p>
+        )}
+        {desktopSurfaceError && (
+          <p className="settings-app__error" role="alert">
+            {desktopSurfaceError}
+          </p>
+        )}
         <button
           type="button"
-          onClick={() => queueMicrotask(resetDesktopWindows)}
+          onClick={() => {
+            if (window.confirm("恢复默认桌面项目和窗口状态？")) {
+              void resetDesktopSurface();
+              queueMicrotask(resetDesktopWindows);
+            }
+          }}
         >
           恢复默认桌面状态
         </button>

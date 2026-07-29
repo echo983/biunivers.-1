@@ -1,8 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultApps } from "../store/defaults";
 import { useDesktopStore } from "../store/desktopStore";
+import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import { Desktop } from "./Desktop";
 
 describe("Desktop", () => {
@@ -12,6 +13,44 @@ describe("Desktop", () => {
       appMenuOpen: false,
       selectedDesktopAppId: null,
     });
+    useDesktopSurfaceStore.setState({
+      status: "ready",
+      surface: {
+        schemaVersion: 1,
+        revision: 1,
+        items: [
+          {
+            id: "11".repeat(16),
+            target: { type: "app", handle: "system.about" },
+            position: { column: 0, row: 0 },
+            createdAtMs: 1,
+            resolved: {
+              available: true,
+              kind: "app",
+              name: "关于",
+              icon: "/icons/about.svg",
+            },
+          },
+        ],
+      },
+      selectedItemIds: new Set(),
+      error: undefined,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/api/v1/desktop-surface/resolve")) {
+          return new Response(
+            JSON.stringify(useDesktopSurfaceStore.getState().surface),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          );
+        }
+        return new Response("Not found", { status: 404 });
+      }),
+    );
   });
 
   it("opens, searches, and closes the app menu", async () => {
@@ -36,7 +75,7 @@ describe("Desktop", () => {
   it("selects and clears a desktop icon", async () => {
     const user = userEvent.setup();
     const { container } = render(<Desktop />);
-    const desktopApps = screen.getByRole("group", { name: "桌面应用" });
+    const desktopApps = screen.getByRole("group", { name: "桌面项目" });
     const about = within(desktopApps).getByRole("button", { name: "关于" });
 
     await user.click(about);
@@ -46,5 +85,21 @@ describe("Desktop", () => {
     expect(iconLayer).not.toBeNull();
     await user.click(iconLayer as Element);
     expect(about).toHaveAttribute("data-selected", "false");
+  });
+
+  it("shows the desktop-only no-op refresh menu", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<Desktop />);
+    const iconLayer = container.querySelector(".desktop-icon-layer");
+    expect(iconLayer).not.toBeNull();
+
+    await user.pointer({
+      target: iconLayer as Element,
+      keys: "[MouseRight]",
+    });
+    const refresh = screen.getByRole("menuitem", { name: "刷新" });
+    await user.click(refresh);
+    expect(screen.queryByRole("menuitem", { name: "刷新" })).toBeNull();
+    expect(useDesktopSurfaceStore.getState().surface.revision).toBe(1);
   });
 });
