@@ -72,6 +72,10 @@ import {
   openApp,
 } from "./windowController";
 import { creatingAppIds, windowRuntimeMap } from "./windowRuntimeMap";
+import {
+  pendingResourceLaunch,
+  resetResourceLaunchBrokerForTests,
+} from "../openResource/launchBroker";
 
 describe("window controller", () => {
   beforeEach(() => {
@@ -79,12 +83,37 @@ describe("window controller", () => {
     winboxMock.instances.length = 0;
     windowRuntimeMap.clear();
     creatingAppIds.clear();
+    resetResourceLaunchBrokerForTests();
     useDesktopStore.setState({
       apps: Object.fromEntries(defaultApps.map((app) => [app.id, app])),
       windows: {},
       runningAppIds: [],
       activeAppId: null,
     });
+  });
+
+  it("queues a resource launch while opening or focusing an iframe app", () => {
+    const iframeApp = {
+      ...defaultApps[0],
+      id: "io.github.example.notes",
+      kind: "iframe" as const,
+      url: "http://notes.localhost:8081/index.html",
+    };
+    useDesktopStore.setState({
+      apps: {
+        ...useDesktopStore.getState().apps,
+        [iframeApp.id]: iframeApp,
+      },
+    });
+    act(() => openApp(iframeApp.id, { launchId: "a".repeat(43) }));
+    expect(pendingResourceLaunch(iframeApp.id)).toBe("a".repeat(43));
+
+    const instance = winboxMock.instances[0];
+    instance.show.mockClear();
+    act(() => openApp(iframeApp.id, { launchId: "a".repeat(43) }));
+    expect(instance.show).toHaveBeenCalledOnce();
+    act(() => closeApp(iframeApp.id));
+    expect(pendingResourceLaunch(iframeApp.id)).toBeUndefined();
   });
 
   afterEach(() => {

@@ -13,6 +13,22 @@ import { HostFilePicker } from "../hostApi/HostFilePicker";
 import { HostSaveDialog } from "../hostApi/HostSaveDialog";
 import type { AppDefinition } from "../types/desktop";
 import { openExternalApp } from "./openExternalApp";
+import {
+  consumeResourceLaunch,
+  pendingResourceLaunch,
+  subscribeResourceLaunch,
+} from "../openResource/launchBroker";
+import {
+  claimResourceLaunch,
+  errorResponse,
+  OpenResourceClientError,
+  successResponse,
+} from "../openResource/openResourceClient";
+import {
+  noLaunchContextResponse,
+  OPEN_RESOURCE_PROTOCOL,
+  parseOpenResourceRequest,
+} from "../openResource/protocol";
 
 interface IframeAppProps {
   app: AppDefinition;
@@ -40,6 +56,27 @@ export function IframeApp({ app }: IframeAppProps) {
     suggestedName: string;
   } | null>(null);
   const appOrigin = app.url ? new URL(app.url).origin : null;
+
+  const notifyResourceAvailable = useCallback(() => {
+    if (!appOrigin || !pendingResourceLaunch(app.id)) return;
+    const iframeWindow = iframeRef.current?.contentWindow;
+    if (!iframeWindow) return;
+    void instanceReadyRef.current.then((instanceToken) => {
+      if (
+        instanceToken &&
+        pendingResourceLaunch(app.id) &&
+        iframeRef.current?.contentWindow === iframeWindow
+      ) {
+        iframeWindow.postMessage(
+          {
+            protocol: OPEN_RESOURCE_PROTOCOL,
+            event: "launch.contextAvailable",
+          },
+          appOrigin,
+        );
+      }
+    });
+  }, [app.id, appOrigin]);
 
   const selectFile = useCallback(
     (writable: boolean): Promise<string | null> => {
@@ -136,6 +173,11 @@ export function IframeApp({ app }: IframeAppProps) {
     };
   }, [app.id]);
 
+  useEffect(
+    () => subscribeResourceLaunch(app.id, notifyResourceAvailable),
+    [app.id, notifyResourceAvailable],
+  );
+
   useEffect(() => {
     if (!appOrigin) {
       return;
@@ -146,11 +188,57 @@ export function IframeApp({ app }: IframeAppProps) {
       if (!isTrustedHostMessage(event, appOrigin, iframeWindow ?? null)) {
         return;
       }
+      const postResponse = (response: unknown) => {
+        if (iframeRef.current?.contentWindow === iframeWindow) {
+          iframeWindow?.postMessage(response, appOrigin);
+        }
+      };
 
-      const request = parseHostRequest(event.data);
-      if (!request) {
+      const openResourceRequest = parseOpenResourceRequest(event.data);
+      if (openResourceRequest) {
+        void instanceReadyRef.current.then(async (instanceToken) => {
+          const launchId = pendingResourceLaunch(app.id);
+          if (!launchId) {
+            postResponse(noLaunchContextResponse(openResourceRequest));
+            return;
+          }
+          if (!instanceToken) {
+            postResponse(
+              errorResponse(
+                openResourceRequest.requestId,
+                new OpenResourceClientError(
+                  "OPEN_RESOURCE_UNSUPPORTED",
+                  "当前宿主尚未启用资源打开能力",
+                  true,
+                ),
+              ),
+            );
+            return;
+          }
+          try {
+            const result = await claimResourceLaunch(
+              instanceToken,
+              launchId,
+            );
+            consumeResourceLaunch(app.id, launchId);
+            postResponse(
+              successResponse(openResourceRequest.requestId, result),
+            );
+          } catch (error) {
+            if (
+              error instanceof OpenResourceClientError &&
+              error.terminal
+            ) {
+              consumeResourceLaunch(app.id, launchId);
+            }
+            postResponse(errorResponse(openResourceRequest.requestId, error));
+          }
+        });
         return;
       }
+
+      const request = parseHostRequest(event.data);
+      if (!request) return;
 
       void instanceReadyRef.current.then(async (instanceToken) => {
         const response = instanceToken
@@ -159,15 +247,13 @@ export function IframeApp({ app }: IframeAppProps) {
               selectSaveTarget,
             })
           : unsupportedResponse(request);
-        if (iframeRef.current?.contentWindow === iframeWindow) {
-          iframeWindow?.postMessage(response, appOrigin);
-        }
+        postResponse(response);
       });
     };
 
     window.addEventListener("message", receiveRequest);
     return () => window.removeEventListener("message", receiveRequest);
-  }, [appOrigin, selectFile, selectSaveTarget]);
+  }, [app.id, appOrigin, selectFile, selectSaveTarget]);
 
   if (!app.url) {
     return (
@@ -190,6 +276,7 @@ export function IframeApp({ app }: IframeAppProps) {
         className="app-iframe"
         src={app.url}
         title={app.name}
+        onLoad={notifyResourceAvailable}
       />
       {picker ? (
         <HostFilePicker

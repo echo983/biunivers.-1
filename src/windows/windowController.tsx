@@ -11,10 +11,15 @@ import {
 import { creatingAppIds, windowRuntimeMap } from "./windowRuntimeMap";
 import { openExternalApp } from "../apps/openExternalApp";
 import type { WindowState } from "../types/desktop";
+import {
+  clearResourceLaunch,
+  queueResourceLaunch,
+} from "../openResource/launchBroker";
 
 interface OpenAppOptions {
   restoreState?: boolean;
   focus?: boolean;
+  launchId?: string;
 }
 
 function getWindowLayer() {
@@ -122,6 +127,7 @@ function finalizeClose(appId: string) {
     height: runtime.winbox.height,
   });
   windowRuntimeMap.delete(appId);
+  clearResourceLaunch(appId);
   runtime.reactRoot.unmount();
   useDesktopStore.getState().removeWindow(appId);
 }
@@ -139,6 +145,12 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
       openExternalApp(app.url);
     }
     return;
+  }
+  if (options.launchId) {
+    if (app.kind !== "iframe") {
+      throw new Error("Only managed iframe apps can receive resources.");
+    }
+    queueResourceLaunch(appId, options.launchId);
   }
 
   const existing = windowRuntimeMap.get(appId);
@@ -259,6 +271,9 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
       useDesktopStore.getState().setActiveApp(appId);
     }
   } catch (error) {
+    if (options.launchId) {
+      clearResourceLaunch(appId);
+    }
     reactRoot.unmount();
     useDesktopStore.getState().removeWindow(appId);
     console.error(`Failed to open application "${appId}"`, error);
