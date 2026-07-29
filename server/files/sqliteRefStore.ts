@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, rename, rm } from "node:fs/promises";
+import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
@@ -108,6 +108,59 @@ export class SqliteRefStore {
         throw error;
       }
       throw corrupt(error);
+    }
+  }
+
+  static async initializeWithRef(
+    databasePath: string,
+    initialRef: CreateRefInput,
+  ): Promise<SqliteRefStore> {
+    validateRef(initialRef);
+    await mkdir(dirname(databasePath), { recursive: true });
+    if (await pathExists(databasePath)) {
+      throw new RefStoreError(
+        "REF_ALREADY_EXISTS",
+        "RefStore already exists; genesis initialization is create-only.",
+      );
+    }
+
+    const temporaryPath = join(
+      dirname(databasePath),
+      `.${randomUUID()}.sqlite-genesis`,
+    );
+    let database: Database.Database | undefined;
+    try {
+      database = new Database(temporaryPath);
+      configureDatabase(database);
+      createSchema(database);
+      const temporaryStore = new SqliteRefStore(temporaryPath, database);
+      temporaryStore.createRef(initialRef);
+      database.pragma("wal_checkpoint(TRUNCATE)");
+      database.close();
+      database = undefined;
+
+      try {
+        await link(temporaryPath, databasePath);
+      } catch (error) {
+        if (isNodeError(error, "EEXIST")) {
+          throw new RefStoreError(
+            "REF_ALREADY_EXISTS",
+            "Another process initialized the RefStore first.",
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      return await SqliteRefStore.openExisting(databasePath);
+    } finally {
+      if (database?.open) {
+        database.close();
+      }
+      await Promise.all([
+        rm(temporaryPath, { force: true }),
+        rm(`${temporaryPath}-wal`, { force: true }),
+        rm(`${temporaryPath}-shm`, { force: true }),
+      ]);
     }
   }
 
@@ -461,6 +514,10 @@ function isSqliteConstraint(error: unknown): boolean {
     typeof error.code === "string" &&
     error.code.startsWith("SQLITE_CONSTRAINT")
   );
+}
+
+function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error && error.code === code;
 }
 
 async function pathExists(path: string): Promise<boolean> {

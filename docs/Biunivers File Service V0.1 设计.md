@@ -730,7 +730,7 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 - Chunk、Manifest、Segment 和 Head；
 - SQLite RefStore；（已完成）
 - CAS 发布；（已完成）
-- 创世文件系统；
+- 创世文件系统；（已完成）
 - 完整回放和验证工具。
 
 ### 阶段 2：文件服务

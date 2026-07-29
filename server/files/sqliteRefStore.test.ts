@@ -52,6 +52,23 @@ describe("SqliteRefStore", () => {
     reopened.close();
   });
 
+  it("publishes a fully initialized genesis database in one create-only step", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initializeWithRef(path, initial);
+    expect(store.getRef("main")).toEqual(initial);
+    store.close();
+
+    await expect(
+      SqliteRefStore.initializeWithRef(path, {
+        ...initial,
+        headFidHex: "30303030303030303030303030303030",
+      }),
+    ).rejects.toMatchObject({ code: "REF_ALREADY_EXISTS" });
+    const reopened = await SqliteRefStore.openExisting(path);
+    expect(reopened.getRef("main")).toEqual(initial);
+    reopened.close();
+  });
+
   it("publishes with exact head and revision CAS and never overwrites a winner", async () => {
     const path = await databasePath();
     const store = await SqliteRefStore.initialize(path);

@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:pvlog": "cargo test --manifest-path crates/pvlog-core/Cargo.toml && node scripts/verify-pvlog-vectors.mjs",
-    "build:pvlog-wasm": "wasm-pack build crates/pvlog-core --target web --out-dir ../../dist/pvlog-core-wasm",
+    "build:pvlog-wasm": "wasm-pack build crates/pvlog-core --target nodejs --out-dir ../../generated/pvlog-core-wasm",
     "test:e2e": "playwright test",
     "preview": "vite preview",
     "start": "node dist/server/index.js"

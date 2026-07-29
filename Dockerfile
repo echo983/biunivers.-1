@@ -14,6 +14,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/generated ./generated
 COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \
   ./docs/developer-kit/v1/biunivers.app.schema.json
 COPY --from=build /app/docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md \

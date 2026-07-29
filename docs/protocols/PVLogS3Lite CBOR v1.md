@@ -139,3 +139,7 @@ File 额外包含 `6 content` 和 `7 size`；Directory map 不包含这两个字
 仓库内 Rust PVLog Core 已实现 Head、Segment、Checkpoint 和 Manifest 的严格解码与
 重新编码一致性检查。Checkpoint 解码还验证唯一根目录、Entry ID 唯一、父目录存在且类型正确、
 同目录名称唯一以及父子图无环。原生核心与 WASM 导出使用同一实现和同一组黄金向量。
+
+服务端加载仓库内由该 Rust crate 生成的 ABI v1 WASM 产物；产物只包含纯计算能力，并随
+Docker 镜像复制，不在运行时下载。`npm run build:pvlog-wasm` 是唯一再生成入口，生成后必须
+运行 Rust 测试、黄金向量检查和服务端 packaged-WASM 测试。

@@ -275,6 +275,11 @@ CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 
 在线一致性备份和恢复步骤见
 [`runbooks/File Service RefStore 备份恢复.md`](./runbooks/File%20Service%20RefStore%20备份恢复.md)。
 
+创世初始化先生成并持久化 revision 0 Checkpoint，再生成引用它的 revision 0 Head；两者均
+完成读后 FID 与结构验证后，才用 `initializeWithRef` 发布 `main`。初始 SQLite 在同目录临时
+文件中完整创建，关闭并清空 WAL 后通过 create-only 硬链接发布。失败最多留下不可达的不可变
+对象，不会留下半初始化或空的权威 RefStore。
+
 ## 8. Head
 
 Head 是不可变、内容寻址的文件系统版本根。

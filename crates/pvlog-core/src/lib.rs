@@ -1152,8 +1152,10 @@ pub fn validate_entry_name(name: &str) -> Result<(), String> {
 #[cfg(target_arch = "wasm32")]
 mod wasm {
     use super::{
-        ABI_VERSION, ChunkRef, Fid, IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest,
-        decode_checkpoint, decode_head, decode_manifest, decode_segment, encode_manifest, fid_hex,
+        ABI_VERSION, Checkpoint, CheckpointRef, ChunkRef, Entry, EntryId, EntryKind, Fid, Head,
+        IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest, decode_checkpoint, decode_head,
+        decode_manifest, decode_segment, encode_checkpoint, encode_head, encode_manifest, fid_hex,
+        validate_entry_id,
     };
     use wasm_bindgen::prelude::*;
 
@@ -1220,6 +1222,73 @@ mod wasm {
         decode_checkpoint(bytes)
             .map(|_| ())
             .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = encodeGenesisCheckpoint)]
+    pub fn encode_genesis_checkpoint_wasm(
+        lineage_id: &[u8],
+        root_entry_id: &[u8],
+        created_at_ms: u64,
+    ) -> Result<Vec<u8>, JsError> {
+        let lineage_id = array_16(lineage_id, "lineage ID")?;
+        if lineage_id == [0; 16] {
+            return Err(JsError::new("lineage ID must not be all zeroes"));
+        }
+        let root_entry_id = EntryId(array_16(root_entry_id, "root Entry ID")?);
+        validate_entry_id(root_entry_id).map_err(|error| JsError::new(&error))?;
+        Ok(encode_checkpoint(&Checkpoint {
+            lineage_id,
+            revision: 0,
+            covered_segment: None,
+            entries: vec![Entry {
+                entry_id: root_entry_id,
+                parent_id: None,
+                name: String::new(),
+                kind: EntryKind::Directory,
+                created_at_ms,
+                mtime_ms: created_at_ms,
+            }],
+        }))
+    }
+
+    #[wasm_bindgen(js_name = encodeGenesisHead)]
+    pub fn encode_genesis_head_wasm(
+        lineage_id: &[u8],
+        root_entry_id: &[u8],
+        checkpoint_fid: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+    ) -> Result<Vec<u8>, JsError> {
+        let lineage_id = array_16(lineage_id, "lineage ID")?;
+        if lineage_id == [0; 16] {
+            return Err(JsError::new("lineage ID must not be all zeroes"));
+        }
+        let root_entry_id = EntryId(array_16(root_entry_id, "root Entry ID")?);
+        validate_entry_id(root_entry_id).map_err(|error| JsError::new(&error))?;
+        let checkpoint_fid = Fid(array_16(checkpoint_fid, "Checkpoint FID")?);
+        if writer_id.is_empty() || writer_id.len() > 255 {
+            return Err(JsError::new("writer ID must contain 1 to 255 UTF-8 bytes"));
+        }
+        Ok(encode_head(&Head {
+            lineage_id,
+            root_entry_id,
+            revision: 0,
+            parent_head: None,
+            last_segment: None,
+            checkpoint: Some(CheckpointRef {
+                fid: checkpoint_fid,
+                revision: 0,
+                covered_segment: None,
+            }),
+            created_at_ms,
+            writer_id,
+        }))
+    }
+
+    fn array_16(bytes: &[u8], label: &str) -> Result<[u8; 16], JsError> {
+        bytes
+            .try_into()
+            .map_err(|_| JsError::new(&format!("{label} must contain exactly 16 bytes")))
     }
 
     #[wasm_bindgen(js_name = FidHasher)]
