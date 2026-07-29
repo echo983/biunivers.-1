@@ -192,6 +192,10 @@ head(key)
 list(prefix)  // 仅诊断和 GC 报告
 ```
 
+仓库内 `server/files/objectStore.ts` 是该合约的 TypeScript 边界；
+`LocalWormObjectStore` 使用同文件系统硬链接完成 create-only 原子发布，仅用于本地开发和
+合约测试。生产 S3 适配器必须通过同一套合约测试，不能因为后端不同而放宽不可变语义。
+
 其中 `create` 必须满足：
 
 - 一个 Key 最多成功创建一次；
