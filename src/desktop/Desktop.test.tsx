@@ -136,4 +136,17 @@ describe("Desktop", () => {
     expect(screen.queryByRole("menuitem", { name: "刷新" })).toBeNull();
     expect(useDesktopSurfaceStore.getState().surface.revision).toBe(1);
   });
+
+  it("shows a recoverable notice after a tab layout conflict", () => {
+    useDesktopSurfaceStore.setState({
+      status: "ready",
+      error: "桌面已在其他页面中发生变化，请重新操作。",
+    });
+    render(<Desktop />);
+    expect(
+      screen.getByRole("button", {
+        name: /桌面已在其他页面中发生变化/,
+      }),
+    ).toBeVisible();
+  });
 });

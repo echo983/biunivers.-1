@@ -130,6 +130,13 @@
   cursor: pointer;
 }
 
+.desktop-icons__status--warning {
+  color: #fff1d1;
+  border: 1px solid rgb(255 217 137 / 38%);
+  background: rgb(99 66 24 / 92%);
+  cursor: pointer;
+}
+
 .desktop-marquee {
   position: absolute;
   z-index: 5;

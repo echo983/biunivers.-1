@@ -344,6 +344,15 @@ export function DesktopIcons() {
           {error ?? "桌面项目加载失败"}，点击重试
         </button>
       )}
+      {status === "ready" && error && (
+        <button
+          className="desktop-icons__status desktop-icons__status--warning"
+          type="button"
+          onClick={() => void useDesktopSurfaceStore.getState().load()}
+        >
+          {error} 点击刷新桌面状态
+        </button>
+      )}
     </div>
   );
 }
