@@ -12,6 +12,7 @@ import {
   FileCapabilityError,
 } from "../files/fileCapabilityRegistry.js";
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
+import type { FileServiceBackupResult } from "../files/fileServiceBackup.js";
 import type { FileHostService } from "../files/fileHostService.js";
 import {
   createFileTransferRouter,
@@ -29,6 +30,9 @@ interface DesktopServerDependencies {
   fileCapabilities?: FileCapabilityRegistry;
   fileTransfers?: FileTransferExecutor;
   fileHost?: FileHostService;
+  fileServiceBackup?: {
+    createLatest(): Promise<FileServiceBackupResult>;
+  };
 }
 
 export function createDesktopServer({
@@ -42,6 +46,7 @@ export function createDesktopServer({
   fileCapabilities,
   fileTransfers,
   fileHost,
+  fileServiceBackup,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -301,6 +306,27 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  app.post(
+    "/api/v1/admin/file-service/backups",
+    async (_request, response, next) => {
+      try {
+        if (!fileServiceBackup) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用文件备份能力",
+            503,
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(await fileServiceBackup.createLatest());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   if (inspections && appService) {
     app.post("/api/v1/admin/inspections", async (request, response, next) => {

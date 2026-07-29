@@ -112,6 +112,58 @@ describe("desktop and app origins", () => {
       mode: "disabled",
       writable: false,
     });
+
+    const unavailableBackup = await fetch(
+      `${origin}/api/v1/admin/file-service/backups`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${dependencies.config.adminToken}`,
+        },
+      },
+    );
+    expect(unavailableBackup.status).toBe(503);
+    await expect(unavailableBackup.json()).resolves.toMatchObject({
+      error: { code: "HOST_API_UNSUPPORTED" },
+    });
+  });
+
+  it("creates a controlled File Service backup through the admin endpoint", async () => {
+    const dependencies = await createDependencies();
+    const result = {
+      createdAt: "2026-07-29T12:00:00.000Z",
+      revision: 3,
+      rootEntryIdHex: "11".repeat(16),
+      size: 24_576,
+      fileName: "latest.sqlite",
+    };
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        fileServiceBackup: {
+          createLatest: async () => result,
+        },
+      }).listen(0, "127.0.0.1"),
+    );
+
+    const unauthorized = await fetch(
+      `${origin}/api/v1/admin/file-service/backups`,
+      { method: "POST" },
+    );
+    expect(unauthorized.status).toBe(401);
+
+    const created = await fetch(
+      `${origin}/api/v1/admin/file-service/backups`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${dependencies.config.adminToken}`,
+        },
+      },
+    );
+    expect(created.status).toBe(201);
+    expect(created.headers.get("cache-control")).toBe("no-store");
+    await expect(created.json()).resolves.toEqual(result);
   });
 
   it("bootstraps file instances only for the trusted desktop and active apps", async () => {

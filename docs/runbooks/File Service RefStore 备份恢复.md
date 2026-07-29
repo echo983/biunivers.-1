@@ -14,6 +14,19 @@ RefStore 默认位于 `/data/file-service/file-service.sqlite`。它保存当前
 2. 对临时备份执行 `quick_check`、schema version 和必需表校验；
 3. 校验通过后原子重命名到目标路径。
 
+管理员可在服务运行时触发受控备份：
+
+```sh
+curl -X POST \
+  -H 'Authorization: Bearer <admin-token>' \
+  http://localhost:8080/api/v1/admin/file-service/backups
+```
+
+宿主不接受调用方提供的文件路径，只会原子更新
+`/data/file-service/backups/latest.sqlite`。接口返回备份的 revision、根 Entry ID、大小和生成时间；
+返回成功前还会独立打开备份，并从对象存储验证其 Ref → Head → checkpoint 链。`latest.sqlite`
+是滚动备份；需要保留历史版本时，由运维在成功后复制到独立备份介质。
+
 备份介质还应记录非 secret S3 endpoint、region、bucket 和 prefix。Access Key 与 Secret
 应通过独立 secret 管理恢复，不写入备份说明或日志。
 

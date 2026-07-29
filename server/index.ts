@@ -13,6 +13,7 @@ import { startFileService } from "./files/fileServiceRuntime.js";
 import { FileCapabilityRegistry } from "./files/fileCapabilityRegistry.js";
 import { FileTransferService } from "./files/fileTransferService.js";
 import { FileHostService } from "./files/fileHostService.js";
+import { FileServiceBackup } from "./files/fileServiceBackup.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -79,6 +80,19 @@ async function main() {
           capabilities: fileCapabilities,
         })
       : undefined;
+  const fileServiceBackup =
+    fileService.repository && fileService.refStore && config.fileService
+      ? new FileServiceBackup({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          backupPath: resolve(
+            config.dataDir,
+            "file-service",
+            "backups",
+            "latest.sqlite",
+          ),
+        })
+      : undefined;
   if (fileService.status.mode === "ready") {
     console.log(
       `Biunivers File Service ready at revision ${fileService.status.revision}`,
@@ -101,6 +115,7 @@ async function main() {
     fileCapabilities,
     fileTransfers,
     fileHost,
+    fileServiceBackup,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
