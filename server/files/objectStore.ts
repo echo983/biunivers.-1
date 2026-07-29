@@ -32,7 +32,8 @@ export interface ImmutableObjectStore {
 export type ObjectStoreErrorCode =
   | "INVALID_OBJECT_KEY"
   | "OBJECT_NOT_FOUND"
-  | "FID_COLLISION";
+  | "FID_COLLISION"
+  | "OBJECT_INTEGRITY_FAILURE";
 
 export class ObjectStoreError extends Error {
   constructor(

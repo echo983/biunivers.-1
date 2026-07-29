@@ -163,6 +163,11 @@ S3、网络和 File Service 必须位于受信任边界内；未来不可信分�
 本文中的“客户端”是受信任的 Biunivers File Service 或等价存储实现，不是第三方 iframe
 应用。第三方应用不能自行提交可信 FID、访问任意对象或获得 S3 凭据。
 
+仓库内 `ImmutableObjectRepository` 是强制完整性边界：调用方 PUT 时不能提供 FID，Repository
+根据最终字节计算 FID 后才调用 ObjectStore；GET 后重新计算并在不匹配时返回
+`OBJECT_INTEGRITY_FAILURE`。ObjectStore 的 `FID_COLLISION` 只表示同 Key 已存在不同字节，
+两类错误不能混用。
+
 V1 的精确字段编号、确定性编码规则和黄金向量由
 [`protocols/PVLogS3Lite CBOR v1.md`](./protocols/PVLogS3Lite%20CBOR%20v1.md) 定义。
 
