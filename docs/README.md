@@ -36,7 +36,7 @@ Static App、Manifest 和 Management Protocol v1 仍保持发布候选/草案状
 | [File Service V0.1 首轮验收](<acceptance/File Service V0.1 首轮验收.md>) | 已通过 | 真实 R2、记事本、分片、重启、备份恢复和 GC 验收证据 |
 | [File Service RefStore 备份恢复](<runbooks/File Service RefStore 备份恢复.md>) | 当前运维手册 | SQLite 在线备份、恢复、内容扫描和只读 GC |
 | [Biunivers Host API v1](<protocols/Biunivers Host API v1.md>) | 已实现 | 第三方应用文件选择、读写传输、元数据、释放和冲突语义 |
-| [Biunivers Resource Session Protocol v1](<developer-kit/v1/BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md>) | 施工中 | 主推的可续租资源会话、重复 GET、Range 读取和完整保存 |
+| [Biunivers Resource Session Protocol v1](<developer-kit/v1/BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md>) | 已实现 | 主推的可续租资源会话、重复 GET、Range 读取和完整保存 |
 
 Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的冻结原文，因此原文中
 “V1 不提供 Host API”保留其发布时语境，不做原地修改。V0.3 文件能力由独立、可选的
@@ -111,12 +111,13 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Static App Protocol v1 发布候选摘要](<protocols/Biunivers Static App Protocol v1 发布候选摘要.md>) | 发布候选 | 第三方最小交付、宿主承诺、边界和冻结判断 |
 | [Nassau App Manifest v1](<Nassau App Manifest v1.txt>) | 参考材料 | 内容寻址应用清单参考；不是 Biunivers V1 的直接运行协议 |
 
-## V0.8：资源会话待施工
+## V0.8：资源会话验收完成
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
-| [V0.8 资源会话技术设计](<浏览器云端个人桌面 V0.8 资源会话技术设计.md>) | 待施工评审 | 并行兼容架构、内存租约、Range/Chunk、控制面、数据面与生命周期 |
-| [V0.8 资源会话施工计划](<浏览器云端个人桌面 V0.8 资源会话施工计划.md>) | 待施工 | 六阶段实施、兼容验证、真实 Range 验收和合并门槛 |
+| [V0.8 资源会话技术设计](<浏览器云端个人桌面 V0.8 资源会话技术设计.md>) | 已实现 | 并行兼容架构、内存租约、Range/Chunk、控制面、数据面与生命周期 |
+| [V0.8 资源会话施工计划](<浏览器云端个人桌面 V0.8 资源会话施工计划.md>) | 验收完成 | 六阶段实施、兼容验证、真实 Range 验收和合并门槛 |
+| [V0.8 资源会话后端验收](<acceptance/V0.8 资源会话后端验收.md>) | 已通过 | Docker/R2、随机 Seek、租约、保存冲突、撤销、重启和 Notepad 双栈验收 |
 
 ## 归档规则
 

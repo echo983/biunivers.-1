@@ -21,7 +21,7 @@ export function AboutApp() {
         </div>
         <div>
           <dt>文件</dt>
-          <dd>Biunivers File Service</dd>
+          <dd>File Service · Resource Session v1</dd>
         </div>
         <div>
           <dt>应用</dt>
