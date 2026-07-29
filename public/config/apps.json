@@ -1,19 +1,5 @@
 [
   {
-    "id": "files",
-    "name": "文件",
-    "kind": "iframe",
-    "icon": "/icons/files.svg",
-    "url": "/services/files/",
-    "defaultWidth": 1000,
-    "defaultHeight": 700,
-    "minWidth": 600,
-    "minHeight": 400,
-    "desktop": true,
-    "pinned": true,
-    "trusted": true
-  },
-  {
     "id": "transmission",
     "name": "Transmission",
     "kind": "iframe",
