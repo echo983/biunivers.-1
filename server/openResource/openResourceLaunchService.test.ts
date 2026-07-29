@@ -1,11 +1,12 @@
 // @vitest-environment node
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { InstalledAppRecord } from "../apps/appStore.js";
 import { EntryIndex } from "../files/entryIndex.js";
 import { FileCapabilityRegistry } from "../files/fileCapabilityRegistry.js";
 import { OpenResourceLaunchRegistry } from "./openResourceLaunchRegistry.js";
 import { OpenResourceLaunchService } from "./openResourceLaunchService.js";
+import type { PublicResourceSession } from "../resources/resourceSessionRegistry.js";
 
 const appId = "io.github.example.notes";
 const entryId = "20".repeat(16);
@@ -49,7 +50,13 @@ function installed(
   };
 }
 
-function setup() {
+function setup(resourceSessionService?: {
+  issueFile: (
+    instanceToken: string,
+    entryId: string,
+    access: "read" | "edit",
+  ) => Promise<PublicResourceSession>;
+}) {
   const capabilities = new FileCapabilityRegistry();
   const launches = new OpenResourceLaunchRegistry();
   const apps = [installed()];
@@ -76,6 +83,7 @@ function setup() {
     capabilities,
     launches,
     appStore: { read: async () => ({ apps }) },
+    resourceSessionService,
     loadIndex: async () => index,
   });
   return {
@@ -175,6 +183,39 @@ describe("OpenResourceLaunchService", () => {
     await expect(service.claim(target, created.launchId)).resolves.toMatchObject({
       resource: { permissions: ["read"] },
     });
+  });
+
+  it("lets the new protocol consume a launch exactly once", async () => {
+    const issueFile = vi.fn().mockResolvedValue({
+      sessionId: "session-id",
+      access: "edit",
+    });
+    const { capabilities, service } = setup({ issueFile });
+    const source = capabilities.createInstance(
+      "system.files",
+      "files-window",
+    ).instanceToken;
+    const target = capabilities.createInstance(
+      appId,
+      "notes-window",
+    ).instanceToken;
+    const created = await service.create(source, {
+      entryId,
+      expectedRevision: 3,
+      targetAppId: appId,
+      handlerId: "text",
+      action: "edit",
+    });
+    await expect(
+      service.claimResourceSession(target, created.launchId),
+    ).resolves.toMatchObject({
+      action: "edit",
+      resource: { sessionId: "session-id", access: "edit" },
+    });
+    expect(issueFile).toHaveBeenCalledWith(target, entryId, "edit");
+    await expect(
+      service.claim(target, created.launchId),
+    ).rejects.toMatchObject({ code: "NO_LAUNCH_CONTEXT" });
   });
 
   it("consumes safely when revision or handler changes before claim", async () => {

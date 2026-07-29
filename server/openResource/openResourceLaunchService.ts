@@ -20,7 +20,7 @@ interface OpenResourceLaunchServiceOptions {
   launches: OpenResourceLaunchRegistry;
   appStore: AppStoreReader;
   loadIndex: () => Promise<EntryIndex>;
-  resourceSessionService?: ResourceSessionService;
+  resourceSessionService?: Pick<ResourceSessionService, "issueFile">;
 }
 
 export class OpenResourceLaunchService {
