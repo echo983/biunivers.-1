@@ -28,7 +28,8 @@
 ## 明确边界
 
 - 配置会发送给浏览器，不得存放 secret；
-- V1 不提供 Host API、capability、跨应用资源交换或应用专属后端；
+- Static App Protocol v1 不定义 Host API、capability、跨应用资源交换或应用专属后端；
+  文件能力由可选的独立 `biunivers.host-api/1` 提供，不改变静态应用安装协议原文；
 - 包内资源使用相对路径，客户端路由使用 hash 路由；
 - iframe 内业务和站点数据由应用负责，外层窗口由宿主负责。
 

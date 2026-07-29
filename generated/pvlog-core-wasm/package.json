@@ -1,0 +1,13 @@
+{
+  "name": "pvlog-core",
+  "description": "Deterministic PVLogS3Lite format and XXH3-128 core",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "pvlog_core_bg.wasm",
+    "pvlog_core.js",
+    "pvlog_core.d.ts"
+  ],
+  "main": "pvlog_core.js",
+  "types": "pvlog_core.d.ts"
+}

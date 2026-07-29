@@ -9,6 +9,12 @@ import { GitHubSource } from "./github/githubSource.js";
 import { createAppServer } from "./http/appServer.js";
 import { createDesktopServer } from "./http/desktopServer.js";
 import { ManifestValidator } from "./manifests/manifestValidator.js";
+import { startFileService } from "./files/fileServiceRuntime.js";
+import { FileCapabilityRegistry } from "./files/fileCapabilityRegistry.js";
+import { FileTransferService } from "./files/fileTransferService.js";
+import { FileHostService } from "./files/fileHostService.js";
+import { FileServiceBackup } from "./files/fileServiceBackup.js";
+import { FileServiceGcScanner } from "./files/fileServiceGcScanner.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -50,6 +56,60 @@ async function main() {
     operationLock: new OperationLock(),
     dataDir: config.dataDir,
   });
+  const fileService = await startFileService(config.fileService);
+  const fileCapabilities =
+    fileService.status.mode === "ready"
+      ? new FileCapabilityRegistry()
+      : undefined;
+  const fileTransfers =
+    fileCapabilities &&
+    fileService.repository &&
+    fileService.refStore &&
+    config.fileService
+      ? new FileTransferService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          writerId: config.fileService.writerId,
+          capabilities: fileCapabilities,
+        })
+      : undefined;
+  const fileHost =
+    fileCapabilities && fileService.repository && fileService.refStore
+      ? new FileHostService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          capabilities: fileCapabilities,
+        })
+      : undefined;
+  const fileServiceBackup =
+    fileService.repository && fileService.refStore && config.fileService
+      ? new FileServiceBackup({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          backupPath: resolve(
+            config.dataDir,
+            "file-service",
+            "backups",
+            "latest.sqlite",
+          ),
+        })
+      : undefined;
+  const fileServiceGcScanner =
+    fileService.repository && fileService.refStore
+      ? new FileServiceGcScanner({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+        })
+      : undefined;
+  if (fileService.status.mode === "ready") {
+    console.log(
+      `Biunivers File Service ready at revision ${fileService.status.revision}`,
+    );
+  } else if (fileService.status.mode === "offline") {
+    console.warn(
+      `Biunivers File Service offline (${fileService.status.code}): ${fileService.status.message}`,
+    );
+  }
 
   const clientDir = fileURLToPath(new URL("../client/", import.meta.url));
   const desktopServer = createDesktopServer({
@@ -58,6 +118,13 @@ async function main() {
     clientDir,
     inspections,
     appService,
+    fileServiceStatus: fileService.status,
+    getFileServiceStatus: () => fileService.currentStatus(),
+    fileCapabilities,
+    fileTransfers,
+    fileHost,
+    fileServiceBackup,
+    fileServiceGcScanner,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
@@ -67,6 +134,7 @@ async function main() {
   const appServer = createAppServer({
     appStore,
     dataDir: config.dataDir,
+    appOrigin: config.appOrigin,
   }).listen(config.appPort, () => {
     console.log(
       `Biunivers apps listening on ${config.appOrigin} (port ${config.appPort})`,
@@ -74,6 +142,7 @@ async function main() {
   });
 
   const shutdown = () => {
+    fileService.close();
     desktopServer.close();
     appServer.close();
   };

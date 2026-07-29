@@ -100,19 +100,20 @@ installed-apps/
         └── assets/
 ```
 
-桌面入口：
+桌面入口（`<app-origin-key>` 由宿主根据 app ID 稳定派生）：
 
 ```text
-/apps/<appId>/<commit-sha>/index.html
+https://<app-origin-key>.<app-base>/apps/<commit-sha>/index.html
 ```
 
 配置入口：
 
 ```text
-/apps/<appId>/<commit-sha>/.biunivers/config.json
+https://<app-origin-key>.<app-base>/apps/<commit-sha>/.biunivers/config.json
 ```
 
 配置是管理服务提供的虚拟资源，不属于仓库文件。它必须使用 `Cache-Control: no-store`。
+请求 Host 必须精确匹配该应用；应用 ID 不作为可切换的 URL 路径参数。
 
 静态文件服务必须：
 

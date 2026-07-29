@@ -215,6 +215,11 @@ Biunivers 负责：
 - 处理标题栏、拖动、缩放、最小化、最大化和关闭；
 - 更新、停用和卸载应用。
 
+支持 File Service 的宿主还可以选择提供独立的
+[`biunivers.host-api/1`](<../../protocols/Biunivers Host API v1.md>)。它不属于静态应用
+安装协议，应用必须先检测能力，并能处理 `HOST_API_UNSUPPORTED`。不使用文件能力的应用无需
+接入 Host API。
+
 应用负责：
 
 - iframe 内部界面；
@@ -225,9 +230,8 @@ Biunivers 负责：
 
 ## V1 没有什么
 
-不要假定 V1 提供：
+Static App Protocol v1 本身不定义：
 
-- Host API；
 - 应用之间互相调用；
 - 文件关联；
 - 跨应用资源传递；
@@ -236,7 +240,8 @@ Biunivers 负责：
 - 自动更新；
 - Biunivers 内部 store 或父页面 DOM。
 
-未来能力会使用独立、带版本的协议。不要提前自行设计私有的父页面调用方式。
+文件打开与保存已经由独立、可选的 Host API v1 定义；其他未来能力也会使用独立、带版本的
+协议。不要自行设计私有的父页面调用方式。
 
 ## 给 AI 开发代理
 

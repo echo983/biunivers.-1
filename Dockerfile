@@ -1,4 +1,4 @@
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -6,14 +6,16 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS runtime
+FROM node:24-alpine AS runtime
 
 ENV NODE_ENV=production
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+RUN node -e "import('hash-wasm')"
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/generated ./generated
 COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \
   ./docs/developer-kit/v1/biunivers.app.schema.json
 COPY --from=build /app/docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md \

@@ -28,6 +28,15 @@ describe("loadServerConfig", () => {
     ).toThrow("必须不同");
   });
 
+  it("rejects an IP App Origin because it cannot isolate app subdomains", () => {
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        BIUNIVERS_APP_ORIGIN: "http://127.0.0.1:8081",
+      }),
+    ).toThrow("不能使用 IP");
+  });
+
   it("rejects weak admin tokens and origins with paths", () => {
     expect(() =>
       loadServerConfig({
@@ -42,5 +51,41 @@ describe("loadServerConfig", () => {
         BIUNIVERS_APP_ORIGIN: "https://apps.example.com/path",
       }),
     ).toThrow("必须是无路径");
+  });
+
+  it("keeps File Service disabled unless explicitly enabled", () => {
+    expect(loadServerConfig(validEnvironment).fileService).toBeUndefined();
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        BIUNIVERS_FILE_ENABLED: "true",
+      }),
+    ).toThrow("BIUNIVERS_FILE_S3_ENDPOINT");
+  });
+
+  it("loads enabled File Service configuration without exposing defaults as secrets", () => {
+    const config = loadServerConfig({
+      ...validEnvironment,
+      BIUNIVERS_FILE_ENABLED: "true",
+      BIUNIVERS_FILE_INITIALIZE: "true",
+      BIUNIVERS_FILE_S3_ENDPOINT: "https://account.r2.example.com",
+      BIUNIVERS_FILE_S3_BUCKET: "files",
+      BIUNIVERS_FILE_NAMESPACE: "users/alice",
+      BIUNIVERS_FILE_S3_ACCESS_KEY_ID: "access-key",
+      BIUNIVERS_FILE_S3_SECRET_ACCESS_KEY: "secret-key",
+    });
+
+    expect(config.fileService).toMatchObject({
+      initialize: true,
+      endpoint: "https://account.r2.example.com",
+      region: "auto",
+      bucket: "files",
+      namespace: "users/alice",
+      forcePathStyle: true,
+      writerId: "biunivers-host",
+    });
+    expect(config.fileService?.databasePath).toMatch(
+      /file-service\/file-service\.sqlite$/,
+    );
   });
 });

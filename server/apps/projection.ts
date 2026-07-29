@@ -1,11 +1,12 @@
 import type { InstalledAppRecord } from "./appStore.js";
+import { appSpecificOrigin } from "./appOrigin.js";
 
 function appUrl(
   appOrigin: string,
   installed: InstalledAppRecord,
   path: string,
 ) {
-  const base = `${appOrigin}/apps/${encodeURIComponent(installed.appId)}/${encodeURIComponent(installed.commitSha)}/`;
+  const base = `${appSpecificOrigin(appOrigin, installed.appId)}/apps/${encodeURIComponent(installed.commitSha)}/`;
   return new URL(path, base).toString();
 }
 

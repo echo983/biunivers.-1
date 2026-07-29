@@ -41,10 +41,10 @@ describe("projectInstalledApp", () => {
       name: "Hello",
       kind: "iframe",
       icon:
-        "http://localhost:8081/apps/io.github.example.hello/0123456789abcdef/assets/icon.svg",
+        "http://app-cd3ab3859ceac28abdef8189c8db9692c9566cd7.localhost:8081/apps/0123456789abcdef/assets/icon.svg",
       description: "Example",
       url:
-        "http://localhost:8081/apps/io.github.example.hello/0123456789abcdef/index.html",
+        "http://app-cd3ab3859ceac28abdef8189c8db9692c9566cd7.localhost:8081/apps/0123456789abcdef/index.html",
       defaultWidth: 640,
       defaultHeight: 480,
       minWidth: 320,

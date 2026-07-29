@@ -1,10 +1,12 @@
 import { join } from "node:path";
 import express from "express";
+import { requestHostMatchesApp } from "../apps/appOrigin.js";
 import type { AppStore } from "../apps/appStore.js";
 
 interface AppServerDependencies {
   appStore: AppStore;
   dataDir: string;
+  appOrigin: string;
 }
 
 const APP_ID_PATTERN = /^[a-z0-9.-]+$/;
@@ -30,27 +32,35 @@ export function createAppServer(dependencies?: AppServerDependencies) {
     app.use("/apps", async (request, response, next) => {
       try {
         const segments = request.path.split("/").filter(Boolean);
-        if (segments.length < 3) {
+        if (segments.length < 2) {
           response.status(404).end();
           return;
         }
-        const [appId, commitSha, ...resourceSegments] = segments;
-        if (
-          !APP_ID_PATTERN.test(appId) ||
-          !COMMIT_PATTERN.test(commitSha)
-        ) {
+        const [commitSha, ...resourceSegments] = segments;
+        if (!COMMIT_PATTERN.test(commitSha)) {
           response.status(404).end();
           return;
         }
 
         const state = await dependencies.appStore.read();
         const installed = state.apps.find(
-          (record) => record.appId === appId,
+          (record) =>
+            record.status === "active" &&
+            APP_ID_PATTERN.test(record.appId) &&
+            requestHostMatchesApp(
+              request.get("host"),
+              dependencies.appOrigin,
+              record.appId,
+            ),
         );
         if (!installed) {
           response.status(404).end();
           return;
         }
+
+        response.set("X-Content-Type-Options", "nosniff");
+        response.set("Cross-Origin-Resource-Policy", "cross-origin");
+        response.set("Referrer-Policy", "no-referrer");
 
         if (
           resourceSegments.length === 2 &&
@@ -92,7 +102,7 @@ export function createAppServer(dependencies?: AppServerDependencies) {
             root: join(
               dependencies.dataDir,
               "apps",
-              appId,
+              installed.appId,
               commitSha,
             ),
             dotfiles: "deny",

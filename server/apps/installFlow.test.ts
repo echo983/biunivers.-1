@@ -10,7 +10,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import type { Server } from "node:http";
+import { request, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -24,6 +24,7 @@ import { createDesktopServer } from "../http/desktopServer.js";
 import { ManifestValidator } from "../manifests/manifestValidator.js";
 import type { ServerConfig } from "../config.js";
 import { AppService } from "./appService.js";
+import { appSpecificOrigin } from "./appOrigin.js";
 import { AppStore } from "./appStore.js";
 import { InspectionService } from "./inspectionService.js";
 import { OperationLock } from "./operationLock.js";
@@ -47,6 +48,40 @@ const schemaPath = resolve(
   "v1",
   "biunivers.app.schema.json",
 );
+
+function fetchApp(
+  origin: string,
+  appId: string,
+  path: string,
+): Promise<Response> {
+  const url = new URL(path, origin);
+  return new Promise((resolveRequest, rejectRequest) => {
+    const outgoing = request(
+      url,
+      {
+        headers: {
+          host: new URL(
+            appSpecificOrigin("http://localhost:8081", appId),
+          ).host,
+        },
+      },
+      (incoming) => {
+        const chunks: Buffer[] = [];
+        incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+        incoming.on("end", () => {
+          resolveRequest(
+            new Response(Buffer.concat(chunks), {
+              status: incoming.statusCode,
+              headers: incoming.headers as Record<string, string>,
+            }),
+          );
+        });
+      },
+    );
+    outgoing.on("error", rejectRequest);
+    outgoing.end();
+  });
+}
 const commitSha = "0123456789abcdef0123456789abcdef01234567";
 
 let validator: ManifestValidator;
@@ -188,18 +223,48 @@ describe("inspect and install flow", () => {
       createAppServer({
         appStore: services.appStore,
         dataDir: services.dataDir,
+        appOrigin: "http://localhost:8081",
       }).listen(0, "127.0.0.1"),
     );
-    const base = `${origin}/apps/${installed.appId}/${commitSha}`;
-    expect((await fetch(`${base}/index.html`)).status).toBe(200);
-    await expect(
-      fetch(`${base}/.biunivers/config.json`).then((response) =>
-        response.json(),
-      ),
-    ).resolves.toEqual({ greeting: "来自安装流程" });
-    expect((await fetch(`${base}/biunivers.app.json`)).status).toBe(404);
+    const base = `/apps/${commitSha}`;
+    expect((await fetch(`${origin}${base}/index.html`)).status).toBe(404);
     expect(
-      (await fetch(`${base}/BIUNIVERS_APP_PROTOCOL_V1.md`)).status,
+      (
+        await fetchApp(
+          origin,
+          "io.github.example.other",
+          `${base}/index.html`,
+        )
+      ).status,
+    ).toBe(404);
+    const appResponse = await fetchApp(
+      origin,
+      installed.appId,
+      `${base}/index.html`,
+    );
+    expect(appResponse.status).toBe(200);
+    expect(
+      appResponse.headers.get("cross-origin-resource-policy"),
+    ).toBe("cross-origin");
+    await expect(
+      fetchApp(
+        origin,
+        installed.appId,
+        `${base}/.biunivers/config.json`,
+      ).then((response) => response.json()),
+    ).resolves.toEqual({ greeting: "来自安装流程" });
+    expect(
+      (await fetchApp(origin, installed.appId, `${base}/biunivers.app.json`))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await fetchApp(
+          origin,
+          installed.appId,
+          `${base}/BIUNIVERS_APP_PROTOCOL_V1.md`,
+        )
+      ).status,
     ).toBe(404);
   });
 
@@ -325,8 +390,10 @@ describe("inspect and install flow", () => {
         {
           id: "io.github.example.hello",
           kind: "iframe",
-          url:
-            "http://localhost:8081/apps/io.github.example.hello/0123456789abcdef0123456789abcdef01234567/index.html",
+          url: `${appSpecificOrigin(
+            "http://localhost:8081",
+            "io.github.example.hello",
+          )}/apps/0123456789abcdef0123456789abcdef01234567/index.html`,
         },
       ],
     });
@@ -386,15 +453,21 @@ describe("inspect and install flow", () => {
       createAppServer({
         appStore: services.appStore,
         dataDir: services.dataDir,
+        appOrigin: "http://localhost:8081",
       }).listen(0, "127.0.0.1"),
     );
-    const oldBase = `${origin}/apps/io.github.example.hello/${commitSha}`;
-    const newBase = `${origin}/apps/io.github.example.hello/${source.commitSha}`;
-    expect((await fetch(`${oldBase}/index.html`)).status).toBe(200);
-    expect((await fetch(`${newBase}/index.html`)).status).toBe(200);
+    const appId = "io.github.example.hello";
+    const oldBase = `/apps/${commitSha}`;
+    const newBase = `/apps/${source.commitSha}`;
+    expect((await fetchApp(origin, appId, `${oldBase}/index.html`)).status).toBe(
+      200,
+    );
+    expect((await fetchApp(origin, appId, `${newBase}/index.html`)).status).toBe(
+      200,
+    );
     await expect(
-      fetch(`${newBase}/.biunivers/config.json`).then((response) =>
-        response.json(),
+      fetchApp(origin, appId, `${newBase}/.biunivers/config.json`).then(
+        (response) => response.json(),
       ),
     ).resolves.toEqual({ greeting: "updated" });
 
@@ -402,6 +475,8 @@ describe("inspect and install flow", () => {
     await expect(services.appStore.read()).resolves.toMatchObject({
       apps: [],
     });
-    expect((await fetch(`${newBase}/index.html`)).status).toBe(404);
+    expect((await fetchApp(origin, appId, `${newBase}/index.html`)).status).toBe(
+      404,
+    );
   });
 });
