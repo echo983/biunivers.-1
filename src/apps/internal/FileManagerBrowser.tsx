@@ -42,6 +42,18 @@ interface Breadcrumb {
   name: string;
 }
 
+type ToolbarIconName =
+  | "new-folder"
+  | "new-file"
+  | "rename"
+  | "move"
+  | "copy"
+  | "remove"
+  | "upload"
+  | "download"
+  | "open-with"
+  | "refresh";
+
 type EditDialog =
   | { mode: "create-directory" }
   | { mode: "create-file" }
@@ -339,9 +351,153 @@ export function FileManagerBrowser({
   return (
     <article className="file-manager-app">
       <header className="file-manager-app__toolbar">
+        <div className="file-manager-app__actions">
+          <div role="group" aria-label="新建">
+            <button
+              type="button"
+              aria-label="新建文件夹"
+              title="新建文件夹"
+              disabled={!listing || working}
+              onClick={() =>
+                setEditDialog({ mode: "create-directory" })
+              }
+            >
+              <ToolbarIcon kind="new-folder" />
+            </button>
+            <button
+              type="button"
+              aria-label="新建文件"
+              title="新建文件"
+              disabled={!listing || working}
+              onClick={() => setEditDialog({ mode: "create-file" })}
+            >
+              <ToolbarIcon kind="new-file" />
+            </button>
+          </div>
+          <div role="group" aria-label="整理">
+            <button
+              type="button"
+              aria-label="重命名"
+              title="重命名"
+              disabled={!selected || working}
+              onClick={() =>
+                selected &&
+                setEditDialog({ mode: "rename", entry: selected })
+              }
+            >
+              <ToolbarIcon kind="rename" />
+            </button>
+            <button
+              type="button"
+              aria-label="移动"
+              title="移动"
+              disabled={!selected || working}
+              onClick={() => setMovingEntry(selected)}
+            >
+              <ToolbarIcon kind="move" />
+            </button>
+            <button
+              type="button"
+              aria-label="复制"
+              title="复制"
+              disabled={
+                !selected || selected.kind !== "file" || working
+              }
+              onClick={() =>
+                selected &&
+                setEditDialog({ mode: "copy", entry: selected })
+              }
+            >
+              <ToolbarIcon kind="copy" />
+            </button>
+            <button
+              type="button"
+              aria-label="移除"
+              title="移除"
+              disabled={!selected || working}
+              onClick={() => {
+                if (
+                  selected &&
+                  listing &&
+                  window.confirm(
+                    selected.kind === "directory"
+                      ? `从当前文件树移除文件夹“${selected.name}”及其内容？`
+                      : `从当前文件树移除文件“${selected.name}”？`,
+                  )
+                ) {
+                  void runMutation(() =>
+                    removeEntry(
+                      instanceToken,
+                      selected.entryId,
+                      selected.kind === "directory",
+                      listing.revision,
+                    ),
+                  );
+                }
+              }}
+            >
+              <ToolbarIcon kind="remove" />
+            </button>
+          </div>
+          <div role="group" aria-label="传输">
+            <button
+              type="button"
+              aria-label="上传"
+              title="上传"
+              disabled={!listing || working}
+              onClick={() => uploadInputRef.current?.click()}
+            >
+              <ToolbarIcon kind="upload" />
+            </button>
+            <input
+              ref={uploadInputRef}
+              className="sr-only"
+              type="file"
+              multiple
+              aria-label="选择要上传的文件"
+              onChange={(event) => {
+                if (event.target.files?.length) {
+                  void uploadFiles(event.target.files);
+                }
+              }}
+            />
+            <button
+              type="button"
+              aria-label="下载"
+              title="下载"
+              disabled={!selected || selected.kind !== "file" || working}
+              onClick={() => void downloadSelected()}
+            >
+              <ToolbarIcon kind="download" />
+            </button>
+          </div>
+          <div role="group" aria-label="打开与刷新">
+            <button
+              type="button"
+              aria-label="打开方式"
+              title="打开方式"
+              disabled={!selected || selected.kind !== "file" || working}
+              onClick={() => selected && void openFile(selected, true)}
+            >
+              <ToolbarIcon kind="open-with" />
+            </button>
+            <button
+              type="button"
+              aria-label="刷新"
+              title="刷新"
+              disabled={loading || working}
+              onClick={() => {
+                setError(undefined);
+                refresh();
+              }}
+            >
+              <ToolbarIcon kind="refresh" />
+            </button>
+          </div>
+        </div>
         <nav aria-label="当前位置" className="file-manager-app__breadcrumbs">
           <button type="button" onClick={() => navigateTo(-1)}>
-            文件
+            /
           </button>
           {breadcrumbs.map((breadcrumb, index) => (
             <span key={breadcrumb.entryId}>
@@ -352,142 +508,6 @@ export function FileManagerBrowser({
             </span>
           ))}
         </nav>
-        <div className="file-manager-app__actions">
-          <button
-            type="button"
-            aria-label="新建文件夹"
-            title="新建文件夹"
-            disabled={!listing || working}
-            onClick={() =>
-              setEditDialog({ mode: "create-directory" })
-            }
-          >
-            <span aria-hidden="true">📁＋</span>
-          </button>
-          <button
-            type="button"
-            aria-label="新建文件"
-            title="新建文件"
-            disabled={!listing || working}
-            onClick={() => setEditDialog({ mode: "create-file" })}
-          >
-            <span aria-hidden="true">📄＋</span>
-          </button>
-          <button
-            type="button"
-            aria-label="重命名"
-            title="重命名"
-            disabled={!selected || working}
-            onClick={() =>
-              selected &&
-              setEditDialog({ mode: "rename", entry: selected })
-            }
-          >
-            <span aria-hidden="true">✏️</span>
-          </button>
-          <button
-            type="button"
-            aria-label="移动"
-            title="移动"
-            disabled={!selected || working}
-            onClick={() => setMovingEntry(selected)}
-          >
-            <span aria-hidden="true">📂→</span>
-          </button>
-          <button
-            type="button"
-            aria-label="复制"
-            title="复制"
-            disabled={
-              !selected || selected.kind !== "file" || working
-            }
-            onClick={() =>
-              selected &&
-              setEditDialog({ mode: "copy", entry: selected })
-            }
-          >
-            <span aria-hidden="true">📑</span>
-          </button>
-          <button
-            type="button"
-            aria-label="移除"
-            title="移除"
-            disabled={!selected || working}
-            onClick={() => {
-              if (
-                selected &&
-                listing &&
-                window.confirm(
-                  selected.kind === "directory"
-                    ? `从当前文件树移除文件夹“${selected.name}”及其内容？`
-                    : `从当前文件树移除文件“${selected.name}”？`,
-                )
-              ) {
-                void runMutation(() =>
-                  removeEntry(
-                    instanceToken,
-                    selected.entryId,
-                    selected.kind === "directory",
-                    listing.revision,
-                  ),
-                );
-              }
-            }}
-          >
-            <span aria-hidden="true">🗑️</span>
-          </button>
-          <button
-            type="button"
-            aria-label="上传"
-            title="上传"
-            disabled={!listing || working}
-            onClick={() => uploadInputRef.current?.click()}
-          >
-            <span aria-hidden="true">⬆️</span>
-          </button>
-          <input
-            ref={uploadInputRef}
-            className="sr-only"
-            type="file"
-            multiple
-            aria-label="选择要上传的文件"
-            onChange={(event) => {
-              if (event.target.files?.length) {
-                void uploadFiles(event.target.files);
-              }
-            }}
-          />
-          <button
-            type="button"
-            aria-label="下载"
-            title="下载"
-            disabled={!selected || selected.kind !== "file" || working}
-            onClick={() => void downloadSelected()}
-          >
-            <span aria-hidden="true">⬇️</span>
-          </button>
-          <button
-            type="button"
-            aria-label="打开方式"
-            title="打开方式"
-            disabled={!selected || selected.kind !== "file" || working}
-            onClick={() => selected && void openFile(selected, true)}
-          >
-            <span aria-hidden="true">↗</span>
-          </button>
-          <button
-            type="button"
-            aria-label="刷新"
-            title="刷新"
-            disabled={loading || working}
-            onClick={() => {
-              setError(undefined);
-              refresh();
-            }}
-          >
-            <span aria-hidden="true">↻</span>
-          </button>
-        </div>
       </header>
 
       {error && (
@@ -964,4 +984,67 @@ function copyName(name: string): string {
   const dot = name.lastIndexOf(".");
   if (dot <= 0) return `${name} - 副本`;
   return `${name.slice(0, dot)} - 副本${name.slice(dot)}`;
+}
+
+function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
+  const paths: Record<ToolbarIconName, string[]> = {
+    "new-folder": [
+      "M3 6h6l2 2h10v11H3z",
+      "M15 11v6",
+      "M12 14h6",
+    ],
+    "new-file": [
+      "M6 2h8l4 4v16H6z",
+      "M14 2v6h4",
+      "M12 11v6",
+      "M9 14h6",
+    ],
+    rename: [
+      "M4 20h4l11-11-4-4L4 16z",
+      "M13.5 6.5l4 4",
+    ],
+    move: [
+      "M3 6h6l2 2h10v11H3z",
+      "M8 13h8",
+      "M13 10l3 3-3 3",
+    ],
+    copy: ["M8 8h12v12H8z", "M4 16V4h12"],
+    remove: [
+      "M4 7h16",
+      "M9 7V4h6v3",
+      "M6 7l1 14h10l1-14",
+      "M10 11v6",
+      "M14 11v6",
+    ],
+    upload: ["M12 19V5", "M7 10l5-5 5 5", "M5 21h14"],
+    download: ["M12 5v14", "M7 14l5 5 5-5", "M5 3h14"],
+    "open-with": [
+      "M14 3h7v7",
+      "M10 14L21 3",
+      "M21 14v7H3V3h7",
+    ],
+    refresh: [
+      "M20 7v5h-5",
+      "M4 17v-5h5",
+      "M6.1 8a7 7 0 0 1 11.7-2L20 9",
+      "M17.9 16a7 7 0 0 1-11.7 2L4 15",
+    ],
+  };
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths[kind].map((path) => (
+        <path key={path} d={path} />
+      ))}
+    </svg>
+  );
 }

@@ -766,45 +766,44 @@
 
 .file-manager-app__toolbar {
   display: grid;
-  padding: 10px 12px;
-  gap: 9px;
+  padding: 6px 8px;
+  gap: 5px;
   border-bottom: 1px solid #d8dee8;
   background: #fff;
 }
 
 .file-manager-app__breadcrumbs,
 .file-manager-app__breadcrumbs span,
-.file-manager-app__actions {
+.file-manager-app__actions,
+.file-manager-app__actions > [role="group"] {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 6px;
-}
-
-.file-manager-app__breadcrumbs {
-  overflow-x: auto;
-}
-
-.file-manager-app__breadcrumbs button {
-  padding: 2px 4px;
-  color: #285d9f;
-  border: 0;
-  background: transparent;
-  white-space: nowrap;
-  cursor: pointer;
+  gap: 4px;
 }
 
 .file-manager-app__actions {
   flex-wrap: wrap;
 }
 
-.file-manager-app__actions button {
-  display: inline-grid;
-  width: 34px;
-  height: 32px;
-  padding: 0;
-  place-items: center;
-  font-size: 15px;
+.file-manager-app__actions > [role="group"] + [role="group"] {
+  padding-left: 8px;
+  border-left: 1px solid #d8dee8;
+}
+
+.file-manager-app__breadcrumbs {
+  padding-top: 4px;
+  overflow-x: auto;
+  border-top: 1px solid #edf0f4;
+}
+
+.file-manager-app__breadcrumbs button {
+  padding: 1px 4px;
+  color: #285d9f;
+  border: 0;
+  background: transparent;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .file-manager-app__actions button,
@@ -814,6 +813,14 @@
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+}
+
+.file-manager-app__actions button {
+  display: inline-grid;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
 }
 
 .file-manager-app__actions button:disabled,

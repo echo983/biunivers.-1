@@ -176,8 +176,8 @@ describe("FileManagerBrowser", () => {
     });
     expect(await screen.findByText("此文件夹为空。")).toBeInTheDocument();
     expect(
-      screen.getAllByRole("button", { name: "Documents" }),
-    ).toHaveLength(1);
+      screen.getByRole("button", { name: "Documents" }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "新建文件夹" }));
     await user.type(screen.getByLabelText("名称"), "Drafts");
