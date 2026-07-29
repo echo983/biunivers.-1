@@ -186,11 +186,21 @@ describe("desktop and app origins", () => {
       entryId: "22".repeat(16),
       revision: 4,
     }));
+    const createFile = vi.fn(async () => ({
+      entryId: "33".repeat(16),
+      revision: 5,
+    }));
+    const copyFile = vi.fn(async () => ({
+      entryId: "44".repeat(16),
+      revision: 6,
+    }));
     const origin = await listen(
       createDesktopServer({
         ...dependencies,
         internalFileManager: {
           createDirectory,
+          createFile,
+          copyFile,
           moveEntry: vi.fn(),
           removeEntry: vi.fn(),
         },
@@ -252,6 +262,58 @@ describe("desktop and app origins", () => {
       name: "Documents",
       expectedRevision: 3,
     });
+
+    const createdFile = await fetch(
+      `${origin}/api/v1/internal/files/files`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          parentEntryId: "11".repeat(16),
+          name: "empty.txt",
+          expectedRevision: 4,
+        }),
+      },
+    );
+    expect(createdFile.status).toBe(201);
+    expect(createFile).toHaveBeenCalledWith("a".repeat(43), {
+      parentEntryId: "11".repeat(16),
+      name: "empty.txt",
+      expectedRevision: 4,
+    });
+
+    const copied = await fetch(
+      `${origin}/api/v1/internal/files/entries/${"33".repeat(16)}/copies`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          newParentEntryId: "11".repeat(16),
+          newName: "empty - copy.txt",
+          expectedRevision: 5,
+        }),
+      },
+    );
+    expect(copied.status).toBe(201);
+    expect(copyFile).toHaveBeenCalledWith(
+      "a".repeat(43),
+      "33".repeat(16),
+      {
+        newParentEntryId: "11".repeat(16),
+        newName: "empty - copy.txt",
+        expectedRevision: 5,
+      },
+    );
   });
 
   it("protects and validates internal resource handler resolution", async () => {

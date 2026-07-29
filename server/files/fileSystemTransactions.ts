@@ -24,6 +24,7 @@ export interface CreateFileInput {
   name: string;
   content: FileContentRef;
   mtimeMs?: number;
+  expectedRevision?: number;
 }
 
 export interface SetFileContentInput {
@@ -92,7 +93,7 @@ export class FileSystemTransactions {
   async createFile(
     input: CreateFileInput,
   ): Promise<PublishedFileSystemTransaction> {
-    const state = await this.#loadCurrentState();
+    const state = await this.#loadCurrentState(input.expectedRevision);
     const entryId = requireId(this.#randomId(), "Entry ID");
     const transactionId = requireId(this.#randomId(), "transaction ID");
     const timestamp = input.mtimeMs ?? this.#now();

@@ -6,6 +6,8 @@ import {
   type FormEvent,
 } from "react";
 import {
+  copyFile,
+  createFile,
   createResourceLaunch,
   createDirectory,
   moveEntry,
@@ -41,8 +43,10 @@ interface Breadcrumb {
 }
 
 type EditDialog =
-  | { mode: "create" }
+  | { mode: "create-directory" }
+  | { mode: "create-file" }
   | { mode: "rename"; entry: FileEntry }
+  | { mode: "copy"; entry: FileEntry }
   | null;
 
 interface OpenWithState {
@@ -67,6 +71,7 @@ export function FileManagerBrowser({
   const [openWith, setOpenWith] = useState<OpenWithState>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const directoryNavigationPendingRef = useRef(false);
+  const mutationPendingRef = useRef(false);
   const appRegistry = useDesktopStore((state) => state.apps);
   const defaultResourceHandlers = useDesktopStore(
     (state) => state.defaultResourceHandlers,
@@ -77,6 +82,7 @@ export function FileManagerBrowser({
 
   const refresh = useCallback(() => {
     setLoading(true);
+    setListing(undefined);
     setRefreshKey((value) => value + 1);
   }, []);
 
@@ -103,13 +109,19 @@ export function FileManagerBrowser({
     };
   }, [directoryId, instanceToken, refreshKey]);
 
-  const runMutation = async (operation: () => Promise<unknown>) => {
+  const runMutation = async (
+    operation: () => Promise<unknown>,
+    successMessage?: string,
+  ) => {
+    if (mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
     setWorking(true);
     setError(undefined);
     try {
       await operation();
       setEditDialog(null);
       setMovingEntry(undefined);
+      if (successMessage) setNotice(successMessage);
       refresh();
     } catch (reason) {
       if (
@@ -122,6 +134,7 @@ export function FileManagerBrowser({
         setError(messageOf(reason));
       }
     } finally {
+      mutationPendingRef.current = false;
       setWorking(false);
     }
   };
@@ -179,6 +192,7 @@ export function FileManagerBrowser({
     directoryNavigationPendingRef.current = true;
     setError(undefined);
     setLoading(true);
+    setListing(undefined);
     setBreadcrumbs((current) =>
       current.at(-1)?.entryId === entry.entryId
         ? current
@@ -317,6 +331,7 @@ export function FileManagerBrowser({
     directoryNavigationPendingRef.current = true;
     setError(undefined);
     setLoading(true);
+    setListing(undefined);
     setBreadcrumbs(next);
     setDirectoryId(targetDirectoryId);
   };
@@ -341,9 +356,18 @@ export function FileManagerBrowser({
           <button
             type="button"
             disabled={!listing || working}
-            onClick={() => setEditDialog({ mode: "create" })}
+            onClick={() =>
+              setEditDialog({ mode: "create-directory" })
+            }
           >
             新建文件夹
+          </button>
+          <button
+            type="button"
+            disabled={!listing || working}
+            onClick={() => setEditDialog({ mode: "create-file" })}
+          >
+            新建文件
           </button>
           <button
             type="button"
@@ -361,6 +385,18 @@ export function FileManagerBrowser({
             onClick={() => setMovingEntry(selected)}
           >
             移动
+          </button>
+          <button
+            type="button"
+            disabled={
+              !selected || selected.kind !== "file" || working
+            }
+            onClick={() =>
+              selected &&
+              setEditDialog({ mode: "copy", entry: selected })
+            }
+          >
+            复制
           </button>
           <button
             type="button"
@@ -499,28 +535,57 @@ export function FileManagerBrowser({
         <NameDialog
           mode={editDialog.mode}
           initialName={
-            editDialog.mode === "rename" ? editDialog.entry.name : ""
+            editDialog.mode === "rename"
+              ? editDialog.entry.name
+              : editDialog.mode === "copy"
+                ? copyName(editDialog.entry.name)
+                : editDialog.mode === "create-file"
+                  ? "未命名.txt"
+                  : ""
           }
           working={working}
           onCancel={() => setEditDialog(null)}
-          onSubmit={(name) =>
-            void runMutation(() =>
-              editDialog.mode === "create"
-                ? createDirectory(
-                    instanceToken,
-                    listing.parent.entryId,
-                    name,
-                    listing.revision,
-                  )
-                : moveEntry(
-                    instanceToken,
-                    editDialog.entry.entryId,
-                    listing.parent.entryId,
-                    name,
-                    listing.revision,
-                  ),
-            )
-          }
+          onSubmit={(name) => {
+            const mode = editDialog.mode;
+            void runMutation(() => {
+              if (mode === "create-directory") {
+                return createDirectory(
+                  instanceToken,
+                  listing.parent.entryId,
+                  name,
+                  listing.revision,
+                );
+              }
+              if (mode === "create-file") {
+                return createFile(
+                  instanceToken,
+                  listing.parent.entryId,
+                  name,
+                  listing.revision,
+                );
+              }
+              if (mode === "copy") {
+                return copyFile(
+                  instanceToken,
+                  editDialog.entry.entryId,
+                  listing.parent.entryId,
+                  name,
+                  listing.revision,
+                );
+              }
+              return moveEntry(
+                instanceToken,
+                editDialog.entry.entryId,
+                listing.parent.entryId,
+                name,
+                listing.revision,
+              );
+            }, mode === "create-file"
+              ? `已新建“${name}”。`
+              : mode === "copy"
+                ? `已创建副本“${name}”。`
+                : undefined);
+          }}
         />
       )}
 
@@ -656,7 +721,7 @@ function NameDialog({
   onCancel,
   onSubmit,
 }: {
-  mode: "create" | "rename";
+  mode: "create-directory" | "create-file" | "rename" | "copy";
   initialName: string;
   working: boolean;
   onCancel: () => void;
@@ -676,7 +741,13 @@ function NameDialog({
     >
       <form onSubmit={submit}>
         <h2 id="file-manager-name-dialog-title">
-          {mode === "create" ? "新建文件夹" : "重命名"}
+          {mode === "create-directory"
+            ? "新建文件夹"
+            : mode === "create-file"
+              ? "新建文件"
+              : mode === "copy"
+                ? "复制文件"
+                : "重命名"}
         </h2>
         <label>
           名称
@@ -805,6 +876,7 @@ function MoveDialog({
           ))}
         </nav>
         {error && <p role="alert">{error}</p>}
+        {loading && <p role="status">正在读取目标文件夹…</p>}
         <ul className="file-manager-dialog__directories">
           {listing?.entries
             .filter((item) => item.kind === "directory")
@@ -858,4 +930,10 @@ function formatDate(value: number): string {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function copyName(name: string): string {
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return `${name} - 副本`;
+  return `${name.slice(0, dot)} - 副本${name.slice(dot)}`;
 }

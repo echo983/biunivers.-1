@@ -34,6 +34,91 @@ afterEach(() => {
 });
 
 describe("FileManagerBrowser", () => {
+  it("creates an empty file and copies a file only once per submit", async () => {
+    const user = userEvent.setup();
+    const fileId = "4".repeat(32);
+    const mutations: Array<{ url: string; body: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("/api/v1/host/files")) {
+          return Response.json({
+            revision: 3,
+            rootEntryId: rootId,
+            parent: {
+              entryId: rootId,
+              name: "",
+              kind: "directory",
+              mtimeMs: 0,
+            },
+            entries: [
+              {
+                entryId: fileId,
+                name: "note.txt",
+                kind: "file",
+                size: 12,
+                mtimeMs: 100,
+              },
+            ],
+          });
+        }
+        mutations.push({
+          url,
+          body: typeof init?.body === "string" ? init.body : "",
+        });
+        return Response.json(
+          { entryId: "5".repeat(32), revision: 4 },
+          { status: 201 },
+        );
+      }),
+    );
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    await screen.findByText("note.txt");
+
+    await user.click(screen.getByRole("button", { name: "新建文件" }));
+    const createDialog = screen.getByRole("dialog", { name: "新建文件" });
+    expect(within(createDialog).getByLabelText("名称")).toHaveValue(
+      "未命名.txt",
+    );
+    const createButton = within(createDialog).getByRole("button", {
+      name: "确定",
+    });
+    act(() => {
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      createButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await waitFor(() => expect(mutations).toHaveLength(1));
+    expect(mutations[0]).toEqual({
+      url: "/api/v1/internal/files/files",
+      body: JSON.stringify({
+        parentEntryId: rootId,
+        name: "未命名.txt",
+        expectedRevision: 3,
+      }),
+    });
+
+    await user.click(await screen.findByText("note.txt"));
+    await user.click(screen.getByRole("button", { name: "复制" }));
+    const copyDialog = screen.getByRole("dialog", { name: "复制文件" });
+    expect(within(copyDialog).getByLabelText("名称")).toHaveValue(
+      "note - 副本.txt",
+    );
+    await user.click(
+      within(copyDialog).getByRole("button", { name: "确定" }),
+    );
+    await waitFor(() => expect(mutations).toHaveLength(2));
+    expect(mutations[1]).toEqual({
+      url: `/api/v1/internal/files/entries/${fileId}/copies`,
+      body: JSON.stringify({
+        newParentEntryId: rootId,
+        newName: "note - 副本.txt",
+        expectedRevision: 3,
+      }),
+    });
+  });
+
   it("browses directories and creates a folder at the listed revision", async () => {
     const user = userEvent.setup();
     let revision = 3;

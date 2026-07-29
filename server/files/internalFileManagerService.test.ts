@@ -4,6 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadCurrentEntryIndex } from "./entryIndex.js";
 import { FileCapabilityRegistry } from "./fileCapabilityRegistry.js";
+import { FileContentStore } from "./fileContentStore.js";
+import { FileSystemTransactions } from "./fileSystemTransactions.js";
 import { initializeGenesisFileSystem } from "./genesisFileSystem.js";
 import { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import { InternalFileManagerService } from "./internalFileManagerService.js";
@@ -42,6 +44,47 @@ afterEach(async () => {
 });
 
 describe("InternalFileManagerService", () => {
+  it("creates an empty file and copies content without changing its FID", async () => {
+    const { repository, genesis, service, instanceToken } = await setup();
+    const empty = await service.createFile(instanceToken, {
+      parentEntryId: genesis.rootEntryIdHex,
+      name: "empty.txt",
+      expectedRevision: 0,
+    });
+    const content = await new FileContentStore(repository).putBytes(
+      new TextEncoder().encode("shared content"),
+    );
+    const source = await new FileSystemTransactions({
+      repository,
+      refStore: genesis.store,
+      writerId: "test",
+    }).createFile({
+      parentEntryIdHex: genesis.rootEntryIdHex,
+      name: "source.txt",
+      content,
+      expectedRevision: 1,
+    });
+    const copied = await service.copyFile(
+      instanceToken,
+      source.entryIdHex,
+      {
+        newParentEntryId: genesis.rootEntryIdHex,
+        newName: "copy.txt",
+        expectedRevision: 2,
+      },
+    );
+
+    const index = await loadCurrentEntryIndex(repository, genesis.store);
+    expect(index.get(empty.entryId)).toMatchObject({
+      name: "empty.txt",
+      content: { kind: "chunk", size: 0 },
+    });
+    expect(copied.entryId).not.toBe(source.entryIdHex);
+    expect(index.get(copied.entryId)?.content).toEqual(content);
+    expect(index.get(source.entryIdHex)?.content).toEqual(content);
+    genesis.store.close();
+  });
+
   it("creates, renames, moves and removes directories with stable Entry IDs", async () => {
     const { repository, genesis, service, instanceToken } = await setup();
     const documents = await service.createDirectory(instanceToken, {
@@ -115,6 +158,13 @@ describe("InternalFileManagerService", () => {
     await expect(
       service.removeEntry(instanceToken, parent.entryId, {
         recursive: false,
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject({ code: "REQUEST_INVALID" });
+    await expect(
+      service.copyFile(instanceToken, parent.entryId, {
+        newParentEntryId: genesis.rootEntryIdHex,
+        newName: "Parent copy",
         expectedRevision: 2,
       }),
     ).rejects.toMatchObject({ code: "REQUEST_INVALID" });

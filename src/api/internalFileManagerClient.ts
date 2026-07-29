@@ -83,6 +83,39 @@ export function createDirectory(
   });
 }
 
+export function createFile(
+  instanceToken: string,
+  parentEntryId: string,
+  name: string,
+  expectedRevision: number,
+): Promise<FileMutationResult> {
+  return internalFetch("/api/v1/internal/files/files", instanceToken, {
+    method: "POST",
+    body: JSON.stringify({ parentEntryId, name, expectedRevision }),
+  });
+}
+
+export function copyFile(
+  instanceToken: string,
+  entryId: string,
+  newParentEntryId: string,
+  newName: string,
+  expectedRevision: number,
+): Promise<FileMutationResult> {
+  return internalFetch(
+    `/api/v1/internal/files/entries/${encodeURIComponent(entryId)}/copies`,
+    instanceToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        newParentEntryId,
+        newName,
+        expectedRevision,
+      }),
+    },
+  );
+}
+
 export function moveEntry(
   instanceToken: string,
   entryId: string,

@@ -5,6 +5,7 @@ import {
 import { loadCurrentEntryIndex, type EntryIndex } from "./entryIndex.js";
 import { validateEntryName } from "./entryName.js";
 import { FileSystemTransactions } from "./fileSystemTransactions.js";
+import { FileContentStore } from "./fileContentStore.js";
 import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import {
   RefStoreError,
@@ -30,12 +31,14 @@ export class InternalFileManagerService {
   readonly #repository: ImmutableObjectRepository;
   readonly #refStore: SqliteRefStore;
   readonly #capabilities: FileCapabilityRegistry;
+  readonly #contentStore: FileContentStore;
   readonly #transactions: FileSystemTransactions;
 
   constructor(options: InternalFileManagerServiceOptions) {
     this.#repository = options.repository;
     this.#refStore = options.refStore;
     this.#capabilities = options.capabilities;
+    this.#contentStore = new FileContentStore(options.repository);
     this.#transactions =
       options.transactions ??
       new FileSystemTransactions({
@@ -65,6 +68,68 @@ export class InternalFileManagerService {
       this.#transactions.createDirectory({
         parentEntryIdHex: parent.entryIdHex,
         name: input.name,
+        expectedRevision: input.expectedRevision,
+      }),
+    );
+  }
+
+  async createFile(
+    instanceToken: string,
+    input: {
+      parentEntryId: string;
+      name: string;
+      expectedRevision: number;
+    },
+  ): Promise<InternalFileMutationResult> {
+    this.#authorize(instanceToken);
+    validateEntryName(input.name);
+    const index = await this.#loadExpected(input.expectedRevision);
+    const parent = index.get(input.parentEntryId);
+    if (!parent || parent.kind !== "directory") {
+      throw notFound("Parent directory was not found.");
+    }
+    requireUniqueName(index, parent.entryIdHex, input.name);
+    const content = await this.#contentStore.putBytes(new Uint8Array());
+    return await this.#publish(() =>
+      this.#transactions.createFile({
+        parentEntryIdHex: parent.entryIdHex,
+        name: input.name,
+        content,
+        expectedRevision: input.expectedRevision,
+      }),
+    );
+  }
+
+  async copyFile(
+    instanceToken: string,
+    entryId: string,
+    input: {
+      newParentEntryId: string;
+      newName: string;
+      expectedRevision: number;
+    },
+  ): Promise<InternalFileMutationResult> {
+    this.#authorize(instanceToken);
+    validateEntryName(input.newName);
+    const index = await this.#loadExpected(input.expectedRevision);
+    const source = index.get(entryId);
+    if (!source) {
+      throw notFound("Source file was not found.");
+    }
+    if (source.kind !== "file" || !source.content) {
+      throw invalid("Only files can be copied.");
+    }
+    const content = source.content;
+    const parent = index.get(input.newParentEntryId);
+    if (!parent || parent.kind !== "directory") {
+      throw notFound("Destination directory was not found.");
+    }
+    requireUniqueName(index, parent.entryIdHex, input.newName);
+    return await this.#publish(() =>
+      this.#transactions.createFile({
+        parentEntryIdHex: parent.entryIdHex,
+        name: input.newName,
+        content,
         expectedRevision: input.expectedRevision,
       }),
     );

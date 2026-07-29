@@ -26,7 +26,11 @@ import {
 
 type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
-  "createDirectory" | "moveEntry" | "removeEntry"
+  | "createDirectory"
+  | "createFile"
+  | "copyFile"
+  | "moveEntry"
+  | "removeEntry"
 >;
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 type OpenResourceLaunchExecutor = Pick<
@@ -311,6 +315,80 @@ export function createDesktopServer({
       }),
     );
   }
+
+  app.post(
+    "/api/v1/internal/files/files",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { parentEntryId, name, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof parentEntryId !== "string" ||
+          typeof name !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "parentEntryId、name 和 expectedRevision 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.createFile(instanceToken, {
+              parentEntryId,
+              name,
+              expectedRevision,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/files/entries/:entryId/copies",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { newParentEntryId, newName, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof newParentEntryId !== "string" ||
+          typeof newName !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "newParentEntryId、newName 和 expectedRevision 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.copyFile(
+              instanceToken,
+              request.params.entryId,
+              { newParentEntryId, newName, expectedRevision },
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.post(
     "/api/v1/internal/files/directories",
