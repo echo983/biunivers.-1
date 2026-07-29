@@ -27,6 +27,30 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
+function parseDefaultResourceHandlers(value: unknown) {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const result: PersistedDesktopState["defaultResourceHandlers"] = {};
+  for (const [key, handler] of Object.entries(value)) {
+    if (
+      !/^extension:\.[a-z0-9]+:(?:open|edit)$/.test(key) ||
+      !isRecord(handler) ||
+      typeof handler.appId !== "string" ||
+      !/^[a-z0-9.-]+$/.test(handler.appId) ||
+      typeof handler.handlerId !== "string" ||
+      !/^[a-z][a-z0-9-]*$/.test(handler.handlerId)
+    ) {
+      return null;
+    }
+    result[key] = {
+      appId: handler.appId,
+      handlerId: handler.handlerId,
+    };
+  }
+  return result;
+}
+
 export function parsePersistedDesktopState(
   value: string | null,
 ): PersistedDesktopState | null {
@@ -38,7 +62,7 @@ export function parsePersistedDesktopState(
     const parsed: unknown = JSON.parse(value);
     if (
       !isRecord(parsed) ||
-      parsed.schemaVersion !== 1 ||
+      (parsed.schemaVersion !== 1 && parsed.schemaVersion !== 2) ||
       parsed.preferencesInitialized !== true ||
       typeof parsed.wallpaper !== "string" ||
       !isStringArray(parsed.pinnedAppIds) ||
@@ -75,13 +99,22 @@ export function parsePersistedDesktopState(
       };
     }
 
+    const defaultResourceHandlers =
+      parsed.schemaVersion === 1
+        ? {}
+        : parseDefaultResourceHandlers(parsed.defaultResourceHandlers);
+    if (defaultResourceHandlers === null) {
+      return null;
+    }
+
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       preferencesInitialized: true,
       wallpaper: parsed.wallpaper,
       pinnedAppIds: [...new Set(parsed.pinnedAppIds)],
       runningAppIds: [...new Set(parsed.runningAppIds)],
       activeAppId: parsed.activeAppId,
+      defaultResourceHandlers,
       windows,
     };
   } catch {
@@ -101,12 +134,13 @@ export function readPersistedDesktopState() {
 function serializeCurrentDesktop(): PersistedDesktopState {
   const state = useDesktopStore.getState();
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     preferencesInitialized: true,
     wallpaper: state.wallpaper,
     pinnedAppIds: state.pinnedAppIds,
     runningAppIds: state.runningAppIds,
     activeAppId: state.activeAppId,
+    defaultResourceHandlers: state.defaultResourceHandlers,
     windows: Object.fromEntries(
       Object.entries(state.windows).map(([appId, window]) => [
         appId,
@@ -209,6 +243,7 @@ function reconcilePersistedState(
     runningAppIds,
     windows,
     activeAppId,
+    defaultResourceHandlers: persisted.defaultResourceHandlers,
   };
 }
 

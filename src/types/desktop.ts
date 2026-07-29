@@ -36,13 +36,19 @@ export interface WindowState {
   openedAt: number;
 }
 
+export interface DefaultResourceHandler {
+  appId: string;
+  handlerId: string;
+}
+
 export interface PersistedDesktopState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   preferencesInitialized: true;
   wallpaper: string;
   pinnedAppIds: string[];
   runningAppIds: string[];
   activeAppId: string | null;
+  defaultResourceHandlers: Record<string, DefaultResourceHandler>;
   windows: Record<
     string,
     {

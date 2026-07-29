@@ -16,6 +16,7 @@ import type { FileServiceBackupResult } from "../files/fileServiceBackup.js";
 import type { FileServiceGcReport } from "../files/fileServiceGcScanner.js";
 import type { InternalFileManagerService } from "../files/internalFileManagerService.js";
 import type { FileHostService } from "../files/fileHostService.js";
+import type { OpenResourceResolver } from "../openResource/openResourceResolver.js";
 import {
   createFileTransferRouter,
   type FileTransferExecutor,
@@ -25,6 +26,7 @@ type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
   "createDirectory" | "moveEntry" | "removeEntry"
 >;
+type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -45,6 +47,7 @@ interface DesktopServerDependencies {
   };
   internalFileAppIds?: ReadonlySet<string>;
   internalFileManager?: InternalFileManagerExecutor;
+  openResourceResolver?: OpenResourceResolverExecutor;
 }
 
 export function createDesktopServer({
@@ -62,6 +65,7 @@ export function createDesktopServer({
   fileServiceGcScanner,
   internalFileAppIds = new Set(),
   internalFileManager,
+  openResourceResolver,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -399,6 +403,46 @@ export function createDesktopServer({
               request.params.entryId,
               { recursive, expectedRevision },
             ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/open-resources/resolve",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceResolver) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用资源打开能力",
+            503,
+          );
+        }
+        const instanceToken = readInstanceToken(request);
+        const { entryId, expectedRevision, requestedAction } =
+          request.body as Record<string, unknown>;
+        if (
+          typeof entryId !== "string" ||
+          !isRevision(expectedRevision) ||
+          (requestedAction !== "open" && requestedAction !== "edit")
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryId、expectedRevision 和 requestedAction 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await openResourceResolver.resolve(instanceToken, {
+              entryId,
+              expectedRevision,
+              requestedAction,
+            }),
           );
       } catch (error) {
         next(error);

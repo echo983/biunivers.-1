@@ -6,7 +6,23 @@ describe("desktop store taskbar preferences", () => {
     useDesktopStore.setState({
       pinnedAppIds: [],
       pinnedInitialized: false,
+      defaultResourceHandlers: {},
     });
+  });
+
+  it("sets and clears a default resource handler", () => {
+    const key = "extension:.txt:edit";
+    useDesktopStore.getState().setDefaultResourceHandler(key, {
+      appId: "io.github.example.notes",
+      handlerId: "text",
+    });
+    expect(useDesktopStore.getState().defaultResourceHandlers[key]).toEqual({
+      appId: "io.github.example.notes",
+      handlerId: "text",
+    });
+
+    useDesktopStore.getState().clearDefaultResourceHandler(key);
+    expect(useDesktopStore.getState().defaultResourceHandlers).toEqual({});
   });
 
   it("uses configured pins once and respects a later empty user list", () => {

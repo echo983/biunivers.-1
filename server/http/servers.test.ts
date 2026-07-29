@@ -254,6 +254,64 @@ describe("desktop and app origins", () => {
     });
   });
 
+  it("protects and validates internal resource handler resolution", async () => {
+    const dependencies = await createDependencies();
+    const resolveHandlers = vi.fn(async () => ({
+      entryId: "22".repeat(16),
+      name: "note.txt",
+      extension: ".txt",
+      revision: 3,
+      requestedAction: "edit",
+      effectiveAction: "edit",
+      candidates: [],
+    }));
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        openResourceResolver: { resolve: resolveHandlers },
+      }).listen(0, "127.0.0.1"),
+    );
+    const body = JSON.stringify({
+      entryId: "22".repeat(16),
+      expectedRevision: 3,
+      requestedAction: "edit",
+    });
+    const response = await fetch(
+      `${origin}/api/v1/internal/open-resources/resolve`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body,
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(resolveHandlers).toHaveBeenCalledWith("a".repeat(43), {
+      entryId: "22".repeat(16),
+      expectedRevision: 3,
+      requestedAction: "edit",
+    });
+
+    const forbidden = await fetch(
+      `${origin}/api/v1/internal/open-resources/resolve`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+        },
+        body,
+      },
+    );
+    expect(forbidden.status).toBe(403);
+  });
+
   it("bootstraps file instances only for the trusted desktop and active apps", async () => {
     const dependencies = await createDependencies();
     await dependencies.appStore.write({

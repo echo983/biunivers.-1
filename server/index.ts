@@ -17,6 +17,8 @@ import { FileServiceBackup } from "./files/fileServiceBackup.js";
 import { FileServiceGcScanner } from "./files/fileServiceGcScanner.js";
 import { InternalFileManagerService } from "./files/internalFileManagerService.js";
 import { OpenResourceValidator } from "./openResource/openResourceValidator.js";
+import { OpenResourceResolver } from "./openResource/openResourceResolver.js";
+import { loadCurrentEntryIndex } from "./files/entryIndex.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -134,6 +136,18 @@ async function main() {
           writerId: config.fileService.writerId,
         })
       : undefined;
+  const openResourceResolver =
+    fileCapabilities && fileService.repository && fileService.refStore
+      ? new OpenResourceResolver({
+          capabilities: fileCapabilities,
+          appStore,
+          loadIndex: () =>
+            loadCurrentEntryIndex(
+              fileService.repository!,
+              fileService.refStore!,
+            ),
+        })
+      : undefined;
   if (fileService.status.mode === "ready") {
     console.log(
       `Biunivers File Service ready at revision ${fileService.status.revision}`,
@@ -160,6 +174,7 @@ async function main() {
     fileServiceGcScanner,
     internalFileAppIds: new Set(["system.files"]),
     internalFileManager,
+    openResourceResolver,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,

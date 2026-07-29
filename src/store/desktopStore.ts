@@ -3,6 +3,7 @@ import { DEFAULT_WALLPAPER } from "./defaults";
 import type {
   AppDefinition,
   ConfigStatus,
+  DefaultResourceHandler,
   WindowState,
 } from "../types/desktop";
 
@@ -17,6 +18,7 @@ interface DesktopState {
   runningAppIds: string[];
   activeAppId: string | null;
   wallpaper: string;
+  defaultResourceHandlers: Record<string, DefaultResourceHandler>;
   selectedDesktopAppId: string | null;
   appMenuOpen: boolean;
   setApps: (apps: AppDefinition[]) => void;
@@ -34,12 +36,18 @@ interface DesktopState {
   setActiveApp: (appId: string | null) => void;
   updateWindow: (appId: string, update: Partial<WindowState>) => void;
   setWallpaper: (wallpaper: string) => void;
+  setDefaultResourceHandler: (
+    key: string,
+    handler: DefaultResourceHandler,
+  ) => void;
+  clearDefaultResourceHandler: (key: string) => void;
   hydrateDesktop: (state: {
     wallpaper: string;
     pinnedAppIds: string[];
     windows: Record<string, WindowState>;
     runningAppIds: string[];
     activeAppId: string | null;
+    defaultResourceHandlers: Record<string, DefaultResourceHandler>;
   }) => void;
   clearWindowState: () => void;
   selectDesktopApp: (appId: string | null) => void;
@@ -59,6 +67,7 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   runningAppIds: [],
   activeAppId: null,
   wallpaper: DEFAULT_WALLPAPER,
+  defaultResourceHandlers: {},
   selectedDesktopAppId: null,
   appMenuOpen: false,
   setApps: (apps) =>
@@ -121,6 +130,21 @@ export const useDesktopStore = create<DesktopState>((set) => ({
       };
     }),
   setWallpaper: (wallpaper) => set({ wallpaper }),
+  setDefaultResourceHandler: (key, handler) =>
+    set((state) => ({
+      defaultResourceHandlers: {
+        ...state.defaultResourceHandlers,
+        [key]: handler,
+      },
+    })),
+  clearDefaultResourceHandler: (key) =>
+    set((state) => ({
+      defaultResourceHandlers: Object.fromEntries(
+        Object.entries(state.defaultResourceHandlers).filter(
+          ([candidateKey]) => candidateKey !== key,
+        ),
+      ),
+    })),
   hydrateDesktop: (desktop) =>
     set({
       ...desktop,

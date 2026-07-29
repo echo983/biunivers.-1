@@ -24,8 +24,14 @@ export function SettingsApp() {
   const appRegistry = useDesktopStore((state) => state.apps);
   const wallpaper = useDesktopStore((state) => state.wallpaper);
   const pinnedAppIds = useDesktopStore((state) => state.pinnedAppIds);
+  const defaultResourceHandlers = useDesktopStore(
+    (state) => state.defaultResourceHandlers,
+  );
   const setWallpaper = useDesktopStore((state) => state.setWallpaper);
   const unpinApp = useDesktopStore((state) => state.unpinApp);
+  const clearDefaultResourceHandler = useDesktopStore(
+    (state) => state.clearDefaultResourceHandler,
+  );
   const resetPinnedApps = useDesktopStore(
     (state) => state.resetPinnedApps,
   );
@@ -122,6 +128,36 @@ export function SettingsApp() {
         >
           恢复默认桌面状态
         </button>
+      </section>
+
+      <section>
+        <h2>默认打开方式</h2>
+        {Object.entries(defaultResourceHandlers).length > 0 ? (
+          <ul className="settings-app__app-list">
+            {Object.entries(defaultResourceHandlers).map(
+              ([key, handler]) => {
+                const [, extension, action] = key.split(":");
+                return (
+                  <li key={key}>
+                    <span>
+                      {extension} · {action === "edit" ? "编辑" : "打开"}
+                      {" → "}
+                      {appRegistry[handler.appId]?.name ?? handler.appId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => clearDefaultResourceHandler(key)}
+                    >
+                      清除默认
+                    </button>
+                  </li>
+                );
+              },
+            )}
+          </ul>
+        ) : (
+          <p>尚未设置默认打开方式。</p>
+        )}
       </section>
 
       <AppManagement />

@@ -22,6 +22,7 @@ describe("persisted desktop state", () => {
       windows: {},
       runningAppIds: [],
       activeAppId: null,
+      defaultResourceHandlers: {},
       pinnedAppIds: [],
       pinnedInitialized: false,
     });
@@ -32,11 +33,53 @@ describe("persisted desktop state", () => {
     expect(
       parsePersistedDesktopState(
         JSON.stringify({
-          schemaVersion: 2,
+          schemaVersion: 3,
           preferencesInitialized: true,
         }),
       ),
     ).toBeNull();
+  });
+
+  it("migrates v1 state and preserves valid v2 default handlers", () => {
+    const v1 = parsePersistedDesktopState(
+      JSON.stringify({
+        schemaVersion: 1,
+        preferencesInitialized: true,
+        wallpaper: "/wallpaper.svg",
+        pinnedAppIds: [],
+        runningAppIds: [],
+        activeAppId: null,
+        windows: {},
+      }),
+    );
+    expect(v1).toMatchObject({
+      schemaVersion: 2,
+      defaultResourceHandlers: {},
+    });
+
+    const v2 = parsePersistedDesktopState(
+      JSON.stringify({
+        schemaVersion: 2,
+        preferencesInitialized: true,
+        wallpaper: "/wallpaper.svg",
+        pinnedAppIds: [],
+        runningAppIds: [],
+        activeAppId: null,
+        windows: {},
+        defaultResourceHandlers: {
+          "extension:.txt:edit": {
+            appId: "io.github.example.notes",
+            handlerId: "text",
+          },
+        },
+      }),
+    );
+    expect(v2?.defaultResourceHandlers).toEqual({
+      "extension:.txt:edit": {
+        appId: "io.github.example.notes",
+        handlerId: "text",
+      },
+    });
   });
 
   it("removes damaged local storage data", () => {
