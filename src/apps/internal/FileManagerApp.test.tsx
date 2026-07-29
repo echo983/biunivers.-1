@@ -24,9 +24,22 @@ describe("FileManagerApp", () => {
   it("enters the ready state after creating its internal instance", async () => {
     const token = "a".repeat(43);
     const fetchMock = vi.fn(
-      async (_input: string | URL | Request, init?: RequestInit) => {
+      async (input: string | URL | Request, init?: RequestInit) => {
         if (init?.method === "DELETE") {
           return new Response(null, { status: 204 });
+        }
+        if (String(input).startsWith("/api/v1/host/files")) {
+          return Response.json({
+            revision: 3,
+            rootEntryId: "1".repeat(32),
+            parent: {
+              entryId: "1".repeat(32),
+              name: "",
+              kind: "directory",
+              mtimeMs: 0,
+            },
+            entries: [],
+          });
         }
         return Response.json(
           {
@@ -42,9 +55,7 @@ describe("FileManagerApp", () => {
     const view = render(<FileManagerApp />);
 
     expect(
-      await screen.findByText(
-        "文件服务已就绪。目录管理将在下一施工阶段接入。",
-      ),
+      await screen.findByText("此文件夹为空。"),
     ).toBeInTheDocument();
 
     view.unmount();

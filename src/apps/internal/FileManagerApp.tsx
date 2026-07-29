@@ -3,6 +3,7 @@ import {
   closeHostInstance,
   createHostInstance,
 } from "../../hostApi/instanceClient";
+import { FileManagerBrowser } from "./FileManagerBrowser";
 
 type FileManagerStatus =
   | { mode: "loading" }
@@ -77,12 +78,5 @@ export function FileManagerApp() {
       </div>
     );
   }
-  return (
-    <article className="file-manager-app">
-      <header>
-        <h1>文件</h1>
-        <p>文件服务已就绪。目录管理将在下一施工阶段接入。</p>
-      </header>
-    </article>
-  );
+  return <FileManagerBrowser instanceToken={status.instanceToken} />;
 }
