@@ -745,7 +745,8 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 ### 阶段 3：Host API 与宿主 UI
 
 - 每应用独立 origin；（已完成）
-- 安全消息桥；
+- 安全消息桥；（v1 信封、大小/方法白名单、精确 origin 与 iframe source 校验已完成；
+  文件能力 dispatcher 待接入）
 - 文件句柄；
 - 传输 URL；
 - 文件选择器；
