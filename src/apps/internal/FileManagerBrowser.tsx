@@ -355,39 +355,49 @@ export function FileManagerBrowser({
         <div className="file-manager-app__actions">
           <button
             type="button"
+            aria-label="新建文件夹"
+            title="新建文件夹"
             disabled={!listing || working}
             onClick={() =>
               setEditDialog({ mode: "create-directory" })
             }
           >
-            新建文件夹
+            <span aria-hidden="true">📁＋</span>
           </button>
           <button
             type="button"
+            aria-label="新建文件"
+            title="新建文件"
             disabled={!listing || working}
             onClick={() => setEditDialog({ mode: "create-file" })}
           >
-            新建文件
+            <span aria-hidden="true">📄＋</span>
           </button>
           <button
             type="button"
+            aria-label="重命名"
+            title="重命名"
             disabled={!selected || working}
             onClick={() =>
               selected &&
               setEditDialog({ mode: "rename", entry: selected })
             }
           >
-            重命名
+            <span aria-hidden="true">✏️</span>
           </button>
           <button
             type="button"
+            aria-label="移动"
+            title="移动"
             disabled={!selected || working}
             onClick={() => setMovingEntry(selected)}
           >
-            移动
+            <span aria-hidden="true">📂→</span>
           </button>
           <button
             type="button"
+            aria-label="复制"
+            title="复制"
             disabled={
               !selected || selected.kind !== "file" || working
             }
@@ -396,10 +406,12 @@ export function FileManagerBrowser({
               setEditDialog({ mode: "copy", entry: selected })
             }
           >
-            复制
+            <span aria-hidden="true">📑</span>
           </button>
           <button
             type="button"
+            aria-label="移除"
+            title="移除"
             disabled={!selected || working}
             onClick={() => {
               if (
@@ -422,14 +434,16 @@ export function FileManagerBrowser({
               }
             }}
           >
-            移除
+            <span aria-hidden="true">🗑️</span>
           </button>
           <button
             type="button"
+            aria-label="上传"
+            title="上传"
             disabled={!listing || working}
             onClick={() => uploadInputRef.current?.click()}
           >
-            上传
+            <span aria-hidden="true">⬆️</span>
           </button>
           <input
             ref={uploadInputRef}
@@ -445,27 +459,33 @@ export function FileManagerBrowser({
           />
           <button
             type="button"
+            aria-label="下载"
+            title="下载"
             disabled={!selected || selected.kind !== "file" || working}
             onClick={() => void downloadSelected()}
           >
-            下载
+            <span aria-hidden="true">⬇️</span>
           </button>
           <button
             type="button"
+            aria-label="打开方式"
+            title="打开方式"
             disabled={!selected || selected.kind !== "file" || working}
             onClick={() => selected && void openFile(selected, true)}
           >
-            打开方式
+            <span aria-hidden="true">↗</span>
           </button>
           <button
             type="button"
+            aria-label="刷新"
+            title="刷新"
             disabled={loading || working}
             onClick={() => {
               setError(undefined);
               refresh();
             }}
           >
-            刷新
+            <span aria-hidden="true">↻</span>
           </button>
         </div>
       </header>
@@ -478,6 +498,14 @@ export function FileManagerBrowser({
       {notice && (
         <div className="file-manager-app__notice" role="status">
           {notice}
+          <button
+            type="button"
+            aria-label="关闭提示"
+            title="关闭提示"
+            onClick={() => setNotice(undefined)}
+          >
+            <span aria-hidden="true">×</span>
+          </button>
         </div>
       )}
 

@@ -418,6 +418,10 @@ describe("FileManagerBrowser", () => {
     expect(
       await screen.findByText("已开始下载“note.txt”。"),
     ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "关闭提示" }));
+    expect(
+      screen.queryByText("已开始下载“note.txt”。"),
+    ).not.toBeInTheDocument();
   });
 
   it("double-clicks a file into its unique handler", async () => {
