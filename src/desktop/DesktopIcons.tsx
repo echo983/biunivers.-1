@@ -5,6 +5,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useDesktopStore } from "../store/desktopStore";
+import { ContextMenu } from "../components/ContextMenu";
 import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import type {
   DesktopItem,
@@ -31,6 +32,14 @@ interface PendingPointer {
   baseline: Set<string>;
   selectionMode: "replace" | "toggle" | "add";
   active: boolean;
+}
+
+interface ItemContextMenu {
+  itemId: string;
+  x: number;
+  y: number;
+  error?: string;
+  working: boolean;
 }
 
 export function DesktopIcons() {
@@ -60,6 +69,7 @@ export function DesktopIcons() {
   }>();
   const [dragPreview, setDragPreview] = useState<Point>();
   const [dragItemIds, setDragItemIds] = useState<Set<string>>();
+  const [contextMenu, setContextMenu] = useState<ItemContextMenu>();
 
   useEffect(() => {
     const cancel = () => {
@@ -284,6 +294,16 @@ export function DesktopIcons() {
               }px)`,
             }}
             onPointerDown={(event) => beginDrag(event, item.id)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setContextMenu({
+                itemId: item.id,
+                x: event.clientX,
+                y: event.clientY,
+                working: false,
+              });
+            }}
             onClick={(event) => {
               event.stopPropagation();
               if (suppressClickRef.current) return;
@@ -315,6 +335,19 @@ export function DesktopIcons() {
                   event.key,
                 );
               }
+              if (
+                event.key === "ContextMenu" ||
+                (event.shiftKey && event.key === "F10")
+              ) {
+                event.preventDefault();
+                const rect = event.currentTarget.getBoundingClientRect();
+                setContextMenu({
+                  itemId: item.id,
+                  x: rect.left + 20,
+                  y: rect.top + 20,
+                  working: false,
+                });
+              }
             }}
           >
             <DesktopTargetIcon item={item} />
@@ -330,6 +363,51 @@ export function DesktopIcons() {
           {dragItemIds.size}
         </span>
       ) : null}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(undefined)}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={contextMenu.working}
+            onClick={() => {
+              setContextMenu((current) =>
+                current
+                  ? { ...current, working: true, error: undefined }
+                  : current,
+              );
+              void useDesktopSurfaceStore
+                .getState()
+                .remove([contextMenu.itemId])
+                .then(() => setContextMenu(undefined))
+                .catch((reason: unknown) =>
+                  setContextMenu((current) =>
+                    current
+                      ? {
+                          ...current,
+                          working: false,
+                          error:
+                            reason instanceof Error
+                              ? reason.message
+                              : "无法从桌面移除项目",
+                        }
+                      : current,
+                  ),
+                );
+            }}
+          >
+            从桌面移除
+          </button>
+          {contextMenu.error && (
+            <p className="context-menu__error" role="alert">
+              {contextMenu.error}
+            </p>
+          )}
+        </ContextMenu>
+      )}
       {status === "loading" && (
         <span className="desktop-icons__status">
           正在加载桌面项目…

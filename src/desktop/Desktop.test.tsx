@@ -6,6 +6,8 @@ import { useDesktopStore } from "../store/desktopStore";
 import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import { Desktop } from "./Desktop";
 
+const removeDesktopItems = useDesktopSurfaceStore.getState().remove;
+
 describe("Desktop", () => {
   beforeEach(() => {
     useDesktopStore.setState({
@@ -15,6 +17,7 @@ describe("Desktop", () => {
       pinnedAppIds: defaultApps
         .filter((app) => app.pinned)
         .map((app) => app.id),
+      windows: {},
     });
     useDesktopSurfaceStore.setState({
       status: "ready",
@@ -38,6 +41,7 @@ describe("Desktop", () => {
       },
       selectedItemIds: new Set(),
       error: undefined,
+      remove: removeDesktopItems,
     });
     vi.stubGlobal(
       "fetch",
@@ -135,6 +139,52 @@ describe("Desktop", () => {
     await user.click(refresh);
     expect(screen.queryByRole("menuitem", { name: "刷新" })).toBeNull();
     expect(useDesktopSurfaceStore.getState().surface.revision).toBe(1);
+  });
+
+  it("removes a desktop reference from the icon context menu", async () => {
+    const user = userEvent.setup();
+    const remove = vi.fn(async (itemIds: string[]) => {
+      useDesktopSurfaceStore.setState((state) => ({
+        surface: {
+          ...state.surface,
+          revision: state.surface.revision + 1,
+          items: state.surface.items.filter(
+            (item) => !itemIds.includes(item.id),
+          ),
+        },
+      }));
+    });
+    useDesktopSurfaceStore.setState({ remove });
+    render(<Desktop />);
+    const desktopApps = screen.getByRole("group", { name: "桌面项目" });
+    const about = within(desktopApps).getByRole("button", { name: "关于" });
+
+    await user.pointer({ target: about, keys: "[MouseRight]" });
+    await user.click(
+      screen.getByRole("menuitem", { name: "从桌面移除" }),
+    );
+
+    expect(remove).toHaveBeenCalledWith(["11".repeat(16)]);
+    expect(
+      within(desktopApps).queryByRole("button", { name: "关于" }),
+    ).toBeNull();
+  });
+
+  it("removes a pinned app from the taskbar without closing it", async () => {
+    const user = userEvent.setup();
+    render(<Desktop />);
+    const taskbar = screen.getByRole("contentinfo");
+    const files = within(taskbar).getByRole("button", { name: "文件" });
+
+    await user.pointer({ target: files, keys: "[MouseRight]" });
+    await user.click(
+      screen.getByRole("menuitem", { name: "从任务栏移除" }),
+    );
+
+    expect(useDesktopStore.getState().pinnedAppIds).not.toContain(
+      "system.files",
+    );
+    expect(useDesktopStore.getState().windows["system.files"]).toBeUndefined();
   });
 
   it("shows a recoverable notice after a tab layout conflict", () => {

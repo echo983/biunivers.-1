@@ -65,7 +65,7 @@ export function TaskbarItem({
               setMenuPosition(null);
             }}
           >
-            {pinned ? "从任务栏取消固定" : "固定到任务栏"}
+            {pinned ? "从任务栏移除" : "添加到任务栏"}
           </button>
           {windowState && (
             <button
