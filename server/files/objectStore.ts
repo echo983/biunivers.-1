@@ -32,6 +32,8 @@ export interface ImmutableObjectStore {
 export type ObjectStoreErrorCode =
   | "INVALID_OBJECT_KEY"
   | "OBJECT_NOT_FOUND"
+  | "OBJECT_INVALID"
+  | "OBJECT_TOO_LARGE"
   | "FID_COLLISION"
   | "OBJECT_INTEGRITY_FAILURE";
 

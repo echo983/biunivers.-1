@@ -103,4 +103,61 @@ describe("FileContentStore", () => {
       code: "OBJECT_INTEGRITY_FAILURE",
     });
   });
+
+  it("streams irregular input into fixed chunks without buffering the file", async () => {
+    const { contentStore, objectStore } = createContentStore();
+    const bytes = new Uint8Array(MAX_CHUNK_BYTES + 3);
+    bytes[0] = 5;
+    bytes[MAX_CHUNK_BYTES - 1] = 6;
+    bytes[MAX_CHUNK_BYTES] = 7;
+    bytes[bytes.length - 1] = 8;
+    async function* source() {
+      yield bytes.subarray(0, 17);
+      yield bytes.subarray(17, MAX_CHUNK_BYTES);
+      yield bytes.subarray(MAX_CHUNK_BYTES);
+    }
+
+    const content = await contentStore.putStream(
+      source(),
+      MAX_CHUNK_BYTES + 3,
+    );
+    expect(content).toMatchObject({
+      kind: "manifest",
+      size: MAX_CHUNK_BYTES + 3,
+    });
+    expect(
+      [...objectStore.objects.keys()].filter((key) => key.includes("chunks")),
+    ).toHaveLength(2);
+    const chunks = [];
+    for await (const chunk of contentStore.readChunks(content)) {
+      chunks.push(chunk);
+    }
+    expect(chunks.map((chunk) => chunk.byteLength)).toEqual([
+      MAX_CHUNK_BYTES,
+      3,
+    ]);
+    expect(chunks[0][0]).toBe(5);
+    expect(chunks[0][MAX_CHUNK_BYTES - 1]).toBe(6);
+    expect([...chunks[1]]).toEqual([7, 0, 8]);
+  });
+
+  it("keeps an exact 64 MiB stream as one Chunk and enforces maxBytes", async () => {
+    const { contentStore } = createContentStore();
+    async function* exactBoundary() {
+      yield new Uint8Array(MAX_CHUNK_BYTES);
+    }
+    await expect(
+      contentStore.putStream(exactBoundary(), MAX_CHUNK_BYTES),
+    ).resolves.toMatchObject({
+      kind: "chunk",
+      size: MAX_CHUNK_BYTES,
+    });
+
+    async function* tooLarge() {
+      yield Uint8Array.from([1, 2, 3, 4]);
+    }
+    await expect(contentStore.putStream(tooLarge(), 3)).rejects.toMatchObject({
+      code: "OBJECT_TOO_LARGE",
+    });
+  });
 });

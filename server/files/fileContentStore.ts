@@ -58,6 +58,89 @@ export class FileContentStore {
     };
   }
 
+  async putStream(
+    source: AsyncIterable<Uint8Array>,
+    maxBytes: number,
+  ): Promise<FileContentRef> {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+      throw new ObjectStoreError(
+        "OBJECT_INVALID",
+        "Stream byte limit is invalid.",
+      );
+    }
+    const chunkFids: Buffer[] = [];
+    const chunkLengths: bigint[] = [];
+    let pending: Uint8Array[] = [];
+    let pendingLength = 0;
+    let total = 0;
+
+    const persistPending = async () => {
+      const chunk = concatBytes(pending, pendingLength);
+      const persisted = await this.repository.put("chunks", chunk);
+      chunkFids.push(Buffer.from(persisted.key.fidHex, "hex"));
+      chunkLengths.push(BigInt(chunk.byteLength));
+      pending = [];
+      pendingLength = 0;
+    };
+
+    for await (const input of source) {
+      if (!(input instanceof Uint8Array)) {
+        throw new ObjectStoreError(
+          "OBJECT_INVALID",
+          "Stream yielded a non-byte chunk.",
+        );
+      }
+      let offset = 0;
+      while (offset < input.byteLength) {
+        if (pendingLength === MAX_CHUNK_BYTES) {
+          await persistPending();
+        }
+        const take = Math.min(
+          MAX_CHUNK_BYTES - pendingLength,
+          input.byteLength - offset,
+        );
+        pending.push(input.subarray(offset, offset + take));
+        pendingLength += take;
+        total += take;
+        offset += take;
+        if (total > maxBytes) {
+          throw new ObjectStoreError(
+            "OBJECT_TOO_LARGE",
+            "Stream exceeds its byte limit.",
+          );
+        }
+      }
+    }
+
+    if (chunkFids.length === 0) {
+      const bytes = concatBytes(pending, pendingLength);
+      const persisted = await this.repository.put("chunks", bytes);
+      return {
+        kind: "chunk",
+        fidHex: persisted.key.fidHex,
+        size: total,
+      };
+    }
+    if (pendingLength > 0) {
+      await persistPending();
+    }
+    const manifestBytes = this.core.encodeManifest(
+      BigInt(total),
+      Buffer.concat(chunkFids),
+      BigUint64Array.from(chunkLengths),
+    );
+    this.core.validateManifest(manifestBytes);
+    const manifest = await this.repository.put("manifests", manifestBytes);
+    this.core.validateManifest(
+      await this.repository.get("manifests", manifest.key.fidHex),
+    );
+    return {
+      kind: "manifest",
+      fidHex: manifest.key.fidHex,
+      size: total,
+    };
+  }
+
   async *readChunks(content: FileContentRef): AsyncGenerator<Uint8Array> {
     validateContentRef(content);
     if (content.kind === "chunk") {
@@ -101,6 +184,19 @@ export class FileContentStore {
       throw integrityFailure("Read chunks do not add up to the file size.");
     }
   }
+}
+
+function concatBytes(chunks: Uint8Array[], length: number): Uint8Array {
+  if (chunks.length === 1 && chunks[0].byteLength === length) {
+    return chunks[0];
+  }
+  const result = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result;
 }
 
 function validateContentRef(content: FileContentRef): void {

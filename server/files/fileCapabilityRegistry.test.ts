@@ -55,6 +55,7 @@ describe("FileCapabilityRegistry", () => {
       writable: true,
       issuedAtRevision: 7,
       expectedContentFidHex: file.content?.fidHex,
+      contentSize: 42,
     });
     expectCode(
       () => registry.authorizeHandle(second.instanceToken, handle.handleId),
@@ -147,6 +148,164 @@ describe("FileCapabilityRegistry", () => {
     expectCode(
       () => registry.issueHandle(instance.instanceToken, file, 0, false),
       "CAPABILITY_LIMIT_REACHED",
+    );
+  });
+
+  it("binds one-shot transfers to the instance, handle and HTTP method", () => {
+    const registry = new FileCapabilityRegistry({ randomToken: tokens() });
+    const first = registry.createInstance("io.example.notes", "window-1");
+    const second = registry.createInstance("io.example.notes", "window-2");
+    const handle = registry.issueHandle(
+      first.instanceToken,
+      file,
+      4,
+      true,
+    );
+    const transfer = registry.issueTransfer(
+      first.instanceToken,
+      handle.handleId,
+      "PUT",
+      1_024,
+    );
+
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          second.instanceToken,
+          transfer.transferId,
+          "PUT",
+          10,
+        ),
+      "TRANSFER_NOT_FOUND",
+    );
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          first.instanceToken,
+          transfer.transferId,
+          "GET",
+        ),
+      "TRANSFER_NOT_FOUND",
+    );
+    expect(
+      registry.beginTransfer(
+        first.instanceToken,
+        transfer.transferId,
+        "PUT",
+        1_024,
+      ),
+    ).toMatchObject({
+      appId: "io.example.notes",
+      windowInstanceId: "window-1",
+      entryIdHex: file.entryIdHex,
+      transferId: transfer.transferId,
+      method: "PUT",
+      maxBytes: 1_024,
+    });
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          first.instanceToken,
+          transfer.transferId,
+          "PUT",
+          1,
+        ),
+      "TRANSFER_NOT_FOUND",
+    );
+    registry.finishTransfer(first.instanceToken, transfer.transferId);
+    expectCode(
+      () => registry.finishTransfer(first.instanceToken, transfer.transferId),
+      "TRANSFER_NOT_FOUND",
+    );
+  });
+
+  it("uses the current file size for reads and rejects oversized writes", () => {
+    const registry = new FileCapabilityRegistry({ randomToken: tokens() });
+    const instance = registry.createInstance(
+      "io.example.notes",
+      "window-1",
+    );
+    const handle = registry.issueHandle(
+      instance.instanceToken,
+      file,
+      0,
+      true,
+    );
+    const read = registry.issueTransfer(
+      instance.instanceToken,
+      handle.handleId,
+      "GET",
+      999,
+    );
+    expect(read).toMatchObject({ method: "GET", maxBytes: 42 });
+
+    const write = registry.issueTransfer(
+      instance.instanceToken,
+      handle.handleId,
+      "PUT",
+      10,
+    );
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          instance.instanceToken,
+          write.transferId,
+          "PUT",
+          11,
+        ),
+      "TRANSFER_TOO_LARGE",
+    );
+  });
+
+  it("expires unused transfers and revokes them with their handle", () => {
+    let now = 100;
+    const registry = new FileCapabilityRegistry({
+      now: () => now,
+      randomToken: tokens(),
+      transferTtlMs: 10,
+    });
+    const instance = registry.createInstance(
+      "io.example.notes",
+      "window-1",
+    );
+    const handle = registry.issueHandle(
+      instance.instanceToken,
+      file,
+      0,
+      false,
+    );
+    const expired = registry.issueTransfer(
+      instance.instanceToken,
+      handle.handleId,
+      "GET",
+      42,
+    );
+    now = 111;
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          instance.instanceToken,
+          expired.transferId,
+          "GET",
+        ),
+      "TRANSFER_EXPIRED",
+    );
+
+    const revoked = registry.issueTransfer(
+      instance.instanceToken,
+      handle.handleId,
+      "GET",
+      42,
+    );
+    registry.releaseHandle(instance.instanceToken, handle.handleId);
+    expectCode(
+      () =>
+        registry.beginTransfer(
+          instance.instanceToken,
+          revoked.transferId,
+          "GET",
+        ),
+      "TRANSFER_NOT_FOUND",
     );
   });
 });

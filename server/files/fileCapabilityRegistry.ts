@@ -5,6 +5,9 @@ export type FileCapabilityErrorCode =
   | "REQUEST_INVALID"
   | "HANDLE_NOT_FOUND"
   | "HANDLE_EXPIRED"
+  | "TRANSFER_NOT_FOUND"
+  | "TRANSFER_EXPIRED"
+  | "TRANSFER_TOO_LARGE"
   | "PERMISSION_DENIED"
   | "CAPABILITY_LIMIT_REACHED";
 
@@ -32,7 +35,18 @@ interface HandleRecord {
   writable: boolean;
   issuedAtRevision: number;
   expectedContentFidHex?: string;
+  contentSize?: number;
   expiresAtMs: number;
+}
+
+interface TransferRecord {
+  transferId: string;
+  instanceToken: string;
+  handleId: string;
+  method: "GET" | "PUT";
+  maxBytes: number;
+  expiresAtMs: number;
+  active: boolean;
 }
 
 export interface PublicFileHandle {
@@ -56,6 +70,20 @@ export interface AuthorizedFileHandle {
   writable: boolean;
   issuedAtRevision: number;
   expectedContentFidHex?: string;
+  contentSize?: number;
+}
+
+export interface PublicFileTransfer {
+  transferId: string;
+  method: "GET" | "PUT";
+  expiresAt: string;
+  maxBytes: number;
+}
+
+export interface AuthorizedFileTransfer extends AuthorizedFileHandle {
+  transferId: string;
+  method: "GET" | "PUT";
+  maxBytes: number;
 }
 
 interface FileCapabilityRegistryOptions {
@@ -63,8 +91,10 @@ interface FileCapabilityRegistryOptions {
   randomToken?: () => string;
   instanceTtlMs?: number;
   handleTtlMs?: number;
+  transferTtlMs?: number;
   maxInstances?: number;
   maxHandles?: number;
+  maxTransfers?: number;
 }
 
 const APP_ID_PATTERN = /^[a-z0-9.-]{1,128}$/;
@@ -75,12 +105,15 @@ const ENTRY_ID_PATTERN = /^[0-9a-f]{32}$/;
 export class FileCapabilityRegistry {
   readonly #instances = new Map<string, InstanceRecord>();
   readonly #handles = new Map<string, HandleRecord>();
+  readonly #transfers = new Map<string, TransferRecord>();
   readonly #now: () => number;
   readonly #randomToken: () => string;
   readonly #instanceTtlMs: number;
   readonly #handleTtlMs: number;
+  readonly #transferTtlMs: number;
   readonly #maxInstances: number;
   readonly #maxHandles: number;
+  readonly #maxTransfers: number;
 
   constructor(options: FileCapabilityRegistryOptions = {}) {
     this.#now = options.now ?? Date.now;
@@ -94,11 +127,19 @@ export class FileCapabilityRegistry {
       options.handleTtlMs ?? 30 * 60 * 1000,
       "handle TTL",
     );
+    this.#transferTtlMs = positive(
+      options.transferTtlMs ?? 5 * 60 * 1000,
+      "transfer TTL",
+    );
     this.#maxInstances = positive(
       options.maxInstances ?? 256,
       "instance limit",
     );
     this.#maxHandles = positive(options.maxHandles ?? 4096, "handle limit");
+    this.#maxTransfers = positive(
+      options.maxTransfers ?? 1024,
+      "transfer limit",
+    );
   }
 
   createInstance(appId: string, windowInstanceId: string) {
@@ -112,7 +153,7 @@ export class FileCapabilityRegistry {
     if (this.#instances.size >= this.#maxInstances) {
       throw limit("The active window instance limit has been reached.");
     }
-    const token = this.#newUniqueToken(this.#instances);
+    const token = this.#newUniqueToken();
     const expiresAtMs = this.#now() + this.#instanceTtlMs;
     this.#instances.set(token, {
       token,
@@ -131,6 +172,11 @@ export class FileCapabilityRegistry {
     for (const [handleId, handle] of this.#handles) {
       if (handle.instanceToken === instanceToken) {
         this.#handles.delete(handleId);
+      }
+    }
+    for (const [transferId, transfer] of this.#transfers) {
+      if (transfer.instanceToken === instanceToken) {
+        this.#transfers.delete(transferId);
       }
     }
   }
@@ -159,7 +205,7 @@ export class FileCapabilityRegistry {
     if (this.#handles.size >= this.#maxHandles) {
       throw limit("The active file handle limit has been reached.");
     }
-    const handleId = this.#newUniqueToken(this.#handles);
+    const handleId = this.#newUniqueToken();
     const expiresAtMs = this.#now() + this.#handleTtlMs;
     this.#handles.set(handleId, {
       handleId,
@@ -168,6 +214,7 @@ export class FileCapabilityRegistry {
       writable,
       issuedAtRevision: revision,
       expectedContentFidHex: entry.content?.fidHex,
+      contentSize: entry.content?.size,
       expiresAtMs,
     });
     return {
@@ -215,6 +262,7 @@ export class FileCapabilityRegistry {
       writable: handle.writable,
       issuedAtRevision: handle.issuedAtRevision,
       expectedContentFidHex: handle.expectedContentFidHex,
+      contentSize: handle.contentSize,
     };
   }
 
@@ -225,6 +273,118 @@ export class FileCapabilityRegistry {
       throw notFound();
     }
     this.#handles.delete(handleId);
+    for (const [transferId, transfer] of this.#transfers) {
+      if (transfer.handleId === handleId) {
+        this.#transfers.delete(transferId);
+      }
+    }
+  }
+
+  issueTransfer(
+    instanceToken: string,
+    handleId: string,
+    method: "GET" | "PUT",
+    maxBytes: number,
+  ): PublicFileTransfer {
+    const handle = this.authorizeHandle(
+      instanceToken,
+      handleId,
+      method === "PUT",
+    );
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+      throw invalid("Transfer byte limit is invalid.");
+    }
+    if (method === "GET") {
+      if (handle.contentSize === undefined) {
+        throw new FileCapabilityError(
+          "PERMISSION_DENIED",
+          "Directory handles cannot create content transfers.",
+        );
+      }
+      maxBytes = handle.contentSize;
+    } else if (maxBytes === 0) {
+      throw invalid("Write transfer byte limit must be positive.");
+    }
+    this.prune();
+    if (this.#transfers.size >= this.#maxTransfers) {
+      throw limit("The active file transfer limit has been reached.");
+    }
+    const transferId = this.#newUniqueToken();
+    const expiresAtMs = this.#now() + this.#transferTtlMs;
+    this.#transfers.set(transferId, {
+      transferId,
+      instanceToken,
+      handleId,
+      method,
+      maxBytes,
+      expiresAtMs,
+      active: false,
+    });
+    return {
+      transferId,
+      method,
+      expiresAt: new Date(expiresAtMs).toISOString(),
+      maxBytes,
+    };
+  }
+
+  beginTransfer(
+    instanceToken: string,
+    transferId: string,
+    method: "GET" | "PUT",
+    contentLength?: number,
+  ): AuthorizedFileTransfer {
+    this.#requireInstance(instanceToken);
+    if (!TOKEN_PATTERN.test(transferId)) {
+      throw transferNotFound();
+    }
+    const transfer = this.#transfers.get(transferId);
+    if (
+      !transfer ||
+      transfer.instanceToken !== instanceToken ||
+      transfer.method !== method ||
+      transfer.active
+    ) {
+      throw transferNotFound();
+    }
+    if (transfer.expiresAtMs <= this.#now()) {
+      this.#transfers.delete(transferId);
+      throw new FileCapabilityError(
+        "TRANSFER_EXPIRED",
+        "File transfer expired.",
+      );
+    }
+    if (
+      contentLength !== undefined &&
+      (!Number.isSafeInteger(contentLength) ||
+        contentLength < 0 ||
+        contentLength > transfer.maxBytes)
+    ) {
+      throw new FileCapabilityError(
+        "TRANSFER_TOO_LARGE",
+        "Transfer exceeds its byte limit.",
+      );
+    }
+    const handle = this.authorizeHandle(
+      instanceToken,
+      transfer.handleId,
+      method === "PUT",
+    );
+    transfer.active = true;
+    return {
+      ...handle,
+      transferId,
+      method,
+      maxBytes: transfer.maxBytes,
+    };
+  }
+
+  finishTransfer(instanceToken: string, transferId: string): void {
+    const transfer = this.#transfers.get(transferId);
+    if (!transfer || transfer.instanceToken !== instanceToken) {
+      throw transferNotFound();
+    }
+    this.#transfers.delete(transferId);
   }
 
   prune(): void {
@@ -242,6 +402,15 @@ export class FileCapabilityRegistry {
         expiredInstances.has(handle.instanceToken)
       ) {
         this.#handles.delete(handleId);
+      }
+    }
+    for (const [transferId, transfer] of this.#transfers) {
+      if (
+        transfer.expiresAtMs <= now ||
+        !this.#instances.has(transfer.instanceToken) ||
+        !this.#handles.has(transfer.handleId)
+      ) {
+        this.#transfers.delete(transferId);
       }
     }
   }
@@ -264,10 +433,15 @@ export class FileCapabilityRegistry {
     return instance;
   }
 
-  #newUniqueToken(records: Map<string, unknown>): string {
+  #newUniqueToken(): string {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const token = this.#randomToken();
-      if (TOKEN_PATTERN.test(token) && !records.has(token)) {
+      if (
+        TOKEN_PATTERN.test(token) &&
+        !this.#instances.has(token) &&
+        !this.#handles.has(token) &&
+        !this.#transfers.has(token)
+      ) {
         return token;
       }
     }
@@ -295,4 +469,11 @@ function notFound(): FileCapabilityError {
 
 function limit(message: string): FileCapabilityError {
   return new FileCapabilityError("CAPABILITY_LIMIT_REACHED", message);
+}
+
+function transferNotFound(): FileCapabilityError {
+  return new FileCapabilityError(
+    "TRANSFER_NOT_FOUND",
+    "File transfer not found.",
+  );
 }
