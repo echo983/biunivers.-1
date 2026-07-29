@@ -5,6 +5,72 @@ export interface FileMutationResult {
   revision: number;
 }
 
+export interface ResourceHandlerCandidate {
+  appId: string;
+  appName: string;
+  handler: {
+    id: string;
+    actions: Array<"open" | "edit">;
+    extensions: string[];
+    mediaTypes?: string[];
+    access: "read" | "read-write";
+  };
+}
+
+export interface ResourceHandlerResolution {
+  entryId: string;
+  name: string;
+  extension: string | null;
+  revision: number;
+  requestedAction: "open" | "edit";
+  effectiveAction: "open" | "edit";
+  candidates: ResourceHandlerCandidate[];
+}
+
+export function resolveResourceHandlers(
+  instanceToken: string,
+  entryId: string,
+  expectedRevision: number,
+  requestedAction: "open" | "edit" = "edit",
+): Promise<ResourceHandlerResolution> {
+  return internalFetch(
+    "/api/v1/internal/open-resources/resolve",
+    instanceToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        entryId,
+        expectedRevision,
+        requestedAction,
+      }),
+    },
+  );
+}
+
+export function createResourceLaunch(
+  instanceToken: string,
+  input: {
+    entryId: string;
+    expectedRevision: number;
+    targetAppId: string;
+    handlerId: string;
+    action: "open" | "edit";
+  },
+): Promise<{
+  targetAppId: string;
+  launchId: string;
+  expiresAt: string;
+}> {
+  return internalFetch(
+    "/api/v1/internal/open-resources",
+    instanceToken,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
 export function createDirectory(
   instanceToken: string,
   parentEntryId: string,

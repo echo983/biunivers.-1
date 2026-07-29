@@ -949,6 +949,26 @@
   padding: 3px;
 }
 
+.file-manager-dialog__handlers {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid rgb(148 163 184 / 45%);
+  border-radius: 8px;
+}
+
+.file-manager-dialog__handlers label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.file-manager-dialog__handlers input {
+  width: auto;
+}
+
 .app-management button:disabled {
   opacity: 0.55;
   cursor: wait;

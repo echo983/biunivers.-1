@@ -6,9 +6,13 @@ import {
   type FormEvent,
 } from "react";
 import {
+  createResourceLaunch,
   createDirectory,
   moveEntry,
   removeEntry,
+  resolveResourceHandlers,
+  type ResourceHandlerCandidate,
+  type ResourceHandlerResolution,
 } from "../../api/internalFileManagerClient";
 import {
   downloadFile,
@@ -20,6 +24,12 @@ import {
   type DirectoryListing,
   type FileEntry,
 } from "../../hostApi/fileHostClient";
+import {
+  resourceHandlerKey,
+  selectResourceHandler,
+} from "../../openResource/defaultResourceHandlers";
+import { useDesktopStore } from "../../store/desktopStore";
+import { openApp } from "../../windows/windowController";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -35,6 +45,11 @@ type EditDialog =
   | { mode: "rename"; entry: FileEntry }
   | null;
 
+interface OpenWithState {
+  entry: FileEntry;
+  resolution: ResourceHandlerResolution;
+}
+
 export function FileManagerBrowser({
   instanceToken,
 }: FileManagerBrowserProps) {
@@ -49,7 +64,15 @@ export function FileManagerBrowser({
   const [editDialog, setEditDialog] = useState<EditDialog>(null);
   const [movingEntry, setMovingEntry] = useState<FileEntry>();
   const [notice, setNotice] = useState<string>();
+  const [openWith, setOpenWith] = useState<OpenWithState>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const appRegistry = useDesktopStore((state) => state.apps);
+  const defaultResourceHandlers = useDesktopStore(
+    (state) => state.defaultResourceHandlers,
+  );
+  const setDefaultResourceHandler = useDesktopStore(
+    (state) => state.setDefaultResourceHandler,
+  );
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -150,6 +173,124 @@ export function FileManagerBrowser({
       { entryId: entry.entryId, name: entry.name },
     ]);
     setDirectoryId(entry.entryId);
+  };
+
+  const launchWith = async (
+    state: OpenWithState,
+    candidate: ResourceHandlerCandidate,
+    remember: boolean,
+  ) => {
+    setWorking(true);
+    setError(undefined);
+    setNotice(`正在用“${candidate.appName}”打开“${state.entry.name}”…`);
+    try {
+      if (!appRegistry[candidate.appId]) {
+        throw new Error("目标应用尚未加载，请刷新桌面后重试。");
+      }
+      const launch = await createResourceLaunch(instanceToken, {
+        entryId: state.entry.entryId,
+        expectedRevision: state.resolution.revision,
+        targetAppId: candidate.appId,
+        handlerId: candidate.handler.id,
+        action: state.resolution.effectiveAction,
+      });
+      openApp(candidate.appId, { launchId: launch.launchId });
+      if (remember && state.resolution.extension) {
+        setDefaultResourceHandler(
+          resourceHandlerKey(
+            state.resolution.extension,
+            state.resolution.effectiveAction,
+          ),
+          {
+            appId: candidate.appId,
+            handlerId: candidate.handler.id,
+          },
+        );
+      }
+      setOpenWith(undefined);
+      setNotice(
+        state.resolution.effectiveAction === "open" &&
+          state.resolution.requestedAction === "edit"
+          ? `已用“${candidate.appName}”以只读方式打开。`
+          : `已用“${candidate.appName}”打开。`,
+      );
+    } catch (reason) {
+      setNotice(undefined);
+      if (
+        reason instanceof FileHostClientError &&
+        reason.code === "RESOURCE_OPEN_BUSY"
+      ) {
+        setError("目标应用仍有一个未处理的打开请求，请稍后重试。");
+      } else if (
+        reason instanceof FileHostClientError &&
+        reason.code === "FILE_VERSION_CONFLICT"
+      ) {
+        setError("文件系统已发生变化，目录已刷新，请重新操作。");
+        setOpenWith(undefined);
+        refresh();
+      } else {
+        setError(messageOf(reason));
+      }
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const openFile = async (entry: FileEntry, forceChooser = false) => {
+    if (entry.kind !== "file" || !listing || working) return;
+    setWorking(true);
+    setError(undefined);
+    setNotice(`正在查找“${entry.name}”的打开方式…`);
+    try {
+      const resolution = await resolveResourceHandlers(
+        instanceToken,
+        entry.entryId,
+        listing.revision,
+        "edit",
+      );
+      const state = { entry, resolution };
+      if (resolution.candidates.length === 0) {
+        setNotice(undefined);
+        setError(`没有能够打开“${entry.name}”的应用。`);
+        return;
+      }
+      const selectedHandler = forceChooser
+        ? undefined
+        : selectResourceHandler(
+            resolution.candidates,
+            defaultResourceHandlers,
+            resolution.extension ?? "",
+            resolution.effectiveAction,
+          );
+      if (selectedHandler) {
+        setWorking(false);
+        await launchWith(state, selectedHandler, false);
+        return;
+      }
+      setNotice(undefined);
+      setOpenWith(state);
+    } catch (reason) {
+      setNotice(undefined);
+      if (
+        reason instanceof FileHostClientError &&
+        reason.code === "FILE_VERSION_CONFLICT"
+      ) {
+        setError("文件系统已发生变化，目录已刷新，请重新操作。");
+        refresh();
+      } else {
+        setError(messageOf(reason));
+      }
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const activateEntry = (entry: FileEntry) => {
+    if (entry.kind === "directory") {
+      enterDirectory(entry);
+    } else {
+      void openFile(entry);
+    }
   };
 
   const navigateTo = (index: number) => {
@@ -260,6 +401,13 @@ export function FileManagerBrowser({
           </button>
           <button
             type="button"
+            disabled={!selected || selected.kind !== "file" || working}
+            onClick={() => selected && void openFile(selected, true)}
+          >
+            打开方式
+          </button>
+          <button
+            type="button"
             disabled={loading || working}
             onClick={() => {
               setError(undefined);
@@ -306,9 +454,9 @@ export function FileManagerBrowser({
                   tabIndex={0}
                   aria-selected={selected?.entryId === entry.entryId}
                   onClick={() => setSelected(entry)}
-                  onDoubleClick={() => enterDirectory(entry)}
+                  onDoubleClick={() => activateEntry(entry)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter") enterDirectory(entry);
+                    if (event.key === "Enter") activateEntry(entry);
                   }}
                 >
                   <td>
@@ -382,7 +530,107 @@ export function FileManagerBrowser({
           }
         />
       )}
+
+      {openWith && (
+        <OpenWithDialog
+          state={openWith}
+          working={working}
+          onCancel={() => setOpenWith(undefined)}
+          onOpen={(candidate, remember) =>
+            void launchWith(openWith, candidate, remember)
+          }
+        />
+      )}
     </article>
+  );
+}
+
+function OpenWithDialog({
+  state,
+  working,
+  onCancel,
+  onOpen,
+}: {
+  state: OpenWithState;
+  working: boolean;
+  onCancel: () => void;
+  onOpen: (candidate: ResourceHandlerCandidate, remember: boolean) => void;
+}) {
+  const [selectedKey, setSelectedKey] = useState(
+    `${state.resolution.candidates[0].appId}:${state.resolution.candidates[0].handler.id}`,
+  );
+  const [remember, setRemember] = useState(false);
+  const selected = state.resolution.candidates.find(
+    (candidate) =>
+      `${candidate.appId}:${candidate.handler.id}` === selectedKey,
+  );
+  return (
+    <div
+      className="file-manager-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="file-manager-open-with-title"
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (selected) onOpen(selected, remember);
+        }}
+      >
+        <h2 id="file-manager-open-with-title">
+          打开“{state.entry.name}”
+        </h2>
+        {state.resolution.effectiveAction === "open" &&
+          state.resolution.requestedAction === "edit" && (
+            <p>没有可编辑此文件的应用，以下应用将以只读方式打开。</p>
+          )}
+        <fieldset className="file-manager-dialog__handlers">
+          <legend>选择应用</legend>
+          {state.resolution.candidates.map((candidate) => {
+            const key = `${candidate.appId}:${candidate.handler.id}`;
+            return (
+              <label key={key}>
+                <input
+                  type="radio"
+                  name="resource-handler"
+                  value={key}
+                  checked={selectedKey === key}
+                  onChange={() => setSelectedKey(key)}
+                />
+                <span>
+                  <strong>{candidate.appName}</strong>
+                  {" · "}
+                  {candidate.handler.access === "read-write"
+                    ? "最大读写"
+                    : "只读"}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+        {state.resolution.extension && (
+          <label>
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            始终使用所选应用
+            {state.resolution.effectiveAction === "edit" ? "编辑" : "打开"}
+            {" "}
+            {state.resolution.extension} 文件
+          </label>
+        )}
+        <div>
+          <button type="button" disabled={working} onClick={onCancel}>
+            取消
+          </button>
+          <button type="submit" disabled={working || !selected}>
+            打开
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
