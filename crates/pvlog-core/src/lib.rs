@@ -1090,6 +1090,191 @@ pub fn validate_manifest(manifest: &Manifest) -> Result<(), String> {
     Ok(())
 }
 
+pub fn apply_segment(checkpoint: &Checkpoint, segment: &Segment) -> Result<Checkpoint, String> {
+    validate_checkpoint_entries(&checkpoint.entries)?;
+    if checkpoint.lineage_id != segment.lineage_id {
+        return Err("Segment lineage does not match Checkpoint".into());
+    }
+    if checkpoint.revision.checked_add(1) != Some(segment.revision) {
+        return Err("Segment revision does not follow Checkpoint".into());
+    }
+
+    let mut entries = checkpoint.entries.clone();
+    for operation in &segment.operations {
+        match operation {
+            Operation::CreateDirectory {
+                entry_id,
+                parent_id,
+                name,
+                mtime_ms,
+            } => {
+                ensure_new_entry(&entries, *entry_id, *parent_id, name)?;
+                entries.push(Entry {
+                    entry_id: *entry_id,
+                    parent_id: Some(*parent_id),
+                    name: name.clone(),
+                    kind: EntryKind::Directory,
+                    created_at_ms: segment.created_at_ms,
+                    mtime_ms: *mtime_ms,
+                });
+            }
+            Operation::CreateFile {
+                entry_id,
+                parent_id,
+                name,
+                content,
+                size,
+                mtime_ms,
+            } => {
+                ensure_new_entry(&entries, *entry_id, *parent_id, name)?;
+                entries.push(Entry {
+                    entry_id: *entry_id,
+                    parent_id: Some(*parent_id),
+                    name: name.clone(),
+                    kind: EntryKind::File {
+                        content: content.clone(),
+                        size: *size,
+                    },
+                    created_at_ms: segment.created_at_ms,
+                    mtime_ms: *mtime_ms,
+                });
+            }
+            Operation::SetFileContent {
+                entry_id,
+                expected_content,
+                content,
+                size,
+                mtime_ms,
+            } => {
+                let entry = entries
+                    .iter_mut()
+                    .find(|entry| entry.entry_id == *entry_id)
+                    .ok_or_else(|| "SetFileContent Entry does not exist".to_string())?;
+                let EntryKind::File {
+                    content: current_content,
+                    size: current_size,
+                } = &mut entry.kind
+                else {
+                    return Err("SetFileContent target is not a file".into());
+                };
+                if let Some(expected_fid) = expected_content
+                    && content_fid(current_content) != *expected_fid
+                {
+                    return Err("SetFileContent expected content does not match".into());
+                }
+                *current_content = content.clone();
+                *current_size = *size;
+                entry.mtime_ms = *mtime_ms;
+            }
+            Operation::MoveEntry {
+                entry_id,
+                new_parent_id,
+                new_name,
+            } => {
+                if entries
+                    .iter()
+                    .find(|entry| entry.entry_id == *entry_id)
+                    .is_some_and(|entry| entry.parent_id.is_none())
+                {
+                    return Err("root Entry cannot be moved".into());
+                }
+                ensure_parent_and_name(&entries, *new_parent_id, new_name, Some(*entry_id))?;
+                let entry = entries
+                    .iter_mut()
+                    .find(|entry| entry.entry_id == *entry_id)
+                    .ok_or_else(|| "MoveEntry target does not exist".to_string())?;
+                entry.parent_id = Some(*new_parent_id);
+                entry.name = new_name.clone();
+            }
+            Operation::RemoveEntry {
+                entry_id,
+                recursive,
+            } => {
+                let target = entries
+                    .iter()
+                    .find(|entry| entry.entry_id == *entry_id)
+                    .ok_or_else(|| "RemoveEntry target does not exist".to_string())?;
+                if target.parent_id.is_none() {
+                    return Err("root Entry cannot be removed".into());
+                }
+                let descendants = descendant_ids(&entries, *entry_id);
+                if !*recursive && !descendants.is_empty() {
+                    return Err("non-empty directory removal requires recursive=true".into());
+                }
+                entries.retain(|entry| {
+                    entry.entry_id != *entry_id && !descendants.contains(&entry.entry_id)
+                });
+            }
+        }
+        validate_checkpoint_entries(&entries)?;
+    }
+
+    Ok(Checkpoint {
+        lineage_id: checkpoint.lineage_id,
+        revision: segment.revision,
+        covered_segment: None,
+        entries,
+    })
+}
+
+fn ensure_new_entry(
+    entries: &[Entry],
+    entry_id: EntryId,
+    parent_id: EntryId,
+    name: &str,
+) -> Result<(), String> {
+    if entries.iter().any(|entry| entry.entry_id == entry_id) {
+        return Err("Entry ID already exists".into());
+    }
+    ensure_parent_and_name(entries, parent_id, name, None)
+}
+
+fn ensure_parent_and_name(
+    entries: &[Entry],
+    parent_id: EntryId,
+    name: &str,
+    moving_entry_id: Option<EntryId>,
+) -> Result<(), String> {
+    validate_entry_name(name)?;
+    let parent = entries
+        .iter()
+        .find(|entry| entry.entry_id == parent_id)
+        .ok_or_else(|| "parent Entry does not exist".to_string())?;
+    if !matches!(parent.kind, EntryKind::Directory) {
+        return Err("parent Entry is not a directory".into());
+    }
+    if entries.iter().any(|entry| {
+        entry.parent_id == Some(parent_id)
+            && entry.name == name
+            && Some(entry.entry_id) != moving_entry_id
+    }) {
+        return Err("sibling name already exists".into());
+    }
+    Ok(())
+}
+
+fn descendant_ids(entries: &[Entry], entry_id: EntryId) -> HashSet<EntryId> {
+    let mut descendants = HashSet::new();
+    let mut frontier = vec![entry_id];
+    while let Some(parent_id) = frontier.pop() {
+        for child in entries
+            .iter()
+            .filter(|entry| entry.parent_id == Some(parent_id))
+        {
+            if descendants.insert(child.entry_id) {
+                frontier.push(child.entry_id);
+            }
+        }
+    }
+    descendants
+}
+
+fn content_fid(content: &ContentRef) -> Fid {
+    match content {
+        ContentRef::Chunk(fid) | ContentRef::Manifest(fid) => *fid,
+    }
+}
+
 pub fn fid_bytes(bytes: &[u8]) -> Fid {
     Fid(xxh3_128_with_seed(bytes, 0).to_be_bytes())
 }
@@ -1153,9 +1338,9 @@ pub fn validate_entry_name(name: &str) -> Result<(), String> {
 mod wasm {
     use super::{
         ABI_VERSION, Checkpoint, CheckpointRef, ChunkRef, Entry, EntryId, EntryKind, Fid, Head,
-        IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest, decode_checkpoint, decode_head,
-        decode_manifest, decode_segment, encode_checkpoint, encode_head, encode_manifest, fid_hex,
-        validate_entry_id,
+        IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest, Operation, Segment, apply_segment,
+        decode_checkpoint, decode_head, decode_manifest, decode_segment, encode_checkpoint,
+        encode_head, encode_manifest, encode_segment, fid_bytes, fid_hex, validate_entry_id,
     };
     use wasm_bindgen::prelude::*;
 
@@ -1200,6 +1385,48 @@ mod wasm {
     pub fn validate_head_wasm(bytes: &[u8]) -> Result<(), JsError> {
         decode_head(bytes)
             .map(|_| ())
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = headLineageId)]
+    pub fn head_lineage_id_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_head(bytes)
+            .map(|head| head.lineage_id.to_vec())
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = headRootEntryId)]
+    pub fn head_root_entry_id_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_head(bytes)
+            .map(|head| head.root_entry_id.0.to_vec())
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = headRevision)]
+    pub fn head_revision_wasm(bytes: &[u8]) -> Result<u64, JsError> {
+        decode_head(bytes)
+            .map(|head| head.revision)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = headLastSegmentFid)]
+    pub fn head_last_segment_fid_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_head(bytes)
+            .map(|head| {
+                head.last_segment
+                    .map_or_else(Vec::new, |fid| fid.0.to_vec())
+            })
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = headCheckpointFid)]
+    pub fn head_checkpoint_fid_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_head(bytes)
+            .and_then(|head| {
+                head.checkpoint
+                    .map(|checkpoint| checkpoint.fid.0.to_vec())
+                    .ok_or_else(|| "Head does not reference a Checkpoint".to_string())
+            })
             .map_err(|error| JsError::new(&error))
     }
 
@@ -1316,6 +1543,185 @@ mod wasm {
             created_at_ms,
             writer_id,
         }))
+    }
+
+    #[wasm_bindgen(js_name = encodeCreateFileSegment)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_create_file_segment_wasm(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+        entry_id: &[u8],
+        parent_id: &[u8],
+        name: String,
+        content_kind: u32,
+        content_fid: &[u8],
+        size: u64,
+        mtime_ms: u64,
+    ) -> Result<Vec<u8>, JsError> {
+        let segment = segment_base(
+            lineage_id,
+            base_head_fid,
+            previous_segment_fid,
+            revision,
+            transaction_id,
+            created_at_ms,
+            writer_id,
+        )?;
+        let operation = Operation::CreateFile {
+            entry_id: EntryId(array_16(entry_id, "Entry ID")?),
+            parent_id: EntryId(array_16(parent_id, "parent Entry ID")?),
+            name,
+            content: content_ref(content_kind, content_fid)?,
+            size,
+            mtime_ms,
+        };
+        let segment = Segment {
+            operations: vec![operation],
+            ..segment
+        };
+        decode_segment(&encode_segment(&segment))
+            .map(|_| encode_segment(&segment))
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = encodeSetFileContentSegment)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_set_file_content_segment_wasm(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+        entry_id: &[u8],
+        expected_content_fid: &[u8],
+        content_kind: u32,
+        content_fid: &[u8],
+        size: u64,
+        mtime_ms: u64,
+    ) -> Result<Vec<u8>, JsError> {
+        let segment = segment_base(
+            lineage_id,
+            base_head_fid,
+            previous_segment_fid,
+            revision,
+            transaction_id,
+            created_at_ms,
+            writer_id,
+        )?;
+        let expected_content = if expected_content_fid.is_empty() {
+            None
+        } else {
+            Some(Fid(array_16(expected_content_fid, "expected content FID")?))
+        };
+        let operation = Operation::SetFileContent {
+            entry_id: EntryId(array_16(entry_id, "Entry ID")?),
+            expected_content,
+            content: content_ref(content_kind, content_fid)?,
+            size,
+            mtime_ms,
+        };
+        let segment = Segment {
+            operations: vec![operation],
+            ..segment
+        };
+        decode_segment(&encode_segment(&segment))
+            .map(|_| encode_segment(&segment))
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = applySegment)]
+    pub fn apply_segment_wasm(
+        checkpoint_bytes: &[u8],
+        segment_bytes: &[u8],
+    ) -> Result<Vec<u8>, JsError> {
+        let checkpoint =
+            decode_checkpoint(checkpoint_bytes).map_err(|error| JsError::new(&error))?;
+        let segment = decode_segment(segment_bytes).map_err(|error| JsError::new(&error))?;
+        let mut applied =
+            apply_segment(&checkpoint, &segment).map_err(|error| JsError::new(&error))?;
+        applied.covered_segment = Some(fid_bytes(segment_bytes));
+        Ok(encode_checkpoint(&applied))
+    }
+
+    #[wasm_bindgen(js_name = encodeAdvancedHead)]
+    pub fn encode_advanced_head_wasm(
+        previous_head_bytes: &[u8],
+        segment_fid: &[u8],
+        checkpoint_fid: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+    ) -> Result<Vec<u8>, JsError> {
+        let previous = decode_head(previous_head_bytes).map_err(|error| JsError::new(&error))?;
+        let revision = previous
+            .revision
+            .checked_add(1)
+            .ok_or_else(|| JsError::new("Head revision overflow"))?;
+        if writer_id.is_empty() || writer_id.len() > 255 {
+            return Err(JsError::new("writer ID must contain 1 to 255 UTF-8 bytes"));
+        }
+        Ok(encode_head(&Head {
+            lineage_id: previous.lineage_id,
+            root_entry_id: previous.root_entry_id,
+            revision,
+            parent_head: Some(fid_bytes(previous_head_bytes)),
+            last_segment: Some(Fid(array_16(segment_fid, "Segment FID")?)),
+            checkpoint: Some(CheckpointRef {
+                fid: Fid(array_16(checkpoint_fid, "Checkpoint FID")?),
+                revision,
+                covered_segment: Some(Fid(array_16(segment_fid, "Segment FID")?)),
+            }),
+            created_at_ms,
+            writer_id,
+        }))
+    }
+
+    fn segment_base(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+    ) -> Result<Segment, JsError> {
+        let lineage_id = array_16(lineage_id, "lineage ID")?;
+        if lineage_id == [0; 16] {
+            return Err(JsError::new("lineage ID must not be all zeroes"));
+        }
+        let previous_segment = if previous_segment_fid.is_empty() {
+            None
+        } else {
+            Some(Fid(array_16(previous_segment_fid, "previous Segment FID")?))
+        };
+        if writer_id.is_empty() || writer_id.len() > 255 {
+            return Err(JsError::new("writer ID must contain 1 to 255 UTF-8 bytes"));
+        }
+        Ok(Segment {
+            lineage_id,
+            base_head: Fid(array_16(base_head_fid, "base Head FID")?),
+            previous_segment,
+            revision,
+            transaction_id: array_16(transaction_id, "transaction ID")?,
+            created_at_ms,
+            writer_id,
+            operations: Vec::new(),
+        })
+    }
+
+    fn content_ref(kind: u32, fid: &[u8]) -> Result<super::ContentRef, JsError> {
+        let fid = Fid(array_16(fid, "content FID")?);
+        match kind {
+            1 => Ok(super::ContentRef::Chunk(fid)),
+            2 => Ok(super::ContentRef::Manifest(fid)),
+            _ => Err(JsError::new("content kind must be 1 or 2")),
+        }
     }
 
     fn array_16(bytes: &[u8], label: &str) -> Result<[u8; 16], JsError> {
@@ -1516,5 +1922,91 @@ mod tests {
             .unwrap();
         wrong_chunk_size[position + 4] = 1;
         assert!(decode_manifest(&wrong_chunk_size).is_err());
+    }
+
+    #[test]
+    fn segment_application_enforces_identity_updates_and_root_protection() {
+        let root_id = EntryId(bytes(1));
+        let directory_id = EntryId(bytes(2));
+        let file_id = EntryId(bytes(3));
+        let checkpoint = Checkpoint {
+            lineage_id: bytes(9),
+            revision: 0,
+            covered_segment: None,
+            entries: vec![Entry {
+                entry_id: root_id,
+                parent_id: None,
+                name: String::new(),
+                kind: EntryKind::Directory,
+                created_at_ms: 10,
+                mtime_ms: 10,
+            }],
+        };
+        let segment = Segment {
+            lineage_id: bytes(9),
+            base_head: Fid(bytes(8)),
+            previous_segment: None,
+            revision: 1,
+            transaction_id: bytes(7),
+            created_at_ms: 20,
+            writer_id: "test".into(),
+            operations: vec![
+                Operation::CreateDirectory {
+                    entry_id: directory_id,
+                    parent_id: root_id,
+                    name: "docs".into(),
+                    mtime_ms: 20,
+                },
+                Operation::CreateFile {
+                    entry_id: file_id,
+                    parent_id: directory_id,
+                    name: "notes.md".into(),
+                    content: ContentRef::Chunk(Fid(bytes(4))),
+                    size: 1,
+                    mtime_ms: 20,
+                },
+                Operation::SetFileContent {
+                    entry_id: file_id,
+                    expected_content: Some(Fid(bytes(4))),
+                    content: ContentRef::Chunk(Fid(bytes(5))),
+                    size: 2,
+                    mtime_ms: 21,
+                },
+                Operation::MoveEntry {
+                    entry_id: file_id,
+                    new_parent_id: root_id,
+                    new_name: "moved.md".into(),
+                },
+            ],
+        };
+        let applied = apply_segment(&checkpoint, &segment).unwrap();
+        assert_eq!(applied.revision, 1);
+        assert!(applied.entries.iter().any(|entry| {
+            entry.entry_id == file_id
+                && entry.parent_id == Some(root_id)
+                && entry.name == "moved.md"
+                && matches!(
+                    entry.kind,
+                    EntryKind::File {
+                        content: ContentRef::Chunk(Fid(fid)),
+                        size: 2
+                    } if fid == bytes(5)
+                )
+        }));
+
+        let non_recursive = Segment {
+            lineage_id: bytes(9),
+            base_head: Fid(bytes(6)),
+            previous_segment: None,
+            revision: 2,
+            transaction_id: bytes(6),
+            created_at_ms: 30,
+            writer_id: "test".into(),
+            operations: vec![Operation::RemoveEntry {
+                entry_id: root_id,
+                recursive: true,
+            }],
+        };
+        assert!(apply_segment(&applied, &non_recursive).is_err());
     }
 }

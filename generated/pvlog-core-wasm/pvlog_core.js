@@ -57,6 +57,99 @@ function abiVersion() {
 exports.abiVersion = abiVersion;
 
 /**
+ * @param {Uint8Array} checkpoint_bytes
+ * @param {Uint8Array} segment_bytes
+ * @returns {Uint8Array}
+ */
+function applySegment(checkpoint_bytes, segment_bytes) {
+    const ptr0 = passArray8ToWasm0(checkpoint_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(segment_bytes, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ret = wasm.applySegment(ptr0, len0, ptr1, len1);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v3 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v3;
+}
+exports.applySegment = applySegment;
+
+/**
+ * @param {Uint8Array} previous_head_bytes
+ * @param {Uint8Array} segment_fid
+ * @param {Uint8Array} checkpoint_fid
+ * @param {bigint} created_at_ms
+ * @param {string} writer_id
+ * @returns {Uint8Array}
+ */
+function encodeAdvancedHead(previous_head_bytes, segment_fid, checkpoint_fid, created_at_ms, writer_id) {
+    const ptr0 = passArray8ToWasm0(previous_head_bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(segment_fid, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(checkpoint_fid, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passStringToWasm0(writer_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ret = wasm.encodeAdvancedHead(ptr0, len0, ptr1, len1, ptr2, len2, created_at_ms, ptr3, len3);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v5 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v5;
+}
+exports.encodeAdvancedHead = encodeAdvancedHead;
+
+/**
+ * @param {Uint8Array} lineage_id
+ * @param {Uint8Array} base_head_fid
+ * @param {Uint8Array} previous_segment_fid
+ * @param {bigint} revision
+ * @param {Uint8Array} transaction_id
+ * @param {bigint} created_at_ms
+ * @param {string} writer_id
+ * @param {Uint8Array} entry_id
+ * @param {Uint8Array} parent_id
+ * @param {string} name
+ * @param {number} content_kind
+ * @param {Uint8Array} content_fid
+ * @param {bigint} size
+ * @param {bigint} mtime_ms
+ * @returns {Uint8Array}
+ */
+function encodeCreateFileSegment(lineage_id, base_head_fid, previous_segment_fid, revision, transaction_id, created_at_ms, writer_id, entry_id, parent_id, name, content_kind, content_fid, size, mtime_ms) {
+    const ptr0 = passArray8ToWasm0(lineage_id, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(base_head_fid, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(previous_segment_fid, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(transaction_id, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(writer_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ptr5 = passArray8ToWasm0(entry_id, wasm.__wbindgen_malloc);
+    const len5 = WASM_VECTOR_LEN;
+    const ptr6 = passArray8ToWasm0(parent_id, wasm.__wbindgen_malloc);
+    const len6 = WASM_VECTOR_LEN;
+    const ptr7 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len7 = WASM_VECTOR_LEN;
+    const ptr8 = passArray8ToWasm0(content_fid, wasm.__wbindgen_malloc);
+    const len8 = WASM_VECTOR_LEN;
+    const ret = wasm.encodeCreateFileSegment(ptr0, len0, ptr1, len1, ptr2, len2, revision, ptr3, len3, created_at_ms, ptr4, len4, ptr5, len5, ptr6, len6, ptr7, len7, content_kind, ptr8, len8, size, mtime_ms);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v10 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v10;
+}
+exports.encodeCreateFileSegment = encodeCreateFileSegment;
+
+/**
  * @param {Uint8Array} lineage_id
  * @param {Uint8Array} root_entry_id
  * @param {bigint} created_at_ms
@@ -126,6 +219,49 @@ function encodeManifest(file_size, chunk_fids, chunk_lengths) {
 exports.encodeManifest = encodeManifest;
 
 /**
+ * @param {Uint8Array} lineage_id
+ * @param {Uint8Array} base_head_fid
+ * @param {Uint8Array} previous_segment_fid
+ * @param {bigint} revision
+ * @param {Uint8Array} transaction_id
+ * @param {bigint} created_at_ms
+ * @param {string} writer_id
+ * @param {Uint8Array} entry_id
+ * @param {Uint8Array} expected_content_fid
+ * @param {number} content_kind
+ * @param {Uint8Array} content_fid
+ * @param {bigint} size
+ * @param {bigint} mtime_ms
+ * @returns {Uint8Array}
+ */
+function encodeSetFileContentSegment(lineage_id, base_head_fid, previous_segment_fid, revision, transaction_id, created_at_ms, writer_id, entry_id, expected_content_fid, content_kind, content_fid, size, mtime_ms) {
+    const ptr0 = passArray8ToWasm0(lineage_id, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ptr1 = passArray8ToWasm0(base_head_fid, wasm.__wbindgen_malloc);
+    const len1 = WASM_VECTOR_LEN;
+    const ptr2 = passArray8ToWasm0(previous_segment_fid, wasm.__wbindgen_malloc);
+    const len2 = WASM_VECTOR_LEN;
+    const ptr3 = passArray8ToWasm0(transaction_id, wasm.__wbindgen_malloc);
+    const len3 = WASM_VECTOR_LEN;
+    const ptr4 = passStringToWasm0(writer_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len4 = WASM_VECTOR_LEN;
+    const ptr5 = passArray8ToWasm0(entry_id, wasm.__wbindgen_malloc);
+    const len5 = WASM_VECTOR_LEN;
+    const ptr6 = passArray8ToWasm0(expected_content_fid, wasm.__wbindgen_malloc);
+    const len6 = WASM_VECTOR_LEN;
+    const ptr7 = passArray8ToWasm0(content_fid, wasm.__wbindgen_malloc);
+    const len7 = WASM_VECTOR_LEN;
+    const ret = wasm.encodeSetFileContentSegment(ptr0, len0, ptr1, len1, ptr2, len2, revision, ptr3, len3, created_at_ms, ptr4, len4, ptr5, len5, ptr6, len6, content_kind, ptr7, len7, size, mtime_ms);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v9 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v9;
+}
+exports.encodeSetFileContentSegment = encodeSetFileContentSegment;
+
+/**
  * @param {Uint8Array} bytes
  * @returns {string}
  */
@@ -150,6 +286,89 @@ function fidHex(bytes) {
     }
 }
 exports.fidHex = fidHex;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function headCheckpointFid(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headCheckpointFid(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.headCheckpointFid = headCheckpointFid;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function headLastSegmentFid(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headLastSegmentFid(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.headLastSegmentFid = headLastSegmentFid;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function headLineageId(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headLineageId(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.headLineageId = headLineageId;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {bigint}
+ */
+function headRevision(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headRevision(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return BigInt.asUintN(64, ret[0]);
+}
+exports.headRevision = headRevision;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function headRootEntryId(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headRootEntryId(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.headRootEntryId = headRootEntryId;
 
 /**
  * @param {Uint8Array} bytes

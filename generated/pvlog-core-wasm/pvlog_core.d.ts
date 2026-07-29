@@ -11,13 +11,31 @@ export class FidHasher {
 
 export function abiVersion(): number;
 
+export function applySegment(checkpoint_bytes: Uint8Array, segment_bytes: Uint8Array): Uint8Array;
+
+export function encodeAdvancedHead(previous_head_bytes: Uint8Array, segment_fid: Uint8Array, checkpoint_fid: Uint8Array, created_at_ms: bigint, writer_id: string): Uint8Array;
+
+export function encodeCreateFileSegment(lineage_id: Uint8Array, base_head_fid: Uint8Array, previous_segment_fid: Uint8Array, revision: bigint, transaction_id: Uint8Array, created_at_ms: bigint, writer_id: string, entry_id: Uint8Array, parent_id: Uint8Array, name: string, content_kind: number, content_fid: Uint8Array, size: bigint, mtime_ms: bigint): Uint8Array;
+
 export function encodeGenesisCheckpoint(lineage_id: Uint8Array, root_entry_id: Uint8Array, created_at_ms: bigint): Uint8Array;
 
 export function encodeGenesisHead(lineage_id: Uint8Array, root_entry_id: Uint8Array, checkpoint_fid: Uint8Array, created_at_ms: bigint, writer_id: string): Uint8Array;
 
 export function encodeManifest(file_size: bigint, chunk_fids: Uint8Array, chunk_lengths: BigUint64Array): Uint8Array;
 
+export function encodeSetFileContentSegment(lineage_id: Uint8Array, base_head_fid: Uint8Array, previous_segment_fid: Uint8Array, revision: bigint, transaction_id: Uint8Array, created_at_ms: bigint, writer_id: string, entry_id: Uint8Array, expected_content_fid: Uint8Array, content_kind: number, content_fid: Uint8Array, size: bigint, mtime_ms: bigint): Uint8Array;
+
 export function fidHex(bytes: Uint8Array): string;
+
+export function headCheckpointFid(bytes: Uint8Array): Uint8Array;
+
+export function headLastSegmentFid(bytes: Uint8Array): Uint8Array;
+
+export function headLineageId(bytes: Uint8Array): Uint8Array;
+
+export function headRevision(bytes: Uint8Array): bigint;
+
+export function headRootEntryId(bytes: Uint8Array): Uint8Array;
 
 export function manifestChunkFids(bytes: Uint8Array): Uint8Array;
 

@@ -1,0 +1,236 @@
+import { randomBytes } from "node:crypto";
+import type { FileContentRef } from "./fileContentStore.js";
+import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
+import { ObjectStoreError } from "./objectStore.js";
+import { loadPvlogCore, type PvlogCore } from "./pvlogCore.js";
+import {
+  SqliteRefStore,
+  type FilesystemRef,
+} from "./sqliteRefStore.js";
+
+interface TransactionServiceOptions {
+  repository: ImmutableObjectRepository;
+  refStore: SqliteRefStore;
+  writerId: string;
+  core?: PvlogCore;
+  now?: () => number;
+  randomId?: () => Uint8Array;
+  beforePublish?: () => Promise<void>;
+}
+
+interface CreateFileInput {
+  parentEntryIdHex: string;
+  name: string;
+  content: FileContentRef;
+  mtimeMs?: number;
+}
+
+interface SetFileContentInput {
+  entryIdHex: string;
+  expectedContentFidHex: string;
+  content: FileContentRef;
+  mtimeMs?: number;
+}
+
+export interface PublishedFileSystemTransaction {
+  ref: FilesystemRef;
+  entryIdHex: string;
+  segmentFidHex: string;
+  checkpointFidHex: string;
+}
+
+interface CurrentFileSystemState {
+  ref: FilesystemRef;
+  headBytes: Uint8Array;
+  checkpointBytes: Uint8Array;
+  lineageId: Uint8Array;
+  lastSegmentFid: Uint8Array;
+}
+
+export class FileSystemTransactions {
+  readonly #repository: ImmutableObjectRepository;
+  readonly #refStore: SqliteRefStore;
+  readonly #writerId: string;
+  readonly #core: PvlogCore;
+  readonly #now: () => number;
+  readonly #randomId: () => Uint8Array;
+  readonly #beforePublish?: () => Promise<void>;
+
+  constructor(options: TransactionServiceOptions) {
+    this.#repository = options.repository;
+    this.#refStore = options.refStore;
+    this.#writerId = options.writerId;
+    this.#core = options.core ?? loadPvlogCore();
+    this.#now = options.now ?? Date.now;
+    this.#randomId = options.randomId ?? (() => randomBytes(16));
+    this.#beforePublish = options.beforePublish;
+  }
+
+  async createFile(
+    input: CreateFileInput,
+  ): Promise<PublishedFileSystemTransaction> {
+    const state = await this.#loadCurrentState();
+    const entryId = requireId(this.#randomId(), "Entry ID");
+    const transactionId = requireId(this.#randomId(), "transaction ID");
+    const timestamp = input.mtimeMs ?? this.#now();
+    validateTimestamp(timestamp);
+    const segmentBytes = this.#core.encodeCreateFileSegment(
+      state.lineageId,
+      Buffer.from(state.ref.headFidHex, "hex"),
+      state.lastSegmentFid,
+      BigInt(state.ref.revision + 1),
+      transactionId,
+      BigInt(timestamp),
+      this.#writerId,
+      entryId,
+      hexId(input.parentEntryIdHex, "parent Entry ID"),
+      input.name,
+      contentKind(input.content),
+      Buffer.from(input.content.fidHex, "hex"),
+      BigInt(input.content.size),
+      BigInt(timestamp),
+    );
+    return await this.#publish(
+      state,
+      segmentBytes,
+      Buffer.from(entryId).toString("hex"),
+      timestamp,
+    );
+  }
+
+  async setFileContent(
+    input: SetFileContentInput,
+  ): Promise<PublishedFileSystemTransaction> {
+    const state = await this.#loadCurrentState();
+    const transactionId = requireId(this.#randomId(), "transaction ID");
+    const timestamp = input.mtimeMs ?? this.#now();
+    validateTimestamp(timestamp);
+    const entryId = hexId(input.entryIdHex, "Entry ID");
+    const segmentBytes = this.#core.encodeSetFileContentSegment(
+      state.lineageId,
+      Buffer.from(state.ref.headFidHex, "hex"),
+      state.lastSegmentFid,
+      BigInt(state.ref.revision + 1),
+      transactionId,
+      BigInt(timestamp),
+      this.#writerId,
+      entryId,
+      hexId(input.expectedContentFidHex, "expected content FID"),
+      contentKind(input.content),
+      Buffer.from(input.content.fidHex, "hex"),
+      BigInt(input.content.size),
+      BigInt(timestamp),
+    );
+    return await this.#publish(
+      state,
+      segmentBytes,
+      input.entryIdHex,
+      timestamp,
+    );
+  }
+
+  async #loadCurrentState(): Promise<CurrentFileSystemState> {
+    const ref = this.#refStore.getRef("main");
+    const headBytes = await this.#repository.get("heads", ref.headFidHex);
+    this.#core.validateHead(headBytes);
+    const headRevision = Number(this.#core.headRevision(headBytes));
+    const lineageId = this.#core.headLineageId(headBytes);
+    if (
+      headRevision !== ref.revision ||
+      Buffer.from(lineageId).toString("hex") !== ref.lineageIdHex
+    ) {
+      throw integrityFailure("Ref metadata does not match its Head.");
+    }
+    const checkpointFidHex = Buffer.from(
+      this.#core.headCheckpointFid(headBytes),
+    ).toString("hex");
+    const checkpointBytes = await this.#repository.get(
+      "checkpoints",
+      checkpointFidHex,
+    );
+    this.#core.validateCheckpoint(checkpointBytes);
+    return {
+      ref,
+      headBytes,
+      checkpointBytes,
+      lineageId,
+      lastSegmentFid: this.#core.headLastSegmentFid(headBytes),
+    };
+  }
+
+  async #publish(
+    state: CurrentFileSystemState,
+    segmentBytes: Uint8Array,
+    entryIdHex: string,
+    timestamp: number,
+  ): Promise<PublishedFileSystemTransaction> {
+    this.#core.validateSegment(segmentBytes);
+    const nextCheckpointBytes = this.#core.applySegment(
+      state.checkpointBytes,
+      segmentBytes,
+    );
+    this.#core.validateCheckpoint(nextCheckpointBytes);
+
+    const segment = await this.#repository.put("segments", segmentBytes);
+    const checkpoint = await this.#repository.put(
+      "checkpoints",
+      nextCheckpointBytes,
+    );
+    const nextHeadBytes = this.#core.encodeAdvancedHead(
+      state.headBytes,
+      Buffer.from(segment.key.fidHex, "hex"),
+      Buffer.from(checkpoint.key.fidHex, "hex"),
+      BigInt(timestamp),
+      this.#writerId,
+    );
+    this.#core.validateHead(nextHeadBytes);
+    const head = await this.#repository.put("heads", nextHeadBytes);
+    this.#core.validateHead(
+      await this.#repository.get("heads", head.key.fidHex),
+    );
+
+    await this.#beforePublish?.();
+    const ref = this.#refStore.compareAndSwap({
+      refId: "main",
+      expectedHeadFidHex: state.ref.headFidHex,
+      expectedRevision: state.ref.revision,
+      newHeadFidHex: head.key.fidHex,
+      newRevision: state.ref.revision + 1,
+      updatedAtMs: timestamp,
+    });
+    return {
+      ref,
+      entryIdHex,
+      segmentFidHex: segment.key.fidHex,
+      checkpointFidHex: checkpoint.key.fidHex,
+    };
+  }
+}
+
+function contentKind(content: FileContentRef): number {
+  return content.kind === "chunk" ? 1 : 2;
+}
+
+function hexId(value: string, label: string): Uint8Array {
+  if (!/^[0-9a-f]{32}$/.test(value) || value === "0".repeat(32)) {
+    throw new Error(`${label} is invalid.`);
+  }
+  return Buffer.from(value, "hex");
+}
+
+function requireId(value: Uint8Array, label: string): Uint8Array {
+  if (value.byteLength !== 16 || value.every((byte) => byte === 0)) {
+    throw new Error(`${label} must be a random non-zero 128-bit value.`);
+  }
+  return Uint8Array.from(value);
+}
+
+function validateTimestamp(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error("Transaction timestamp is invalid.");
+  }
+}
+
+function integrityFailure(message: string): ObjectStoreError {
+  return new ObjectStoreError("OBJECT_INTEGRITY_FAILURE", message);
+}

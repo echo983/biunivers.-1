@@ -285,6 +285,13 @@ CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 
 和长度，随后逐 Chunk 读回并验证 FID、单块长度及总长度。2026-07-29 已在真实 R2 隔离前缀
 验证 64 MiB + 1 字节得到两个 Chunk 和一个 Manifest，并完成逐块读回。
 
+文件系统变更由 `FileSystemTransactions` 按不可变顺序发布：读取并验证当前
+`Ref → Head → Checkpoint`，由 WASM 编码 Segment 并应用到状态，依次持久化 Segment、
+新 Checkpoint 和新 Head，最后用旧 Head 与旧 revision 做 SQLite CAS。V0.1 当前实现每次事务
+生成完整 Checkpoint，以优先验证正确性；降低 Checkpoint 频率属于后续空间优化，不改变格式。
+CAS 失败只留下不可达对象。2026-07-29 已在真实 R2 验证创世、新建文件、更新内容、发布到
+revision 2、关闭 RefStore、重开并重新验证 Head/Checkpoint 的完整链路。
+
 ## 8. Head
 
 Head 是不可变、内容寻址的文件系统版本根。
