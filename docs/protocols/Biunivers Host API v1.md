@@ -1,7 +1,7 @@
 # Biunivers Host API v1
 
 - 协议标识：`biunivers.host-api/1`
-- 状态：实现中；打开、读取、覆盖保存、另存为、元数据和释放可用
+- 状态：V1 已实现并通过第三方应用、真实对象存储和容器恢复验收
 - 传输：受管 iframe 与父窗口之间的 `postMessage`
 
 Host API 是可选宿主能力，不是静态应用安装协议的一部分。应用必须能处理

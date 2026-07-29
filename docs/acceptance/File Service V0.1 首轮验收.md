@@ -4,8 +4,8 @@
 - 结果：通过
 - 宿主分支：`agent/file-service-v0-1-design`
 - 验收应用：[`echo983/biunivers-notepad`](https://github.com/echo983/biunivers-notepad)
-- 应用版本：`0.1.0`
-- 应用 commit：`9157e32336cfdd7026eade10fa4410f26742c9f3`
+- 初始验收应用版本：`0.1.0`（commit `9157e32336cfdd7026eade10fa4410f26742c9f3`）
+- 最终验收应用版本：`0.1.1`（commit `63c7b94abd3a209c397e8a486cc10eaa6686c72a`）
 
 ## 环境
 
@@ -41,6 +41,9 @@
 16. 恢复实例成功从 R2 验证 Ref → Head → checkpoint 链，并报告 revision 3；
 17. 从恢复实例逐个读取所有可达文件并重新校验对象 FID：`first-note.txt` 读取 17 字节；
     `large-boundary.bin` 通过 Manifest 读取两个 Chunk，共 67,108,865 字节；全部验证通过。
+18. 在真实 R2 命名空间执行只读 GC 扫描：4 个 Head、3 个 Segment、4 个 Checkpoint、
+    1 个 Manifest 和 4 个 Chunk 全部可达；候选对象为 0，且报告明确
+    `deletionAllowed: false`。
 
 最终观测状态：
 
@@ -64,12 +67,13 @@
 - File Service 管理状态曾缓存启动时 revision；现每次查询都重新验证当前 Ref、Head 和
   Checkpoint。
 
-## 尚未覆盖
+## 后续增强（不阻断 V0.1）
 
-- 两个旧句柄的覆盖保护与 `FILE_VERSION_CONFLICT` 已通过自动化验证；多窗口人工交互仍待验收；
-- 64 MiB + 1 字节文件已通过真实 HTTP 流式上传和读回；浏览器 UI 发起的大文件交互仍待验收；
-- R2 断网、超时和部分上传故障注入；
+- 多窗口人工冲突交互；核心旧句柄保护、`FILE_VERSION_CONFLICT` 和应用可见提示已有自动化覆盖；
+- 浏览器 UI 发起的大文件交互；64 MiB + 1 字节已通过真实 HTTP 流式上传和读回；
+- 真实网络断开、超时和部分上传故障注入；对象存储失败不发布 Ref 已有自动化覆盖；
 - 保存对话框中的覆盖已有文件交互；
 - 文件 MIME/扩展名筛选。
 
-这些项目不否定首轮记事本闭环，但必须在 V0.1 里程碑完成前继续验收。
+这些项目不影响不可变存储、受控句柄、原子发布、恢复与只读维护闭环，留给后续体验和
+故障工程迭代。
