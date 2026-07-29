@@ -1,5 +1,6 @@
 // @vitest-environment node
 
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
@@ -45,6 +46,23 @@ describe("OpenResourceValidator", () => {
       protocol: "biunivers.open-resource/1",
       handlers: [textHandler],
     });
+  });
+
+  it("accepts the resource application template declaration", async () => {
+    const declaration = JSON.parse(
+      await readFile(
+        resolve(
+          "docs",
+          "developer-kit",
+          "v1",
+          "template",
+          "resource-app",
+          "biunivers.open-resource.json",
+        ),
+        "utf8",
+      ),
+    );
+    expect(validator.validate(declaration).handlers).toHaveLength(1);
   });
 
   it("rejects edit handlers without read-write access", () => {

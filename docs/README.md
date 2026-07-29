@@ -101,7 +101,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
-| [第三方静态应用开发包 v1](developer-kit/v1/README.md) | 草案 | 面向人类和 AI 的快速上手、协议原文、Schema、模板、检查表和故障排查 |
+| [第三方静态应用开发包 v1](developer-kit/v1/README.md) | 当前开发包 | 面向人类和 AI 的快速上手、协议原文、Schema、静态/资源应用模板、检查表和故障排查 |
 | [Biunivers Static App Protocol v1](developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md) | 草案 | 第三方仓库必须保存的协议原文；定义 `index.html`、iframe、公开配置和宿主责任 |
 | [Biunivers App Manifest v1](<protocols/Biunivers App Manifest v1.md>) | 草案 | `biunivers.app.json` 的最小身份、窗口默认值和配置 schema |
 | [Biunivers App Management Protocol v1](<protocols/Biunivers App Management Protocol v1.md>) | 草案 | GitHub 安装、固定 commit、可靠注册、更新、停用、卸载和基本恢复 |

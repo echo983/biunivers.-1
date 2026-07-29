@@ -1,0 +1,12 @@
+{
+  "protocol": "biunivers.open-resource/1",
+  "handlers": [
+    {
+      "id": "text-editor",
+      "actions": ["open", "edit"],
+      "extensions": [".txt"],
+      "mediaTypes": ["text/plain"],
+      "access": "read-write"
+    }
+  ]
+}

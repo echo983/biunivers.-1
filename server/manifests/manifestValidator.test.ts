@@ -10,6 +10,7 @@ import {
 
 let validator: ManifestValidator;
 let manifest: unknown;
+let resourceManifest: unknown;
 
 beforeAll(async () => {
   const kit = resolve("docs", "developer-kit", "v1");
@@ -23,6 +24,12 @@ beforeAll(async () => {
       "utf8",
     ),
   );
+  resourceManifest = JSON.parse(
+    await readFile(
+      resolve(kit, "template", "resource-app", "biunivers.app.json"),
+      "utf8",
+    ),
+  );
 });
 
 describe("ManifestValidator", () => {
@@ -32,6 +39,12 @@ describe("ManifestValidator", () => {
     expect(
       validator.validateConfiguration(validated.configuration, {}),
     ).toEqual({ greeting: "你好，Biunivers" });
+  });
+
+  it("accepts the resource application template", () => {
+    expect(validator.validate(resourceManifest).appId).toBe(
+      "io.github.example.resource-app",
+    );
   });
 
   it("rejects duplicate configuration keys and invalid window constraints", () => {

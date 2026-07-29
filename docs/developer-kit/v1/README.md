@@ -31,9 +31,14 @@
 
 ## 最短路径
 
-### 第一步：复制最小示例
+### 第一步：选择模板
 
-从 [`template/minimal-app`](template/minimal-app/) 复制全部文件到一个新的 GitHub 仓库根目录。
+- 不需要文件能力：复制 [`template/minimal-app`](template/minimal-app/)；
+- 需要选择、打开或保存文件：复制
+  [`template/resource-app`](template/resource-app/)。
+
+把所选目录的全部文件放到一个新的 GitHub 仓库根目录。资源应用模板已经包含 Open Resource
+Handler 声明、Resource Session 客户端、续租和释放示例。
 
 不要删除或改写：
 
@@ -42,6 +47,13 @@ BIUNIVERS_APP_PROTOCOL_V1.md
 ```
 
 它必须与本开发包根目录的协议原文完全一致。
+
+资源应用还不得删除或改写：
+
+```text
+BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md
+BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md
+```
 
 ### 第二步：修改应用身份
 
@@ -266,11 +278,17 @@ biunivers.open-resource.json
 }
 ```
 
-应用启动后请求 `launch.getContext`。普通桌面启动会返回 `NO_LAUNCH_CONTEXT`，应用应继续
-显示空白文档或自己的“打开”按钮。资源启动成功后，应用取得 `handleId`，再使用 Host API
-完成读取、保存和释放。
+新应用启动后先调用 `resource.getCapabilities`，再调用 `resource.claimLaunch`。普通桌面
+启动返回 `NO_LAUNCH_CONTEXT` 时，继续显示欢迎页或自己的“打开”按钮。资源启动成功后，
+应用取得可续租 session，通过返回的内容 URL 完成 GET、Range GET 或 PUT，并约每 60 秒
+调用 `resource.renew`。关闭资源时调用 `resource.release`。
 
-应用不得把 handle 放入 URL、日志或本地持久化，也不能转交给其他应用。
+应用不得把 `sessionId`、实例凭据或内容 URL 放入日志、URL、本地持久化或分析事件，也不能
+转交给其他应用。完整起点见
+[`template/resource-app`](template/resource-app/)。
+
+只有维护必须兼容旧宿主的应用时，才按冻结的 Open Resource 原文使用
+`launch.getContext` 和 Host API handle。不要在同一个资源生命周期中混用两套传输。
 
 应用负责：
 
@@ -291,8 +309,9 @@ Static App Protocol v1 本身不定义：
 - 自动更新；
 - Biunivers 内部 store 或父页面 DOM。
 
-文件打开与保存由独立、可选的 Host API v1 定义；文件处理器声明和窗口启动资源由独立、
-可选的 Open Resource Protocol v1 定义。不要自行设计私有的父页面调用方式。
+文件处理器声明由 Open Resource Protocol v1 定义；新应用的文件选择、读取、续租和保存由
+Resource Session Protocol v1 定义。Host API v1 只作为旧应用兼容底座。不要自行设计私有
+的父页面调用方式。
 
 ## 给 AI 开发代理
 
@@ -305,6 +324,8 @@ Static App Protocol v1 本身不定义：
 AI 不得猜测文件摘要、Host API 或未定义字段，也不得为了“增强兼容性”修改协议原文。
 如果应用接入资源打开能力，还必须完整阅读
 [`BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md)。
+新应用还必须阅读
+[`BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`](BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md)。
 
 ## 遇到问题
 
