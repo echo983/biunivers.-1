@@ -109,6 +109,7 @@ export interface PvlogCore {
   headLineageId(bytes: Uint8Array): Uint8Array;
   headRootEntryId(bytes: Uint8Array): Uint8Array;
   headRevision(bytes: Uint8Array): bigint;
+  headParentFid(bytes: Uint8Array): Uint8Array;
   headLastSegmentFid(bytes: Uint8Array): Uint8Array;
   headCheckpointFid(bytes: Uint8Array): Uint8Array;
   checkpointEntriesPacked(bytes: Uint8Array): Uint8Array;

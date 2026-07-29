@@ -53,3 +53,18 @@ Repository 读取路径重新校验每个对象的 XXH3-128 FID。只有全部�
 
 恢复备份可能回到较早 Head。备份之后上传到 S3、但从未被恢复 Ref 引用的对象是不可达对象；
 V1 只报告，不自动删除。
+
+## 只读 GC 报告
+
+管理员可触发一次完整可达性扫描：
+
+```sh
+curl -X POST \
+  -H 'Authorization: Bearer <admin-token>' \
+  http://localhost:8080/api/v1/admin/file-service/gc-reports
+```
+
+扫描根包括当前 `main` Ref 和其快照。扫描器沿父 Head 历史遍历 Head、Segment、Checkpoint、
+Manifest 与 Chunk，并与对象存储 inventory 比较。响应中的 `candidates` 仅表示本次完整扫描
+不可达；`deletionAllowed` 永远为 `false`。V0.1 没有删除接口，也不要求对象存储凭据拥有
+`DeleteObject` 权限。

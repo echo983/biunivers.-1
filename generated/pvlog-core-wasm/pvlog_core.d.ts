@@ -41,6 +41,8 @@ export function headLastSegmentFid(bytes: Uint8Array): Uint8Array;
 
 export function headLineageId(bytes: Uint8Array): Uint8Array;
 
+export function headParentFid(bytes: Uint8Array): Uint8Array;
+
 export function headRevision(bytes: Uint8Array): bigint;
 
 export function headRootEntryId(bytes: Uint8Array): Uint8Array;

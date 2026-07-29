@@ -5,6 +5,7 @@ import {
   type ImmutableObjectStore,
   type ObjectKey,
   type ObjectKind,
+  type ObjectListItem,
 } from "./objectStore.js";
 
 export const MAX_CHUNK_BYTES = 64 * 1024 * 1024;
@@ -42,6 +43,10 @@ export class ImmutableObjectRepository {
       );
     }
     return bytes;
+  }
+
+  async list(kind?: ObjectKind): Promise<ObjectListItem[]> {
+    return await this.store.list(this.namespace, kind);
   }
 
   async putChunkStream(

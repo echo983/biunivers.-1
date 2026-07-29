@@ -13,6 +13,7 @@ import {
 } from "../files/fileCapabilityRegistry.js";
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
 import type { FileServiceBackupResult } from "../files/fileServiceBackup.js";
+import type { FileServiceGcReport } from "../files/fileServiceGcScanner.js";
 import type { FileHostService } from "../files/fileHostService.js";
 import {
   createFileTransferRouter,
@@ -33,6 +34,9 @@ interface DesktopServerDependencies {
   fileServiceBackup?: {
     createLatest(): Promise<FileServiceBackupResult>;
   };
+  fileServiceGcScanner?: {
+    scan(): Promise<FileServiceGcReport>;
+  };
 }
 
 export function createDesktopServer({
@@ -47,6 +51,7 @@ export function createDesktopServer({
   fileTransfers,
   fileHost,
   fileServiceBackup,
+  fileServiceGcScanner,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -322,6 +327,27 @@ export function createDesktopServer({
           .status(201)
           .set("Cache-Control", "no-store")
           .json(await fileServiceBackup.createLatest());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/admin/file-service/gc-reports",
+    async (_request, response, next) => {
+      try {
+        if (!fileServiceGcScanner) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用文件 GC 报告能力",
+            503,
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(await fileServiceGcScanner.scan());
       } catch (error) {
         next(error);
       }

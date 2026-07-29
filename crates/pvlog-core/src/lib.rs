@@ -1419,6 +1419,16 @@ mod wasm {
             .map_err(|error| JsError::new(&error))
     }
 
+    #[wasm_bindgen(js_name = headParentFid)]
+    pub fn head_parent_fid_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_head(bytes)
+            .map(|head| {
+                head.parent_head
+                    .map_or_else(Vec::new, |fid| fid.0.to_vec())
+            })
+            .map_err(|error| JsError::new(&error))
+    }
+
     #[wasm_bindgen(js_name = headCheckpointFid)]
     pub fn head_checkpoint_fid_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
         decode_head(bytes)

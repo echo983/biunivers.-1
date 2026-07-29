@@ -21,6 +21,7 @@ export const fidhasher_update: (a: number, b: number, c: number) => [number, num
 export const headCheckpointFid: (a: number, b: number) => [number, number, number, number];
 export const headLastSegmentFid: (a: number, b: number) => [number, number, number, number];
 export const headLineageId: (a: number, b: number) => [number, number, number, number];
+export const headParentFid: (a: number, b: number) => [number, number, number, number];
 export const headRevision: (a: number, b: number) => [bigint, number, number];
 export const headRootEntryId: (a: number, b: number) => [number, number, number, number];
 export const manifestChunkFids: (a: number, b: number) => [number, number, number, number];

@@ -473,6 +473,23 @@ exports.headLineageId = headLineageId;
 
 /**
  * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function headParentFid(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.headParentFid(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.headParentFid = headParentFid;
+
+/**
+ * @param {Uint8Array} bytes
  * @returns {bigint}
  */
 function headRevision(bytes) {
