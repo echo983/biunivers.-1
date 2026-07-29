@@ -28,6 +28,17 @@ const installed: InstalledAppRecord = {
     },
     configuration: [],
   },
+  openResource: {
+    protocol: "biunivers.open-resource/1",
+    handlers: [
+      {
+        id: "text-editor",
+        actions: ["open", "edit"],
+        extensions: [".txt"],
+        access: "read-write",
+      },
+    ],
+  },
   configuration: {},
   status: "active",
   installedAt: "2026-07-28T00:00:00.000Z",
@@ -52,6 +63,14 @@ describe("projectInstalledApp", () => {
       desktop: true,
       pinned: false,
       trusted: true,
+      resourceHandlers: [
+        {
+          id: "text-editor",
+          actions: ["open", "edit"],
+          extensions: [".txt"],
+          access: "read-write",
+        },
+      ],
     });
   });
 });

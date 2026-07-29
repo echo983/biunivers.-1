@@ -98,6 +98,7 @@ export class AppService {
         version: inspection.manifest.version,
         protocol: inspection.manifest.protocol,
         manifest: inspection.manifest,
+        openResource: inspection.openResource,
         configuration: finalConfiguration,
         status: "active",
         installedAt: now,
@@ -183,6 +184,7 @@ export class AppService {
         version: inspection.manifest.version,
         protocol: inspection.manifest.protocol,
         manifest: inspection.manifest,
+        openResource: inspection.openResource,
         configuration: finalConfiguration,
         updatedAt: new Date().toISOString(),
       };

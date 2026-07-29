@@ -65,4 +65,26 @@ describe("validateAppConfig", () => {
     expect(result.warnings).toHaveLength(2);
     expect(result.warnings[1]).toContain("internal 仅允许编译期注册");
   });
+
+  it("accepts resource handlers only from the managed source", () => {
+    const resourceHandlers = [
+      {
+        id: "text-editor",
+        actions: ["open", "edit"],
+        extensions: [".txt"],
+        access: "read-write",
+      },
+    ];
+
+    expect(
+      validateAppConfig([{ ...validIframe, resourceHandlers }]).apps[0]
+        .resourceHandlers,
+    ).toBeUndefined();
+    expect(
+      validateAppConfig(
+        [{ ...validIframe, resourceHandlers }],
+        { allowResourceHandlers: true },
+      ).apps[0].resourceHandlers,
+    ).toEqual(resourceHandlers);
+  });
 });

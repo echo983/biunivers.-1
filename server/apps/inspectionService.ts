@@ -18,6 +18,11 @@ import {
   type ManifestValidator,
 } from "../manifests/manifestValidator.js";
 import type { AppManifest } from "../manifests/types.js";
+import {
+  OpenResourceValidationError,
+  type OpenResourceValidator,
+} from "../openResource/openResourceValidator.js";
+import type { OpenResourceDeclaration } from "../openResource/types.js";
 
 export interface Inspection {
   inspectionId: string;
@@ -27,6 +32,7 @@ export interface Inspection {
   owner: string;
   rootDir: string;
   manifest: AppManifest;
+  openResource?: OpenResourceDeclaration;
   operation: "install" | "update";
   expiresAt: string;
 }
@@ -34,6 +40,7 @@ export interface Inspection {
 interface InspectionServiceOptions {
   source: RepositorySource;
   validator: ManifestValidator;
+  openResourceValidator: OpenResourceValidator;
   appStore: AppStore;
   dataDir: string;
   maxAppBytes: number;
@@ -118,6 +125,31 @@ async function requireRegularFile(rootDir: string, relativePath: string) {
   return path;
 }
 
+async function optionalRegularFile(rootDir: string, relativePath: string) {
+  const path = join(rootDir, relativePath);
+  ensureChildPath(rootDir, path);
+  try {
+    const stats = await lstat(path);
+    if (!stats.isFile() || stats.isSymbolicLink()) {
+      throw new AppError(
+        "REQUIRED_FILE_INVALID",
+        `${relativePath} 必须是普通文件`,
+      );
+    }
+    return path;
+  } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
 export class InspectionService {
   private readonly inspections = new Map<string, Inspection>();
   private readonly ttlMs: number;
@@ -189,6 +221,60 @@ export class InspectionService {
         );
       }
 
+      const openResourceProtocolPath = await optionalRegularFile(
+        prepared.rootDir,
+        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+      );
+      const openResourceDeclarationPath = await optionalRegularFile(
+        prepared.rootDir,
+        "biunivers.open-resource.json",
+      );
+      if (Boolean(openResourceProtocolPath) !== Boolean(openResourceDeclarationPath)) {
+        throw new AppError(
+          "OPEN_RESOURCE_FILES_INCOMPLETE",
+          "Open Resource 协议原文和声明文件必须同时存在",
+        );
+      }
+      let openResource: OpenResourceDeclaration | undefined;
+      if (openResourceProtocolPath && openResourceDeclarationPath) {
+        const extensionProtocolBytes = await readFile(openResourceProtocolPath);
+        if (
+          !extensionProtocolBytes.equals(
+            this.options.openResourceValidator.protocolBytes,
+          )
+        ) {
+          throw new AppError(
+            "OPEN_RESOURCE_PROTOCOL_MISMATCH",
+            "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md 不是宿主支持的协议原文",
+          );
+        }
+        let declarationValue: unknown;
+        try {
+          declarationValue = JSON.parse(
+            await readFile(openResourceDeclarationPath, "utf8"),
+          );
+        } catch {
+          throw new AppError(
+            "OPEN_RESOURCE_INVALID",
+            "biunivers.open-resource.json 不是合法 JSON",
+          );
+        }
+        try {
+          openResource =
+            this.options.openResourceValidator.validate(declarationValue);
+        } catch (error) {
+          if (error instanceof OpenResourceValidationError) {
+            throw new AppError(
+              "OPEN_RESOURCE_INVALID",
+              error.message,
+              400,
+              error.issues,
+            );
+          }
+          throw error;
+        }
+      }
+
       await requireRegularFile(prepared.rootDir, "index.html");
       await requireRegularFile(prepared.rootDir, "LICENSE");
       await requireRegularFile(prepared.rootDir, manifest.icon);
@@ -218,6 +304,7 @@ export class InspectionService {
         owner: prepared.owner,
         rootDir: prepared.rootDir,
         manifest,
+        openResource,
         operation: existing ? "update" : "install",
         expiresAt,
       };
@@ -289,6 +376,7 @@ export class InspectionService {
       operation: inspection.operation,
       expiresAt: inspection.expiresAt,
       manifest: inspection.manifest,
+      openResource: inspection.openResource,
     };
   }
 }

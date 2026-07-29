@@ -33,6 +33,17 @@ const inspection = {
       },
     ],
   },
+  openResource: {
+    protocol: "biunivers.open-resource/1",
+    handlers: [
+      {
+        id: "text-editor",
+        actions: ["open", "edit"],
+        extensions: [".txt"],
+        access: "read-write",
+      },
+    ],
+  },
 };
 
 const installed = {
@@ -128,6 +139,10 @@ describe("AppManagement", () => {
       "v1.0.0",
     );
     await user.click(screen.getByRole("button", { name: "检查仓库" }));
+    expect(
+      await screen.findByRole("heading", { name: "文件处理能力" }),
+    ).toBeVisible();
+    expect(screen.getByText(".txt")).toBeVisible();
 
     expect(
       await screen.findByRole("heading", { name: "确认安装" }),

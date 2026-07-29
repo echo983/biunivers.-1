@@ -20,6 +20,10 @@ COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \
   ./docs/developer-kit/v1/biunivers.app.schema.json
 COPY --from=build /app/docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md \
   ./docs/developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md
+COPY --from=build /app/docs/developer-kit/v1/biunivers.open-resource.schema.json \
+  ./docs/developer-kit/v1/biunivers.open-resource.schema.json
+COPY --from=build /app/docs/developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md \
+  ./docs/developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md
 
 RUN mkdir -p /data && chown node:node /data
 

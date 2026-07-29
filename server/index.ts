@@ -16,6 +16,7 @@ import { FileHostService } from "./files/fileHostService.js";
 import { FileServiceBackup } from "./files/fileServiceBackup.js";
 import { FileServiceGcScanner } from "./files/fileServiceGcScanner.js";
 import { InternalFileManagerService } from "./files/internalFileManagerService.js";
+import { OpenResourceValidator } from "./openResource/openResourceValidator.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -35,6 +36,20 @@ async function main() {
       "BIUNIVERS_APP_PROTOCOL_V1.md",
     ),
   );
+  const openResourceValidator = await OpenResourceValidator.create(
+    resolve(
+      "docs",
+      "developer-kit",
+      "v1",
+      "biunivers.open-resource.schema.json",
+    ),
+    resolve(
+      "docs",
+      "developer-kit",
+      "v1",
+      "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+    ),
+  );
   const source = new GitHubSource({
     token: config.githubToken,
     maxArchiveBytes: config.maxAppBytes,
@@ -44,6 +59,7 @@ async function main() {
   const inspections = new InspectionService({
     source,
     validator,
+    openResourceValidator,
     appStore,
     dataDir: config.dataDir,
     maxAppBytes: config.maxAppBytes,

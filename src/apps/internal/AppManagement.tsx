@@ -437,6 +437,25 @@ export function AppManagement() {
           {inspection.manifest.description && (
             <p>{inspection.manifest.description}</p>
           )}
+          {inspection.openResource && (
+            <section aria-labelledby="open-resource-handlers-title">
+              <h4 id="open-resource-handlers-title">文件处理能力</h4>
+              <ul>
+                {inspection.openResource.handlers.map((handler) => (
+                  <li key={handler.id}>
+                    <strong>{handler.extensions.join("、")}</strong>
+                    {" · "}
+                    {handler.actions.join(" / ")}
+                    {" · "}
+                    {handler.access === "read-write" ? "最大读写" : "只读"}
+                  </li>
+                ))}
+              </ul>
+              <p className="app-management__notice">
+                该声明只登记候选处理器，不会自动授予文件权限或设为默认应用。
+              </p>
+            </section>
+          )}
           {inspection.manifest.configuration.map((definition) => (
             <ConfigurationField
               key={definition.key}

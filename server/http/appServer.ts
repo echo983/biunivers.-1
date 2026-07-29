@@ -14,6 +14,8 @@ const COMMIT_PATTERN = /^[0-9a-f]{7,64}$/;
 const BLOCKED_FILES = new Set([
   "biunivers.app.json",
   "BIUNIVERS_APP_PROTOCOL_V1.md",
+  "biunivers.open-resource.json",
+  "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
 ]);
 
 export function createAppServer(dependencies?: AppServerDependencies) {

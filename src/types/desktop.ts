@@ -15,6 +15,13 @@ export interface AppDefinition {
   desktop: boolean;
   pinned: boolean;
   trusted?: boolean;
+  resourceHandlers?: Array<{
+    id: string;
+    actions: Array<"open" | "edit">;
+    extensions: string[];
+    mediaTypes?: string[];
+    access: "read" | "read-write";
+  }>;
 }
 
 export interface WindowState {

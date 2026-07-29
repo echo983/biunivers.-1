@@ -62,7 +62,9 @@ export async function loadManagedAppConfig(): Promise<AppSourceLoadResult> {
       throw new Error("响应缺少 apps 数组");
     }
 
-    const validation = validateAppConfig(value.apps);
+    const validation = validateAppConfig(value.apps, {
+      allowResourceHandlers: true,
+    });
     if (validation.fatalError) {
       throw new Error(validation.fatalError);
     }

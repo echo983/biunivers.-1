@@ -59,6 +59,16 @@ export interface InspectionResult {
     };
     configuration: ConfigurationDefinition[];
   };
+  openResource?: {
+    protocol: "biunivers.open-resource/1";
+    handlers: Array<{
+      id: string;
+      actions: Array<"open" | "edit">;
+      extensions: string[];
+      mediaTypes?: string[];
+      access: "read" | "read-write";
+    }>;
+  };
 }
 
 export interface InstalledApp {

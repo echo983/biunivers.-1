@@ -1,6 +1,7 @@
 import { access, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { AppManifest } from "../manifests/types.js";
+import type { OpenResourceDeclaration } from "../openResource/types.js";
 import { readJsonFile, writeJsonFileAtomic } from "../storage/atomicJson.js";
 
 export interface InstalledAppRecord {
@@ -11,6 +12,7 @@ export interface InstalledAppRecord {
   version: string;
   protocol: "biunivers.static-app/1";
   manifest: AppManifest;
+  openResource?: OpenResourceDeclaration;
   configuration: Record<string, string | number | boolean>;
   status: "active" | "disabled";
   installedAt: string;

@@ -36,9 +36,51 @@ function isSupportedUrl(value: string) {
   }
 }
 
+function parseResourceHandlers(value: unknown) {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const handlers: NonNullable<AppDefinition["resourceHandlers"]> = [];
+  for (const handler of value) {
+    if (
+      !isRecord(handler) ||
+      !isNonEmptyString(handler.id) ||
+      !Array.isArray(handler.actions) ||
+      !handler.actions.every(
+        (action) => action === "open" || action === "edit",
+      ) ||
+      !Array.isArray(handler.extensions) ||
+      !handler.extensions.every(
+        (extension) =>
+          typeof extension === "string" &&
+          /^\.[a-z0-9]+$/.test(extension),
+      ) ||
+      (handler.access !== "read" && handler.access !== "read-write") ||
+      (handler.mediaTypes !== undefined &&
+        (!Array.isArray(handler.mediaTypes) ||
+          !handler.mediaTypes.every(
+            (mediaType) => typeof mediaType === "string",
+          )))
+    ) {
+      return undefined;
+    }
+    handlers.push({
+      id: handler.id,
+      actions: handler.actions,
+      extensions: handler.extensions,
+      ...(handler.mediaTypes
+        ? { mediaTypes: handler.mediaTypes as string[] }
+        : {}),
+      access: handler.access,
+    });
+  }
+  return handlers;
+}
+
 export function validateAppConfigEntry(
   value: unknown,
   index: number,
+  options: { allowResourceHandlers?: boolean } = {},
 ): AppValidationResult {
   if (!isRecord(value)) {
     return { ok: false, index, issues: ["必须是对象"] };
@@ -133,11 +175,21 @@ export function validateAppConfigEntry(
       desktop: desktop as boolean,
       pinned: pinned as boolean,
       trusted: value.trusted === true ? true : undefined,
+      ...(options.allowResourceHandlers
+        ? {
+            resourceHandlers: parseResourceHandlers(
+              value.resourceHandlers,
+            ),
+          }
+        : {}),
     },
   };
 }
 
-export function validateAppConfig(value: unknown) {
+export function validateAppConfig(
+  value: unknown,
+  options: { allowResourceHandlers?: boolean } = {},
+) {
   if (!Array.isArray(value)) {
     return {
       fatalError: "apps.json 顶层必须是数组",
@@ -151,7 +203,7 @@ export function validateAppConfig(value: unknown) {
   const seenIds = new Set<string>();
 
   value.forEach((entry, index) => {
-    const result = validateAppConfigEntry(entry, index);
+    const result = validateAppConfigEntry(entry, index, options);
     if (!result.ok) {
       warnings.push(`第 ${index + 1} 项：${result.issues.join("；")}`);
       return;

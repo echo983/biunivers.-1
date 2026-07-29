@@ -28,6 +28,8 @@ import { appSpecificOrigin } from "./appOrigin.js";
 import { AppStore } from "./appStore.js";
 import { InspectionService } from "./inspectionService.js";
 import { OperationLock } from "./operationLock.js";
+import { OpenResourceValidator } from "../openResource/openResourceValidator.js";
+import { projectInstalledApp } from "./projection.js";
 
 const templateDir = resolve(
   "docs",
@@ -47,6 +49,18 @@ const schemaPath = resolve(
   "developer-kit",
   "v1",
   "biunivers.app.schema.json",
+);
+const openResourceProtocolPath = resolve(
+  "docs",
+  "developer-kit",
+  "v1",
+  "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+);
+const openResourceSchemaPath = resolve(
+  "docs",
+  "developer-kit",
+  "v1",
+  "biunivers.open-resource.schema.json",
 );
 
 function fetchApp(
@@ -85,6 +99,7 @@ function fetchApp(
 const commitSha = "0123456789abcdef0123456789abcdef01234567";
 
 let validator: ManifestValidator;
+let openResourceValidator: OpenResourceValidator;
 const temporaryDirectories: string[] = [];
 const servers: Server[] = [];
 
@@ -131,6 +146,7 @@ async function createServices(source: RepositorySource = new FixtureSource()) {
   const inspections = new InspectionService({
     source,
     validator,
+    openResourceValidator,
     appStore,
     dataDir,
     maxAppBytes: 10 * 1024 * 1024,
@@ -163,6 +179,10 @@ async function listen(server: Server) {
 
 beforeAll(async () => {
   validator = await ManifestValidator.create(schemaPath, protocolPath);
+  openResourceValidator = await OpenResourceValidator.create(
+    openResourceSchemaPath,
+    openResourceProtocolPath,
+  );
 });
 
 afterEach(async () => {
@@ -241,6 +261,15 @@ describe("inspect and install flow", () => {
         )
       ).status,
     ).toBe(404);
+    expect(
+      (
+        await fetchApp(
+          origin,
+          installed.appId,
+          `${base}/biunivers.open-resource.json`,
+        )
+      ).status,
+    ).toBe(404);
     const appResponse = await fetchApp(
       origin,
       installed.appId,
@@ -290,6 +319,97 @@ describe("inspect and install flow", () => {
     ).rejects.toMatchObject({ code: "PROTOCOL_MISMATCH" });
     await expect(services.appStore.read()).resolves.toMatchObject({
       apps: [],
+    });
+  });
+
+  it("validates, installs and projects an optional resource handler", async () => {
+    const services = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await cp(
+          openResourceProtocolPath,
+          join(rootDir, "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md"),
+        );
+        await writeFile(
+          join(rootDir, "biunivers.open-resource.json"),
+          JSON.stringify({
+            protocol: "biunivers.open-resource/1",
+            handlers: [
+              {
+                id: "text-editor",
+                actions: ["open", "edit"],
+                extensions: [".txt"],
+                mediaTypes: ["text/plain"],
+                access: "read-write",
+              },
+            ],
+          }),
+        );
+      }),
+    );
+
+    const inspection = await services.inspections.create(
+      "https://github.com/example/hello",
+      "v1.0.0",
+    );
+    expect(inspection.openResource).toMatchObject({
+      protocol: "biunivers.open-resource/1",
+      handlers: [{ id: "text-editor", extensions: [".txt"] }],
+    });
+
+    const installed = await services.appService.install(
+      inspection.inspectionId,
+      { greeting: "handler install" },
+    );
+    expect(installed.openResource).toEqual(inspection.openResource);
+    expect(
+      projectInstalledApp(installed, "http://localhost:8081"),
+    ).toMatchObject({
+      resourceHandlers: [
+        {
+          id: "text-editor",
+          actions: ["open", "edit"],
+          extensions: [".txt"],
+          access: "read-write",
+        },
+      ],
+    });
+  });
+
+  it("rejects incomplete or changed Open Resource extension files", async () => {
+    const incomplete = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "biunivers.open-resource.json"),
+          "{}",
+        );
+      }),
+    );
+    await expect(
+      incomplete.inspections.create(
+        "https://github.com/example/hello",
+        "v1.0.0",
+      ),
+    ).rejects.toMatchObject({ code: "OPEN_RESOURCE_FILES_INCOMPLETE" });
+
+    const changed = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md"),
+          "modified",
+        );
+        await writeFile(
+          join(rootDir, "biunivers.open-resource.json"),
+          "{}",
+        );
+      }),
+    );
+    await expect(
+      changed.inspections.create(
+        "https://github.com/example/hello",
+        "v1.0.0",
+      ),
+    ).rejects.toMatchObject({
+      code: "OPEN_RESOURCE_PROTOCOL_MISMATCH",
     });
   });
 

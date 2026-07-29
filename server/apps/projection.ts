@@ -29,5 +29,8 @@ export function projectInstalledApp(
     desktop: manifest.window.desktop ?? true,
     pinned: manifest.window.pinned ?? false,
     trusted: true as const,
+    ...(installed.openResource
+      ? { resourceHandlers: installed.openResource.handlers }
+      : {}),
   };
 }
