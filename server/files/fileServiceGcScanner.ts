@@ -4,6 +4,8 @@ import { OBJECT_KINDS, type ObjectKind } from "./objectStore.js";
 import { loadPvlogCore, type PvlogCore } from "./pvlogCore.js";
 import type { SqliteRefStore } from "./sqliteRefStore.js";
 
+const MAX_CANDIDATE_FIDS_PER_KIND = 1_000;
+
 export interface GcObjectSummary {
   count: number;
   bytes: number;
@@ -16,6 +18,7 @@ export interface FileServiceGcReport {
   reachable: Record<ObjectKind, GcObjectSummary>;
   candidates: Record<ObjectKind, GcObjectSummary>;
   candidateFids: Partial<Record<ObjectKind, string[]>>;
+  candidateFidsTruncated: boolean;
 }
 
 interface GcScannerOptions {
@@ -30,6 +33,7 @@ export class FileServiceGcScanner {
   readonly #refStore: SqliteRefStore;
   readonly #now: () => Date;
   readonly #core: PvlogCore;
+  #inFlight?: Promise<FileServiceGcReport>;
 
   constructor(options: GcScannerOptions) {
     this.#repository = options.repository;
@@ -38,13 +42,18 @@ export class FileServiceGcScanner {
     this.#core = options.core ?? loadPvlogCore();
   }
 
-  async scan(): Promise<FileServiceGcReport> {
+  scan(): Promise<FileServiceGcReport> {
+    if (!this.#inFlight) {
+      this.#inFlight = this.#scan().finally(() => {
+        this.#inFlight = undefined;
+      });
+    }
+    return this.#inFlight;
+  }
+
+  async #scan(): Promise<FileServiceGcReport> {
     const reachable = createFidSets();
-    const current = this.#refStore.getRef("main");
-    const roots = new Set([
-      current.headFidHex,
-      ...this.#refStore.listSnapshots("main").map((snapshot) => snapshot.headFidHex),
-    ]);
+    const roots = new Set(this.#refStore.listProtectedHeadFids("main"));
     for (const headFid of roots) {
       await this.#markHeadHistory(headFid, reachable);
     }
@@ -53,6 +62,7 @@ export class FileServiceGcScanner {
     const reachableSummary = createSummary();
     const candidateSummary = createSummary();
     const candidateFids: Partial<Record<ObjectKind, string[]>> = {};
+    let candidateFidsTruncated = false;
     for (const item of inventory) {
       const target = reachable[item.kind].has(item.fidHex)
         ? reachableSummary
@@ -60,7 +70,12 @@ export class FileServiceGcScanner {
       target[item.kind].count += 1;
       target[item.kind].bytes += item.size;
       if (!reachable[item.kind].has(item.fidHex)) {
-        (candidateFids[item.kind] ??= []).push(item.fidHex);
+        const details = (candidateFids[item.kind] ??= []);
+        if (details.length < MAX_CANDIDATE_FIDS_PER_KIND) {
+          details.push(item.fidHex);
+        } else {
+          candidateFidsTruncated = true;
+        }
       }
     }
     return {
@@ -70,6 +85,7 @@ export class FileServiceGcScanner {
       reachable: reachableSummary,
       candidates: candidateSummary,
       candidateFids,
+      candidateFidsTruncated,
     };
   }
 

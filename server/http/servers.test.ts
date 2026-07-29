@@ -126,6 +126,20 @@ describe("desktop and app origins", () => {
     await expect(unavailableBackup.json()).resolves.toMatchObject({
       error: { code: "HOST_API_UNSUPPORTED" },
     });
+
+    const unavailableGc = await fetch(
+      `${origin}/api/v1/admin/file-service/gc-reports`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${dependencies.config.adminToken}`,
+        },
+      },
+    );
+    expect(unavailableGc.status).toBe(503);
+    await expect(unavailableGc.json()).resolves.toMatchObject({
+      error: { code: "HOST_API_UNSUPPORTED" },
+    });
   });
 
   it("creates a controlled File Service backup through the admin endpoint", async () => {

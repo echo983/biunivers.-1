@@ -164,6 +164,10 @@ describe("SqliteRefStore", () => {
     });
 
     expect(store.listSnapshots("main")).toEqual([snapshot]);
+    expect(store.listProtectedHeadFids("main")).toEqual([
+      initial.headFidHex,
+      snapshot.headFidHex,
+    ]);
     expect(() =>
       store.createSnapshot({
         ...snapshot,

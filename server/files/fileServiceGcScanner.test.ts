@@ -64,6 +64,7 @@ describe("FileServiceGcScanner", () => {
       candidateFids: {
         chunks: [orphan.key.fidHex],
       },
+      candidateFidsTruncated: false,
     });
     await expect(repository.get("chunks", orphan.key.fidHex)).resolves.toEqual(
       Buffer.from("orphan"),

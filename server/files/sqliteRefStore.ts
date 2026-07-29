@@ -326,6 +326,17 @@ export class SqliteRefStore {
     }));
   }
 
+  listProtectedHeadFids(refId: string): string[] {
+    validateRefId(refId);
+    return this.#database.transaction(() => {
+      const current = this.getRef(refId);
+      return [
+        current.headFidHex,
+        ...this.listSnapshots(refId).map((snapshot) => snapshot.headFidHex),
+      ];
+    })();
+  }
+
   async backupTo(destinationPath: string): Promise<void> {
     await mkdir(dirname(destinationPath), { recursive: true });
     const temporaryPath = join(

@@ -66,5 +66,6 @@ curl -X POST \
 
 扫描根包括当前 `main` Ref 和其快照。扫描器沿父 Head 历史遍历 Head、Segment、Checkpoint、
 Manifest 与 Chunk，并与对象存储 inventory 比较。响应中的 `candidates` 仅表示本次完整扫描
-不可达；`deletionAllowed` 永远为 `false`。V0.1 没有删除接口，也不要求对象存储凭据拥有
-`DeleteObject` 权限。
+不可达；根集合在同一个 SQLite 读事务中取得。候选总数和字节数始终完整，FID 明细每类最多
+返回 1,000 条，超出时 `candidateFidsTruncated` 为 `true`。`deletionAllowed` 永远为
+`false`。V0.1 没有删除接口，也不要求对象存储凭据拥有 `DeleteObject` 权限。
