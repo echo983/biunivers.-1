@@ -9,6 +9,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileManagerBrowser } from "./FileManagerBrowser";
 import { useDesktopStore } from "../../store/desktopStore";
+import {
+  queueDirectoryLaunch,
+  resetDirectoryLaunchBrokerForTests,
+} from "../../desktopSurface/directoryLaunchBroker";
 
 const transferMocks = vi.hoisted(() => ({
   uploadLocalFile: vi.fn(async () => {}),
@@ -31,9 +35,45 @@ afterEach(() => {
   useDesktopStore.setState({
     defaultResourceHandlers: {},
   });
+  resetDirectoryLaunchBrokerForTests();
 });
 
 describe("FileManagerBrowser", () => {
+  it("shows the launched desktop directory in breadcrumbs", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          revision: 3,
+          rootEntryId: rootId,
+          parent: {
+            entryId: directoryId,
+            name: "Documents",
+            kind: "directory",
+            mtimeMs: 0,
+          },
+          entries: [],
+        }),
+      ),
+    );
+    queueDirectoryLaunch(directoryId, "Documents");
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+
+    const breadcrumbs = await screen.findByRole("navigation", {
+      name: "当前位置",
+    });
+    expect(
+      within(breadcrumbs).getByRole("button", { name: "Documents" }),
+    ).toBeVisible();
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/v1/host/files?parent=${directoryId}`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+  });
+
   it("creates an empty file and copies a file only once per submit", async () => {
     const user = userEvent.setup();
     const fileId = "4".repeat(32);

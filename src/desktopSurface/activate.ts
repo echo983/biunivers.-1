@@ -23,7 +23,7 @@ export async function activateDesktopItem(item: DesktopItem) {
     return;
   }
   if (item.target.type === "directory") {
-    queueDirectoryLaunch(item.target.handle);
+    queueDirectoryLaunch(item.target.handle, item.resolved.name);
     openApp("system.files");
     return;
   }

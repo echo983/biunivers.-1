@@ -110,14 +110,16 @@ export function FileManagerBrowser({
 
   useEffect(() => {
     const navigatePending = () => {
-      const entryId = consumeDirectoryLaunch();
-      if (!entryId) return;
+      const launch = consumeDirectoryLaunch();
+      if (!launch) return;
       directoryNavigationPendingRef.current = true;
       setError(undefined);
       setLoading(true);
       setListing(undefined);
-      setBreadcrumbs([]);
-      setDirectoryId(entryId);
+      setBreadcrumbs([
+        { entryId: launch.entryId, name: launch.name },
+      ]);
+      setDirectoryId(launch.entryId);
     };
     navigatePending();
     return subscribeDirectoryLaunch(navigatePending);
@@ -130,6 +132,26 @@ export function FileManagerBrowser({
         if (!active) return;
         setListing(value);
         setSelected(undefined);
+        if (directoryId) {
+          setBreadcrumbs((current) =>
+            current.length === 0
+              ? [
+                  {
+                    entryId: directoryId,
+                    name: value.parent.name,
+                  },
+                ]
+              : current.map((breadcrumb, index) =>
+                  index === current.length - 1 &&
+                  breadcrumb.entryId === value.parent.entryId
+                    ? {
+                        ...breadcrumb,
+                        name: value.parent.name,
+                      }
+                    : breadcrumb,
+                ),
+          );
+        }
       })
       .catch((reason: unknown) => {
         if (!active) return;
