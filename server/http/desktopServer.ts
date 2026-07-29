@@ -23,6 +23,8 @@ import {
   createFileTransferRouter,
   type FileTransferExecutor,
 } from "./fileTransferRouter.js";
+import type { DesktopSurfaceService } from "../desktopSurface/desktopSurfaceService.js";
+import { DesktopSurfaceError } from "../desktopSurface/desktopSurfaceStore.js";
 
 type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
@@ -59,6 +61,7 @@ interface DesktopServerDependencies {
   internalFileManager?: InternalFileManagerExecutor;
   openResourceResolver?: OpenResourceResolverExecutor;
   openResourceLaunchService?: OpenResourceLaunchExecutor;
+  desktopSurface?: DesktopSurfaceService;
 }
 
 export function createDesktopServer({
@@ -78,6 +81,7 @@ export function createDesktopServer({
   internalFileManager,
   openResourceResolver,
   openResourceLaunchService,
+  desktopSurface,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -101,6 +105,156 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  app.get("/api/v1/desktop-surface", async (request, response, next) => {
+    try {
+      requireDesktopOrigin(request, config.desktopOrigin);
+      if (!desktopSurface) {
+        throw new AppError(
+          "DESKTOP_SURFACE_UNSUPPORTED",
+          "当前宿主尚未启用桌面项目管理",
+          503,
+        );
+      }
+      response
+        .set("Cache-Control", "no-store")
+        .json(desktopSurface.read());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post(
+    "/api/v1/desktop-surface/resolve",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!desktopSurface) {
+          throw new AppError(
+            "DESKTOP_SURFACE_UNSUPPORTED",
+            "当前宿主尚未启用桌面项目管理",
+            503,
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(await desktopSurface.resolve());
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/desktop-surface/items",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!desktopSurface) {
+          throw new AppError(
+            "DESKTOP_SURFACE_UNSUPPORTED",
+            "当前宿主尚未启用桌面项目管理",
+            503,
+          );
+        }
+        const { target, position, expectedRevision } =
+          request.body as Record<string, unknown>;
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await desktopSurface.add(
+              target as never,
+              position as never,
+              expectedRevision as number,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.patch(
+    "/api/v1/desktop-surface/layout",
+    (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!desktopSurface) {
+          throw new AppError(
+            "DESKTOP_SURFACE_UNSUPPORTED",
+            "当前宿主尚未启用桌面项目管理",
+            503,
+          );
+        }
+        const { moves, expectedRevision } =
+          request.body as Record<string, unknown>;
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            desktopSurface.move(
+              moves as never,
+              expectedRevision as number,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.delete(
+    "/api/v1/desktop-surface/items",
+    (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!desktopSurface) {
+          throw new AppError(
+            "DESKTOP_SURFACE_UNSUPPORTED",
+            "当前宿主尚未启用桌面项目管理",
+            503,
+          );
+        }
+        const { itemIds, expectedRevision } =
+          request.body as Record<string, unknown>;
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            desktopSurface.remove(
+              itemIds as never,
+              expectedRevision as number,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/desktop-surface/reset",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!desktopSurface) {
+          throw new AppError(
+            "DESKTOP_SURFACE_UNSUPPORTED",
+            "当前宿主尚未启用桌面项目管理",
+            503,
+          );
+        }
+        const { expectedRevision } =
+          request.body as Record<string, unknown>;
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await desktopSurface.reset(expectedRevision as number),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.post("/api/v1/host/instances", async (request, response, next) => {
     try {
@@ -862,6 +1016,21 @@ export function createDesktopServer({
           RESOURCE_OPEN_BUSY: 409,
           HANDLER_NOT_AVAILABLE: 409,
           CAPABILITY_LIMIT_REACHED: 429,
+        }[error.code];
+        response.status(status).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+        return;
+      }
+      if (error instanceof DesktopSurfaceError) {
+        const status = {
+          DESKTOP_SURFACE_INVALID: 400,
+          DESKTOP_SURFACE_CONFLICT: 409,
+          DESKTOP_ITEM_NOT_FOUND: 404,
+          DESKTOP_TARGET_EXISTS: 409,
         }[error.code];
         response.status(status).json({
           error: {

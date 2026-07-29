@@ -21,6 +21,8 @@ import { OpenResourceResolver } from "./openResource/openResourceResolver.js";
 import { OpenResourceLaunchRegistry } from "./openResource/openResourceLaunchRegistry.js";
 import { OpenResourceLaunchService } from "./openResource/openResourceLaunchService.js";
 import { loadCurrentEntryIndex } from "./files/entryIndex.js";
+import { DesktopSurfaceStore } from "./desktopSurface/desktopSurfaceStore.js";
+import { DesktopSurfaceService } from "./desktopSurface/desktopSurfaceService.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -163,6 +165,44 @@ async function main() {
             ),
         })
       : undefined;
+  const desktopSurfaceStore = await DesktopSurfaceStore.open(
+    resolve(config.dataDir, "desktop-surface.sqlite"),
+  );
+  const desktopSurface = new DesktopSurfaceService({
+    store: desktopSurfaceStore,
+    appStore,
+    appOrigin: config.appOrigin,
+    internalApps: [
+      {
+        id: "system.files",
+        name: "文件",
+        icon: "/icons/files.svg",
+        desktop: true,
+      },
+      {
+        id: "system.settings",
+        name: "设置",
+        icon: "/icons/settings.svg",
+        desktop: false,
+      },
+      {
+        id: "system.about",
+        name: "关于",
+        icon: "/icons/about.svg",
+        desktop: true,
+      },
+    ],
+    ...(fileService.repository && fileService.refStore
+      ? {
+          loadEntryIndex: () =>
+            loadCurrentEntryIndex(
+              fileService.repository!,
+              fileService.refStore!,
+            ),
+        }
+      : {}),
+  });
+  await desktopSurface.initialize();
   if (fileService.status.mode === "ready") {
     console.log(
       `Biunivers File Service ready at revision ${fileService.status.revision}`,
@@ -191,6 +231,7 @@ async function main() {
     internalFileManager,
     openResourceResolver,
     openResourceLaunchService,
+    desktopSurface,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
@@ -208,6 +249,7 @@ async function main() {
   });
 
   const shutdown = () => {
+    desktopSurfaceStore.close();
     fileService.close();
     desktopServer.close();
     appServer.close();
