@@ -501,7 +501,7 @@ export function FileManagerBrowser({
           </button>
           {breadcrumbs.map((breadcrumb, index) => (
             <span key={breadcrumb.entryId}>
-              <span aria-hidden="true">/</span>
+              <span aria-hidden="true">›</span>
               <button type="button" onClick={() => navigateTo(index)}>
                 {breadcrumb.name}
               </button>
