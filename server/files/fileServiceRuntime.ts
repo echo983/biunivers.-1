@@ -46,6 +46,35 @@ export class FileServiceRuntime {
     this.refStore?.close();
     this.objectStoreHandle?.close();
   }
+
+  async currentStatus(): Promise<FileServiceStatus> {
+    if (
+      this.status.mode !== "ready" ||
+      !this.repository ||
+      !this.refStore
+    ) {
+      return this.status;
+    }
+    try {
+      const index = await loadCurrentEntryIndex(
+        this.repository,
+        this.refStore,
+      );
+      return {
+        mode: "ready",
+        writable: true,
+        revision: index.revision,
+        rootEntryIdHex: index.rootEntryIdHex,
+      };
+    } catch (error) {
+      return {
+        mode: "offline",
+        writable: false,
+        code: errorCode(error),
+        message: safeMessage(error),
+      };
+    }
+  }
 }
 
 export async function startFileService(

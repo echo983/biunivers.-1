@@ -25,6 +25,7 @@ interface DesktopServerDependencies {
   inspections?: InspectionService;
   appService?: AppService;
   fileServiceStatus?: FileServiceStatus;
+  getFileServiceStatus?: () => Promise<FileServiceStatus>;
   fileCapabilities?: FileCapabilityRegistry;
   fileTransfers?: FileTransferExecutor;
   fileHost?: FileHostService;
@@ -37,6 +38,7 @@ export function createDesktopServer({
   inspections,
   appService,
   fileServiceStatus,
+  getFileServiceStatus,
   fileCapabilities,
   fileTransfers,
   fileHost,
@@ -285,13 +287,19 @@ export function createDesktopServer({
     }
   });
 
-  app.get("/api/v1/admin/file-service", (_request, response) => {
-    response.set("Cache-Control", "no-store").json(
-      fileServiceStatus ?? {
-        mode: "disabled",
-        writable: false,
-      },
-    );
+  app.get("/api/v1/admin/file-service", async (_request, response, next) => {
+    try {
+      response.set("Cache-Control", "no-store").json(
+        getFileServiceStatus
+          ? await getFileServiceStatus()
+          : fileServiceStatus ?? {
+              mode: "disabled",
+              writable: false,
+            },
+      );
+    } catch (error) {
+      next(error);
+    }
   });
 
   if (inspections && appService) {

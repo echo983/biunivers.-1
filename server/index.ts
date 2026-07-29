@@ -97,6 +97,7 @@ async function main() {
     inspections,
     appService,
     fileServiceStatus: fileService.status,
+    getFileServiceStatus: () => fileService.currentStatus(),
     fileCapabilities,
     fileTransfers,
     fileHost,

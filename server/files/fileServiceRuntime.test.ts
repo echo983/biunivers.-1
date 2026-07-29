@@ -8,6 +8,8 @@ import {
   type FileServiceObjectStoreHandle,
 } from "./fileServiceRuntime.js";
 import { LocalWormObjectStore } from "./localWormObjectStore.js";
+import { FileContentStore } from "./fileContentStore.js";
+import { FileSystemTransactions } from "./fileSystemTransactions.js";
 
 const roots: string[] = [];
 
@@ -81,6 +83,30 @@ describe("startFileService", () => {
     );
     expect(restored.status).toMatchObject({ mode: "ready", revision: 0 });
     restored.close();
+  });
+
+  it("reports the current revision instead of the startup snapshot", async () => {
+    const { config, createObjectStore } = await setup();
+    const runtime = await startFileService(config, { createObjectStore });
+    const content = await new FileContentStore(
+      runtime.repository!,
+    ).putBytes(Buffer.from("live"));
+    await new FileSystemTransactions({
+      repository: runtime.repository!,
+      refStore: runtime.refStore!,
+      writerId: "test",
+    }).createFile({
+      parentEntryIdHex: runtime.entryIndex!.rootEntryIdHex,
+      name: "live.txt",
+      content,
+    });
+
+    await expect(runtime.currentStatus()).resolves.toMatchObject({
+      mode: "ready",
+      revision: 1,
+      rootEntryIdHex: runtime.entryIndex!.rootEntryIdHex,
+    });
+    runtime.close();
   });
 
   it("stays offline when an existing RefStore is missing", async () => {
