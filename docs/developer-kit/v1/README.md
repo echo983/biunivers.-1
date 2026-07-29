@@ -18,6 +18,9 @@
 └── 你的其他静态文件
 ```
 
+开发包还提供 [`AGENTS.md`](AGENTS.md)。它不是安装协议的强制文件，但建议复制到仓库根
+目录，为 AI 开发代理提供不会越过协议与权限边界的项目级指令。
+
 这个仓库必须满足：
 
 - `index.html` 可以由浏览器直接运行；
@@ -38,7 +41,8 @@
   [`template/resource-app`](template/resource-app/)。
 
 把所选目录的全部文件放到一个新的 GitHub 仓库根目录。资源应用模板已经包含 Open Resource
-Handler 声明、Resource Session 客户端、续租和释放示例。
+Handler 声明、Resource Session 客户端、续租和释放示例。两个模板都包含配套
+`AGENTS.md`。
 
 不要删除或改写：
 

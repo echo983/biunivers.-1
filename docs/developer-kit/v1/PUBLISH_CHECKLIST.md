@@ -10,6 +10,7 @@
 - [ ] `LICENSE` 与 manifest 的 `license` 一致
 - [ ] 发布 commit 已经包含可直接运行的构建产物
 - [ ] 推荐的 release tag 已指向准备安装的 commit
+- [ ] 若使用 AI 开发，仓库根目录的 `AGENTS.md` 与当前协议和工作流一致
 
 ## 协议和 Manifest
 
