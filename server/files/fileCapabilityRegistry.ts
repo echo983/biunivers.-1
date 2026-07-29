@@ -86,6 +86,11 @@ export interface AuthorizedFileTransfer extends AuthorizedFileHandle {
   maxBytes: number;
 }
 
+export interface FileTransferIdentity {
+  appId: string;
+  method: "GET" | "PUT";
+}
+
 interface FileCapabilityRegistryOptions {
   now?: () => number;
   randomToken?: () => string;
@@ -230,6 +235,29 @@ export class FileCapabilityRegistry {
         revision,
       },
     };
+  }
+
+  inspectTransfer(transferId: string): FileTransferIdentity {
+    if (!TOKEN_PATTERN.test(transferId)) {
+      throw transferNotFound();
+    }
+    const transfer = this.#transfers.get(transferId);
+    if (!transfer || transfer.active) {
+      throw transferNotFound();
+    }
+    if (transfer.expiresAtMs <= this.#now()) {
+      this.#transfers.delete(transferId);
+      throw new FileCapabilityError(
+        "TRANSFER_EXPIRED",
+        "File transfer expired.",
+      );
+    }
+    const instance = this.#instances.get(transfer.instanceToken);
+    if (!instance || instance.expiresAtMs <= this.#now()) {
+      this.prune();
+      throw transferNotFound();
+    }
+    return { appId: instance.appId, method: transfer.method };
   }
 
   authorizeHandle(

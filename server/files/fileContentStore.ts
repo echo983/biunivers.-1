@@ -84,7 +84,10 @@ export class FileContentStore {
     };
 
     for await (const input of source) {
-      if (!(input instanceof Uint8Array)) {
+      if (
+        !ArrayBuffer.isView(input) ||
+        input.BYTES_PER_ELEMENT !== 1
+      ) {
         throw new ObjectStoreError(
           "OBJECT_INVALID",
           "Stream yielded a non-byte chunk.",

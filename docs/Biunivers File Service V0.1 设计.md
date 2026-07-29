@@ -444,6 +444,18 @@ URL 必须：
 - 写入限制最大字节数；
 - 成功或过期后失效。
 
+V0.1 传输端点为：
+
+```text
+GET /api/v1/files/transfers/<transferId>
+PUT /api/v1/files/transfers/<transferId>
+```
+
+浏览器预检必须携带精确的应用 Origin 和与凭据一致的方法。服务端只回显该单一 Origin，
+不返回 `Access-Control-Allow-Credentials`，并只允许 `Authorization`、`Content-Type`。
+实际请求还必须携带窗口实例 token；错误方法、其他应用 Origin、其他窗口 token 和重放
+请求均不能读取或写入内容。
+
 请求必须通过 `Authorization: Biunivers-Instance <appInstanceToken>` 证明窗口实例，并同时匹配
 transfer ID。URL 本身不是完整授权。V0.1 不把长期 Bearer token 交给 iframe，传输授权只
 允许一次具体操作。
@@ -754,11 +766,11 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
   文件能力 dispatcher 待接入）
 - 文件句柄；（内存注册表、实例绑定、读写权限、过期、级联撤销与容量上限已完成；
   文件选择器签发流程待接入）
-- 传输 URL；（一次性 transfer 状态机、实例/句柄/方法绑定、大小上限、过期和撤销已完成；
-  HTTP 路由与精确 CORS 待接入）
+- 传输 URL；（一次性 transfer 状态机、实例/句柄/方法绑定、大小上限、过期、撤销和
+  URL 生成所需后端已完成；Host API dispatcher 待返回 URL）
 - 文件选择器；
 - 保存对话框；
-- File HTTP API。
+- File HTTP API。（GET/PUT 流式路由、实例认证、精确 CORS、版本复核和原子写入已完成）
 
 ### 阶段 4：记事本验收
 

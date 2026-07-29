@@ -12,6 +12,10 @@ import {
   FileCapabilityError,
 } from "../files/fileCapabilityRegistry.js";
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
+import {
+  createFileTransferRouter,
+  type FileTransferExecutor,
+} from "./fileTransferRouter.js";
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -21,6 +25,7 @@ interface DesktopServerDependencies {
   appService?: AppService;
   fileServiceStatus?: FileServiceStatus;
   fileCapabilities?: FileCapabilityRegistry;
+  fileTransfers?: FileTransferExecutor;
 }
 
 export function createDesktopServer({
@@ -31,6 +36,7 @@ export function createDesktopServer({
   appService,
   fileServiceStatus,
   fileCapabilities,
+  fileTransfers,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -110,6 +116,17 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  if (fileCapabilities && fileTransfers) {
+    app.use(
+      "/api/v1/files/transfers",
+      createFileTransferRouter({
+        appOrigin: config.appOrigin,
+        capabilities: fileCapabilities,
+        transfers: fileTransfers,
+      }),
+    );
+  }
 
   app.use("/api/v1/admin", createAdminAuth(config.adminToken));
 
@@ -276,7 +293,17 @@ export function createDesktopServer({
         return;
       }
       if (error instanceof FileCapabilityError) {
-        response.status(error.code === "CAPABILITY_LIMIT_REACHED" ? 429 : 400)
+        const status = {
+          HANDLE_NOT_FOUND: 404,
+          HANDLE_EXPIRED: 410,
+          TRANSFER_NOT_FOUND: 404,
+          TRANSFER_EXPIRED: 410,
+          TRANSFER_TOO_LARGE: 413,
+          PERMISSION_DENIED: 403,
+          CAPABILITY_LIMIT_REACHED: 429,
+          REQUEST_INVALID: 400,
+        }[error.code];
+        response.status(status)
           .json({
             error: {
               code: error.code,
