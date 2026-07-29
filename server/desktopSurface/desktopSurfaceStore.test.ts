@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
 import {
   DesktopSurfaceError,
   DesktopSurfaceStore,
@@ -55,19 +56,19 @@ describe("DesktopSurfaceStore", () => {
     const initial = store.initialize([]);
     const added = store.add(
       { type: "file", handle: "11".repeat(16) },
-      { column: 2, row: 3 },
+      { x: 212, y: 312 },
       initial.revision,
     );
     expect(added.revision).toBe(initial.revision + 1);
     expect(added.items[0]).toMatchObject({
       target: { type: "file", handle: "11".repeat(16) },
-      position: { column: 2, row: 3 },
+      position: { x: 212, y: 312 },
     });
 
     expect(() =>
       store.add(
         { type: "directory", handle: "22".repeat(16) },
-        { column: 4, row: 5 },
+        { x: 424, y: 520 },
         initial.revision,
       ),
     ).toThrowError(
@@ -112,5 +113,47 @@ describe("DesktopSurfaceStore", () => {
       ),
     ).toThrow(DesktopSurfaceError);
     expect(store.read()).toEqual(initial);
+  });
+
+  it("migrates legacy grid coordinates to logical pixels", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "desktop-surface-"));
+    directories.push(directory);
+    const databasePath = join(directory, "desktop-surface.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE desktop_surface (
+        singleton INTEGER PRIMARY KEY,
+        schema_version INTEGER NOT NULL,
+        revision INTEGER NOT NULL,
+        initialized INTEGER NOT NULL
+      );
+      INSERT INTO desktop_surface VALUES (1, 1, 7, 1);
+      CREATE TABLE desktop_items (
+        id TEXT PRIMARY KEY,
+        target_type TEXT NOT NULL,
+        target_handle TEXT NOT NULL,
+        column_index INTEGER NOT NULL,
+        row_index INTEGER NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        UNIQUE (target_type, target_handle),
+        UNIQUE (column_index, row_index)
+      );
+      INSERT INTO desktop_items VALUES (
+        '${"11".repeat(16)}',
+        'app',
+        'system.files',
+        3,
+        2,
+        1
+      );
+    `);
+    legacy.close();
+
+    const store = await DesktopSurfaceStore.open(databasePath);
+    stores.push(store);
+    expect(store.read()).toMatchObject({
+      revision: 7,
+      items: [{ position: { x: 318, y: 208 } }],
+    });
   });
 });

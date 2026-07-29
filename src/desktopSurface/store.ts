@@ -12,6 +12,11 @@ import type {
   DesktopSurface,
   DesktopTarget,
 } from "./types";
+import {
+  DESKTOP_ITEM_HEIGHT,
+  DESKTOP_ITEM_WIDTH,
+  findFirstFreeGridPosition,
+} from "./layout";
 
 interface DesktopSurfaceState {
   status: "idle" | "loading" | "ready" | "error";
@@ -136,21 +141,13 @@ async function runMutation(
 }
 
 function firstFreePosition(surface: DesktopSurface): DesktopPosition {
-  const occupied = new Set(
-    surface.items.map(
-      ({ position }) => `${position.column}:${position.row}`,
+  return findFirstFreeGridPosition(surface.items, {
+    maxX: Math.max(0, window.innerWidth - DESKTOP_ITEM_WIDTH - 20),
+    maxY: Math.max(
+      0,
+      window.innerHeight - 48 - DESKTOP_ITEM_HEIGHT - 28,
     ),
-  );
-  const visibleRows = Math.max(
-    1,
-    Math.floor((window.innerHeight - 76) / 104),
-  );
-  for (let column = 0; column < 1000; column += 1) {
-    for (let row = 0; row < visibleRows; row += 1) {
-      if (!occupied.has(`${column}:${row}`)) return { column, row };
-    }
-  }
-  throw new Error("桌面没有可用位置");
+  });
 }
 
 function messageOf(error: unknown) {

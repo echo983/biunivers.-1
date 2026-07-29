@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { bootstrapDesktop } from "../app/bootstrap";
 import { useDesktopStore } from "../store/desktopStore";
 import { AppMenu } from "./AppMenu";
@@ -11,9 +11,14 @@ import {
 import "./desktop.css";
 import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import { ContextMenu } from "../components/ContextMenu";
-import { useState } from "react";
+import {
+  autoAlignDesktopItems,
+  DESKTOP_ITEM_HEIGHT,
+  DESKTOP_ITEM_WIDTH,
+} from "../desktopSurface/layout";
 
 export function Desktop() {
+  const iconLayerRef = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -24,6 +29,12 @@ export function Desktop() {
   const closeAppMenu = useDesktopStore((state) => state.closeAppMenu);
   const clearSurfaceSelection = useDesktopSurfaceStore(
     (state) => state.clearSelection,
+  );
+  const surfaceItems = useDesktopSurfaceStore(
+    (state) => state.surface.items,
+  );
+  const moveSurfaceItems = useDesktopSurfaceStore(
+    (state) => state.move,
   );
 
   useEffect(() => {
@@ -58,6 +69,7 @@ export function Desktop() {
         aria-hidden="true"
       />
       <div
+        ref={iconLayerRef}
         className="desktop-icon-layer"
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
@@ -83,6 +95,29 @@ export function Desktop() {
               onClick={() => setContextMenu(undefined)}
             >
               刷新
+            </button>
+            <div className="context-menu__separator" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setContextMenu(undefined);
+                const layer = iconLayerRef.current;
+                if (!layer || surfaceItems.length === 0) return;
+                const moves = autoAlignDesktopItems(surfaceItems, {
+                  maxX: Math.max(
+                    0,
+                    layer.clientWidth - DESKTOP_ITEM_WIDTH - 20,
+                  ),
+                  maxY: Math.max(
+                    0,
+                    layer.clientHeight - DESKTOP_ITEM_HEIGHT - 28,
+                  ),
+                });
+                void moveSurfaceItems(moves).catch(() => undefined);
+              }}
+            >
+              自动对齐
             </button>
           </ContextMenu>
         )}

@@ -10,10 +10,11 @@ import type {
   DesktopItem,
 } from "../desktopSurface/types";
 import { activateDesktopItem } from "../desktopSurface/activate";
-import { findGroupPlacement } from "../desktopSurface/layout";
-
-const CELL_WIDTH = 106;
-const CELL_HEIGHT = 104;
+import {
+  DESKTOP_ITEM_HEIGHT,
+  DESKTOP_ITEM_WIDTH,
+  findGroupPlacement,
+} from "../desktopSurface/layout";
 const DRAG_THRESHOLD = 4;
 
 interface Point {
@@ -213,26 +214,26 @@ export function DesktopIcons() {
       }
       setMarquee(undefined);
     } else if (pending.active && dragPreview) {
-      const columnDelta = Math.round(dragPreview.x / CELL_WIDTH);
-      const rowDelta = Math.round(dragPreview.y / CELL_HEIGHT);
-      if (columnDelta !== 0 || rowDelta !== 0) {
+      const xDelta = Math.round(dragPreview.x);
+      const yDelta = Math.round(dragPreview.y);
+      if (xDelta !== 0 || yDelta !== 0) {
         const moves = findGroupPlacement(
           surface.items,
           pending.baseline,
-          columnDelta,
-          rowDelta,
+          xDelta,
+          yDelta,
           {
-            maxColumn: Math.max(
+            maxX: Math.max(
               0,
-              Math.floor(
-                (event.currentTarget.clientWidth - 20) / CELL_WIDTH,
-              ) - 1,
+              event.currentTarget.clientWidth -
+                DESKTOP_ITEM_WIDTH -
+                20,
             ),
-            maxRow: Math.max(
+            maxY: Math.max(
               0,
-              Math.floor(
-                (event.currentTarget.clientHeight - 28) / CELL_HEIGHT,
-              ) - 1,
+              event.currentTarget.clientHeight -
+                DESKTOP_ITEM_HEIGHT -
+                28,
             ),
           },
         );
@@ -277,11 +278,9 @@ export function DesktopIcons() {
             }
             style={{
               transform: `translate(${
-                item.position.column * CELL_WIDTH +
-                (previewing ? dragPreview.x : 0)
+                item.position.x + (previewing ? dragPreview.x : 0)
               }px, ${
-                item.position.row * CELL_HEIGHT +
-                (previewing ? dragPreview.y : 0)
+                item.position.y + (previewing ? dragPreview.y : 0)
               }px)`,
             }}
             onPointerDown={(event) => beginDrag(event, item.id)}
@@ -448,21 +447,20 @@ function focusGridNeighbor(
   const candidates = items
     .filter((candidate) => {
       if (candidate.id === item.id) return false;
-      const columnDelta =
-        candidate.position.column - item.position.column;
-      const rowDelta = candidate.position.row - item.position.row;
-      if (key === "ArrowLeft") return columnDelta < 0;
-      if (key === "ArrowRight") return columnDelta > 0;
-      if (key === "ArrowUp") return rowDelta < 0;
-      return rowDelta > 0;
+      const xDelta = candidate.position.x - item.position.x;
+      const yDelta = candidate.position.y - item.position.y;
+      if (key === "ArrowLeft") return xDelta < 0;
+      if (key === "ArrowRight") return xDelta > 0;
+      if (key === "ArrowUp") return yDelta < 0;
+      return yDelta > 0;
     })
     .sort((left, right) => {
       const leftDistance =
-        Math.abs(left.position.column - item.position.column) +
-        Math.abs(left.position.row - item.position.row);
+        Math.abs(left.position.x - item.position.x) +
+        Math.abs(left.position.y - item.position.y);
       const rightDistance =
-        Math.abs(right.position.column - item.position.column) +
-        Math.abs(right.position.row - item.position.row);
+        Math.abs(right.position.x - item.position.x) +
+        Math.abs(right.position.y - item.position.y);
       return leftDistance - rightDistance;
     });
   const targetId = candidates[0]?.id;

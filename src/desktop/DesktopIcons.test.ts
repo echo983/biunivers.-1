@@ -1,16 +1,19 @@
 import { describe, expect, it } from "vitest";
 import type { DesktopItem } from "../desktopSurface/types";
-import { findGroupPlacement } from "../desktopSurface/layout";
+import {
+  autoAlignDesktopItems,
+  findGroupPlacement,
+} from "../desktopSurface/layout";
 
 function item(
   id: string,
-  column: number,
-  row: number,
+  x: number,
+  y: number,
 ): DesktopItem {
   return {
     id,
     target: { type: "app", handle: `example.${id}` },
-    position: { column, row },
+    position: { x, y },
     createdAtMs: 1,
     resolved: {
       available: true,
@@ -22,53 +25,61 @@ function item(
 
 describe("desktop group placement", () => {
   it("keeps the selected group shape", () => {
-    const items = [item("a", 0, 0), item("b", 1, 0)];
+    const items = [item("a", 0, 0), item("b", 106, 0)];
     expect(
-      findGroupPlacement(items, new Set(["a", "b"]), 2, 3),
+      findGroupPlacement(items, new Set(["a", "b"]), 20, 30),
     ).toEqual([
-      { itemId: "a", position: { column: 2, row: 3 } },
-      { itemId: "b", position: { column: 3, row: 3 } },
+      { itemId: "a", position: { x: 20, y: 30 } },
+      { itemId: "b", position: { x: 126, y: 30 } },
     ]);
   });
 
   it("moves the whole group to the nearest collision-free delta", () => {
     const items = [
       item("a", 0, 0),
-      item("b", 1, 0),
-      item("occupied", 2, 0),
+      item("b", 106, 0),
+      item("occupied", 212, 0),
     ];
     const result = findGroupPlacement(
       items,
       new Set(["a", "b"]),
-      1,
+      106,
       0,
     );
     expect(result).toBeDefined();
     const [first, second] = result!;
-    expect(
-      second.position.column - first.position.column,
-    ).toBe(1);
-    expect(second.position.row - first.position.row).toBe(0);
+    expect(second.position.x - first.position.x).toBe(106);
+    expect(second.position.y - first.position.y).toBe(0);
     expect(
       result?.some(
         ({ position }) =>
-          position.column === 2 && position.row === 0,
+          position.x === 212 && position.y === 0,
       ),
     ).toBe(false);
   });
 
   it("does not place any member outside the non-negative grid", () => {
-    const items = [item("a", 0, 0), item("b", 0, 1)];
+    const items = [item("a", 0, 0), item("b", 0, 112)];
     const result = findGroupPlacement(
       items,
       new Set(["a", "b"]),
-      -4,
-      -4,
+      -20,
+      -20,
     );
     expect(
       result?.every(
-        ({ position }) => position.column >= 0 && position.row >= 0,
+        ({ position }) => position.x >= 0 && position.y >= 0,
       ),
     ).toBe(true);
+  });
+
+  it("aligns each item to a nearby unique grid position", () => {
+    const items = [item("a", 96, 8), item("b", 118, 14)];
+    expect(
+      autoAlignDesktopItems(items, { maxX: 400, maxY: 300 }),
+    ).toEqual([
+      { itemId: "a", position: { x: 106, y: 0 } },
+      { itemId: "b", position: { x: 212, y: 0 } },
+    ]);
   });
 });

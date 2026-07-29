@@ -1136,6 +1136,12 @@
   background: rgb(255 255 255 / 10%);
 }
 
+.context-menu__separator {
+  height: 1px;
+  margin: 3px 5px;
+  background: var(--surface-border);
+}
+
 @media (width < 1024px) {
   .desktop-size-notice {
     position: absolute;

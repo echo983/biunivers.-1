@@ -6,8 +6,8 @@ export interface DesktopTarget {
 }
 
 export interface DesktopPosition {
-  column: number;
-  row: number;
+  x: number;
+  y: number;
 }
 
 export interface DesktopItem {

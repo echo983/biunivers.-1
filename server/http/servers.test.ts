@@ -194,7 +194,7 @@ describe("desktop and app origins", () => {
         },
         body: JSON.stringify({
           target: { type: "app", handle: "system.about" },
-          position: { column: 1, row: 0 },
+          position: { x: 106, y: 0 },
           expectedRevision: initial.revision,
         }),
       },
@@ -212,7 +212,7 @@ describe("desktop and app origins", () => {
         },
         body: JSON.stringify({
           target: { type: "app", handle: "system.about" },
-          position: { column: 1, row: 0 },
+          position: { x: 106, y: 0 },
           expectedRevision: initial.revision,
         }),
       },
@@ -233,7 +233,7 @@ describe("desktop and app origins", () => {
         },
         body: JSON.stringify({
           target: { type: "app", handle: "system.about" },
-          position: { column: 2, row: 0 },
+          position: { x: 212, y: 0 },
           expectedRevision: initial.revision,
         }),
       },

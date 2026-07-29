@@ -13,7 +13,9 @@ const TARGET_TYPES = new Set(["app", "file", "directory"]);
 const APP_ID_PATTERN = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/;
 const ENTRY_ID_PATTERN = /^[0-9a-f]{32}$/;
 const ITEM_ID_PATTERN = /^[0-9a-f]{32}$/;
-const MAX_GRID_COORDINATE = 100_000;
+const MAX_POSITION = 1_000_000;
+const LEGACY_CELL_WIDTH = 106;
+const LEGACY_CELL_HEIGHT = 104;
 
 export type DesktopSurfaceErrorCode =
   | "DESKTOP_SURFACE_INVALID"
@@ -40,8 +42,8 @@ interface ItemRow {
   id: string;
   target_type: DesktopTarget["type"];
   target_handle: string;
-  column_index: number;
-  row_index: number;
+  x_position: number;
+  y_position: number;
   created_at_ms: number;
 }
 
@@ -70,16 +72,19 @@ export class DesktopSurfaceStore {
       INSERT OR IGNORE INTO desktop_surface
         (singleton, schema_version, revision, initialized)
       VALUES (1, 1, 0, 0);
+    `);
+    migrateLegacyGrid(database);
+    database.exec(`
       CREATE TABLE IF NOT EXISTS desktop_items (
         id TEXT PRIMARY KEY,
         target_type TEXT NOT NULL
           CHECK (target_type IN ('app', 'file', 'directory')),
         target_handle TEXT NOT NULL,
-        column_index INTEGER NOT NULL CHECK (column_index >= 0),
-        row_index INTEGER NOT NULL CHECK (row_index >= 0),
+        x_position INTEGER NOT NULL CHECK (x_position >= 0),
+        y_position INTEGER NOT NULL CHECK (y_position >= 0),
         created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
         UNIQUE (target_type, target_handle),
-        UNIQUE (column_index, row_index)
+        UNIQUE (x_position, y_position)
       );
     `);
     return new DesktopSurfaceStore(databasePath, database);
@@ -93,7 +98,7 @@ export class DesktopSurfaceStore {
     const surface = this.#surfaceRow();
     const rows = this.#database
       .prepare(
-        `SELECT id, target_type, target_handle, column_index, row_index,
+        `SELECT id, target_type, target_handle, x_position, y_position,
                 created_at_ms
          FROM desktop_items
          ORDER BY created_at_ms, id`,
@@ -114,7 +119,7 @@ export class DesktopSurfaceStore {
       }
       const insert = this.#database.prepare(
         `INSERT INTO desktop_items
-           (id, target_type, target_handle, column_index, row_index,
+           (id, target_type, target_handle, x_position, y_position,
             created_at_ms)
          VALUES (?, ?, ?, ?, ?, ?)`,
       );
@@ -126,8 +131,8 @@ export class DesktopSurfaceStore {
           randomId(),
           target.type,
           target.handle,
-          position.column,
-          position.row,
+          position.x,
+          position.y,
           createdAtMs + index,
         );
       });
@@ -155,7 +160,7 @@ export class DesktopSurfaceStore {
         this.#database
           .prepare(
             `INSERT INTO desktop_items
-               (id, target_type, target_handle, column_index, row_index,
+               (id, target_type, target_handle, x_position, y_position,
                 created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?)`,
           )
@@ -163,8 +168,8 @@ export class DesktopSurfaceStore {
             randomId(),
             target.type,
             target.handle,
-            position.column,
-            position.row,
+            position.x,
+            position.y,
             Date.now(),
           );
       } catch (error) {
@@ -211,7 +216,7 @@ export class DesktopSurfaceStore {
         );
       }
       const requested = new Set(
-        moves.map(({ position }) => `${position.column}:${position.row}`),
+        moves.map(({ position }) => `${position.x}:${position.y}`),
       );
       if (requested.size !== moves.length) {
         throw new DesktopSurfaceError(
@@ -223,17 +228,17 @@ export class DesktopSurfaceStore {
       const occupied = (
         this.#database
           .prepare(
-            "SELECT id, column_index, row_index FROM desktop_items",
+            "SELECT id, x_position, y_position FROM desktop_items",
           )
           .all() as Array<{
           id: string;
-          column_index: number;
-          row_index: number;
+          x_position: number;
+          y_position: number;
         }>
       ).some(
         (row) =>
           !movingIds.has(row.id) &&
-          requested.has(`${row.column_index}:${row.row_index}`),
+          requested.has(`${row.x_position}:${row.y_position}`),
       );
       if (occupied) {
         throw new DesktopSurfaceError(
@@ -243,7 +248,7 @@ export class DesktopSurfaceStore {
       }
       const update = this.#database.prepare(
         `UPDATE desktop_items
-         SET column_index = ?, row_index = ?
+         SET x_position = ?, y_position = ?
          WHERE id = ?`,
       );
       // Temporarily move the group out of the valid coordinate range so swaps
@@ -252,13 +257,13 @@ export class DesktopSurfaceStore {
         this.#database
           .prepare(
             `UPDATE desktop_items
-             SET column_index = column_index + ?, row_index = row_index + ?
+             SET x_position = x_position + ?, y_position = y_position + ?
              WHERE id = ?`,
           )
-          .run(MAX_GRID_COORDINATE + 1, MAX_GRID_COORDINATE + 1, move.itemId);
+          .run(MAX_POSITION + 1, MAX_POSITION + 1, move.itemId);
       }
       for (const move of moves) {
-        update.run(move.position.column, move.position.row, move.itemId);
+        update.run(move.position.x, move.position.y, move.itemId);
       }
     });
   }
@@ -292,7 +297,7 @@ export class DesktopSurfaceStore {
       this.#database.prepare("DELETE FROM desktop_items").run();
       const insert = this.#database.prepare(
         `INSERT INTO desktop_items
-           (id, target_type, target_handle, column_index, row_index,
+           (id, target_type, target_handle, x_position, y_position,
             created_at_ms)
          VALUES (?, ?, ?, ?, ?, ?)`,
       );
@@ -303,8 +308,8 @@ export class DesktopSurfaceStore {
           randomId(),
           target.type,
           target.handle,
-          position.column,
-          position.row,
+          position.x,
+          position.y,
           createdAtMs + index,
         );
       });
@@ -346,7 +351,7 @@ function mapItem(row: ItemRow): DesktopItem {
   return {
     id: row.id,
     target: { type: row.target_type, handle: row.target_handle },
-    position: { column: row.column_index, row: row.row_index },
+    position: { x: row.x_position, y: row.y_position },
     createdAtMs: row.created_at_ms,
   };
 }
@@ -367,12 +372,12 @@ function validateTarget(target: DesktopTarget) {
 function validatePosition(position: DesktopPosition) {
   if (
     !position ||
-    !Number.isSafeInteger(position.column) ||
-    !Number.isSafeInteger(position.row) ||
-    position.column < 0 ||
-    position.row < 0 ||
-    position.column > MAX_GRID_COORDINATE ||
-    position.row > MAX_GRID_COORDINATE
+    !Number.isSafeInteger(position.x) ||
+    !Number.isSafeInteger(position.y) ||
+    position.x < 0 ||
+    position.y < 0 ||
+    position.x > MAX_POSITION ||
+    position.y > MAX_POSITION
   ) {
     throw invalid("桌面位置无效");
   }
@@ -400,9 +405,48 @@ function randomId() {
 
 function migrationPosition(index: number) {
   return {
-    column: Math.floor(index / 5),
-    row: index % 5,
+    x: Math.floor(index / 5) * LEGACY_CELL_WIDTH,
+    y: (index % 5) * LEGACY_CELL_HEIGHT,
   };
+}
+
+function migrateLegacyGrid(database: Database.Database) {
+  const table = database
+    .prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table' AND name = 'desktop_items'`,
+    )
+    .get() as { name: string } | undefined;
+  if (!table) return;
+  const columns = database
+    .prepare("PRAGMA table_info(desktop_items)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "column_index")) return;
+
+  database.transaction(() => {
+    database.exec(`
+      ALTER TABLE desktop_items RENAME TO desktop_items_grid_v1;
+      CREATE TABLE desktop_items (
+        id TEXT PRIMARY KEY,
+        target_type TEXT NOT NULL
+          CHECK (target_type IN ('app', 'file', 'directory')),
+        target_handle TEXT NOT NULL,
+        x_position INTEGER NOT NULL CHECK (x_position >= 0),
+        y_position INTEGER NOT NULL CHECK (y_position >= 0),
+        created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        UNIQUE (target_type, target_handle),
+        UNIQUE (x_position, y_position)
+      );
+      INSERT INTO desktop_items
+        (id, target_type, target_handle, x_position, y_position, created_at_ms)
+      SELECT id, target_type, target_handle,
+             column_index * ${LEGACY_CELL_WIDTH},
+             row_index * ${LEGACY_CELL_HEIGHT},
+             created_at_ms
+      FROM desktop_items_grid_v1;
+      DROP TABLE desktop_items_grid_v1;
+    `);
+  })();
 }
 
 function isConstraint(error: unknown, detail?: string) {

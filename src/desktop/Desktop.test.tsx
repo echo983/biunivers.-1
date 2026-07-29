@@ -22,7 +22,7 @@ describe("Desktop", () => {
           {
             id: "11".repeat(16),
             target: { type: "app", handle: "system.about" },
-            position: { column: 0, row: 0 },
+            position: { x: 0, y: 0 },
             createdAtMs: 1,
             resolved: {
               available: true,
