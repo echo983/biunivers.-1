@@ -16,6 +16,7 @@ const BLOCKED_FILES = new Set([
   "BIUNIVERS_APP_PROTOCOL_V1.md",
   "biunivers.open-resource.json",
   "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+  "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md",
 ]);
 
 export function createAppServer(dependencies?: AppServerDependencies) {

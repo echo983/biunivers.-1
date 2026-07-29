@@ -310,6 +310,15 @@ describe("inspect and install flow", () => {
         )
       ).status,
     ).toBe(404);
+    expect(
+      (
+        await fetchApp(
+          origin,
+          installed.appId,
+          `${base}/BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("rejects changed protocol bytes before an app is registered", async () => {
