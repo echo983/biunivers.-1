@@ -220,6 +220,7 @@ describe("desktop and app origins", () => {
           rootEntryIdHex: "11".repeat(16),
         },
         fileCapabilities: new FileCapabilityRegistry(),
+        internalFileAppIds: new Set(["system.files"]),
       }).listen(0, "127.0.0.1"),
     );
     const body = JSON.stringify({
@@ -253,6 +254,37 @@ describe("desktop and app origins", () => {
     };
     expect(instance.instanceToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(Number.isNaN(Date.parse(instance.expiresAt))).toBe(false);
+
+    const internalCreated = await fetch(
+      `${origin}/api/v1/host/instances`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          appId: "system.files",
+          windowInstanceId: "files-window-1",
+        }),
+      },
+    );
+    expect(internalCreated.status).toBe(201);
+
+    const unknownApp = await fetch(`${origin}/api/v1/host/instances`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: dependencies.config.desktopOrigin,
+        "sec-fetch-site": "same-origin",
+      },
+      body: JSON.stringify({
+        appId: "system.unknown",
+        windowInstanceId: "unknown-window-1",
+      }),
+    });
+    expect(unknownApp.status).toBe(404);
 
     const closed = await fetch(
       `${origin}/api/v1/host/instances/current`,

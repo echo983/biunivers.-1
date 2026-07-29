@@ -37,6 +37,7 @@ interface DesktopServerDependencies {
   fileServiceGcScanner?: {
     scan(): Promise<FileServiceGcReport>;
   };
+  internalFileAppIds?: ReadonlySet<string>;
 }
 
 export function createDesktopServer({
@@ -52,6 +53,7 @@ export function createDesktopServer({
   fileHost,
   fileServiceBackup,
   fileServiceGcScanner,
+  internalFileAppIds = new Set(),
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -97,12 +99,11 @@ export function createDesktopServer({
         );
       }
       const state = await appStore.read();
-      if (
-        !state.apps.some(
-          (installed) =>
-            installed.appId === appId && installed.status === "active",
-        )
-      ) {
+      const activeManagedApp = state.apps.some(
+        (installed) =>
+          installed.appId === appId && installed.status === "active",
+      );
+      if (!activeManagedApp && !internalFileAppIds.has(appId)) {
         throw new AppError("APP_NOT_FOUND", "应用不存在或未启用", 404);
       }
       response

@@ -47,7 +47,11 @@ async function main() {
     dataDir: config.dataDir,
     maxAppBytes: config.maxAppBytes,
     maxAppFiles: config.maxAppFiles,
-    reservedAppIds: new Set(["system.settings", "system.about"]),
+    reservedAppIds: new Set([
+      "system.settings",
+      "system.about",
+      "system.files",
+    ]),
   });
   const appService = new AppService({
     appStore,
@@ -125,6 +129,7 @@ async function main() {
     fileHost,
     fileServiceBackup,
     fileServiceGcScanner,
+    internalFileAppIds: new Set(["system.files"]),
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,

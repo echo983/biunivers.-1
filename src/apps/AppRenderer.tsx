@@ -1,6 +1,7 @@
 import type { AppDefinition } from "../types/desktop";
 import { AboutApp } from "./internal/AboutApp";
 import { SettingsApp } from "./internal/SettingsApp";
+import { FileManagerApp } from "./internal/FileManagerApp";
 import { IframeApp } from "./IframeApp";
 
 interface AppRendererProps {
@@ -14,6 +15,10 @@ export function AppRenderer({ app }: AppRendererProps) {
 
   if (app.kind === "internal" && app.id === "system.settings") {
     return <SettingsApp />;
+  }
+
+  if (app.kind === "internal" && app.id === "system.files") {
+    return <FileManagerApp />;
   }
 
   if (app.kind === "iframe") {
