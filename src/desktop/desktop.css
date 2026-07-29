@@ -820,6 +820,13 @@
   background: #fff0f0;
 }
 
+.file-manager-app__notice {
+  padding: 8px 12px;
+  color: #275c3b;
+  border-bottom: 1px solid #b9dcc5;
+  background: #edf9f1;
+}
+
 .file-manager-app__content {
   overflow: auto;
 }

@@ -3,10 +3,18 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FileManagerBrowser } from "./FileManagerBrowser";
 
+const transferMocks = vi.hoisted(() => ({
+  uploadLocalFile: vi.fn(async () => {}),
+  downloadFile: vi.fn(async () => {}),
+}));
+
+vi.mock("../../api/fileManagerTransfers", () => transferMocks);
+
 const rootId = "1".repeat(32);
 const directoryId = "2".repeat(32);
 
 afterEach(() => {
+  vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -230,5 +238,68 @@ describe("FileManagerBrowser", () => {
       recursive: false,
       expectedRevision: 3,
     });
+  });
+
+  it("uploads local files and downloads the selected file", async () => {
+    const user = userEvent.setup();
+    const fileId = "4".repeat(32);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          revision: 3,
+          rootEntryId: rootId,
+          parent: {
+            entryId: rootId,
+            name: "",
+            kind: "directory",
+            mtimeMs: 0,
+          },
+          entries: [
+            {
+              entryId: fileId,
+              name: "note.txt",
+              kind: "file",
+              size: 12,
+              mtimeMs: 100,
+            },
+          ],
+        }),
+      ),
+    );
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    await screen.findByText("note.txt");
+
+    const localFile = new File(["upload"], "upload.txt");
+    await user.upload(
+      screen.getByLabelText("选择要上传的文件"),
+      localFile,
+    );
+    await waitFor(() =>
+      expect(transferMocks.uploadLocalFile).toHaveBeenCalledWith(
+        "a".repeat(43),
+        rootId,
+        localFile,
+      ),
+    );
+    expect(
+      await screen.findByText("已上传 1 个文件。"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByText("note.txt"));
+    await user.click(screen.getByRole("button", { name: "下载" }));
+    await waitFor(() =>
+      expect(transferMocks.downloadFile).toHaveBeenCalledWith(
+        "a".repeat(43),
+        expect.objectContaining({
+          entryId: fileId,
+          name: "note.txt",
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText("已开始下载“note.txt”。"),
+    ).toBeInTheDocument();
   });
 });

@@ -18,6 +18,7 @@ import {
 const servers: Server[] = [];
 const appId = "io.example.notes";
 const appBaseOrigin = "http://localhost:8081";
+const desktopOrigin = "http://localhost:8080";
 const appOrigin = appSpecificOrigin(appBaseOrigin, appId);
 const file: IndexedEntry = {
   entryIdHex: "11".repeat(16),
@@ -44,9 +45,9 @@ async function listen(app: express.Express) {
   return `http://127.0.0.1:${address.port}`;
 }
 
-function setup() {
+function setup(instanceAppId = appId) {
   const capabilities = new FileCapabilityRegistry();
-  const instance = capabilities.createInstance(appId, "window-1");
+  const instance = capabilities.createInstance(instanceAppId, "window-1");
   const handle = capabilities.issueHandle(
     instance.instanceToken,
     file,
@@ -93,6 +94,8 @@ function setup() {
     "/api/v1/files/transfers",
     createFileTransferRouter({
       appOrigin: appBaseOrigin,
+      desktopOrigin,
+      internalFileAppIds: new Set(["system.files"]),
       capabilities,
       transfers,
     }),
@@ -220,5 +223,56 @@ describe("File transfer HTTP router", () => {
       size: 7,
     });
     expect(Buffer.concat(fixture.writes).toString()).toBe("updated");
+  });
+
+  it("allows system.files only from the trusted Desktop Origin", async () => {
+    const fixture = setup("system.files");
+    const readTransfer = fixture.capabilities.issueTransfer(
+      fixture.instanceToken,
+      fixture.handleId,
+      "GET",
+      99,
+    );
+    const origin = await listen(fixture.app);
+    const readUrl =
+      `${origin}/api/v1/files/transfers/${readTransfer.transferId}`;
+
+    const read = await fetch(readUrl, {
+      headers: {
+        authorization: `Biunivers-Instance ${fixture.instanceToken}`,
+        "sec-fetch-site": "same-origin",
+      },
+    });
+    expect(read.status).toBe(200);
+    await expect(read.text()).resolves.toBe("hello");
+
+    const writeTransfer = fixture.capabilities.issueTransfer(
+      fixture.instanceToken,
+      fixture.handleId,
+      "PUT",
+      10,
+    );
+    const writeUrl =
+      `${origin}/api/v1/files/transfers/${writeTransfer.transferId}`;
+    const forbidden = await fetch(writeUrl, {
+      method: "PUT",
+      headers: {
+        origin: appSpecificOrigin(appBaseOrigin, "io.example.other"),
+        authorization: `Biunivers-Instance ${fixture.instanceToken}`,
+      },
+      body: "bad",
+    });
+    expect(forbidden.status).toBe(403);
+
+    const written = await fetch(writeUrl, {
+      method: "PUT",
+      headers: {
+        origin: desktopOrigin,
+        authorization: `Biunivers-Instance ${fixture.instanceToken}`,
+      },
+      body: "internal",
+    });
+    expect(written.status).toBe(200);
+    expect(Buffer.concat(fixture.writes).toString()).toBe("internal");
   });
 });

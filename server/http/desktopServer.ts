@@ -290,6 +290,8 @@ export function createDesktopServer({
       "/api/v1/files/transfers",
       createFileTransferRouter({
         appOrigin: config.appOrigin,
+        desktopOrigin: config.desktopOrigin,
+        internalFileAppIds,
         capabilities: fileCapabilities,
         transfers: fileTransfers,
       }),

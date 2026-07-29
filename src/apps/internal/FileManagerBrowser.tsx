@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
   type FormEvent,
 } from "react";
@@ -9,6 +10,10 @@ import {
   moveEntry,
   removeEntry,
 } from "../../api/internalFileManagerClient";
+import {
+  downloadFile,
+  uploadLocalFile,
+} from "../../api/fileManagerTransfers";
 import {
   FileHostClientError,
   listFiles,
@@ -43,6 +48,8 @@ export function FileManagerBrowser({
   const [refreshKey, setRefreshKey] = useState(0);
   const [editDialog, setEditDialog] = useState<EditDialog>(null);
   const [movingEntry, setMovingEntry] = useState<FileEntry>();
+  const [notice, setNotice] = useState<string>();
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -87,6 +94,48 @@ export function FileManagerBrowser({
       } else {
         setError(messageOf(reason));
       }
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const uploadFiles = async (files: FileList) => {
+    if (!listing) return;
+    setWorking(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      for (const file of Array.from(files)) {
+        setNotice(`正在上传“${file.name}”…`);
+        await uploadLocalFile(
+          instanceToken,
+          listing.parent.entryId,
+          file,
+        );
+      }
+      setNotice(`已上传 ${files.length} 个文件。`);
+      refresh();
+    } catch (reason) {
+      setNotice(undefined);
+      setError(messageOf(reason));
+      refresh();
+    } finally {
+      setWorking(false);
+      if (uploadInputRef.current) uploadInputRef.current.value = "";
+    }
+  };
+
+  const downloadSelected = async () => {
+    if (!selected || selected.kind !== "file") return;
+    setWorking(true);
+    setError(undefined);
+    setNotice(`正在下载“${selected.name}”…`);
+    try {
+      await downloadFile(instanceToken, selected);
+      setNotice(`已开始下载“${selected.name}”。`);
+    } catch (reason) {
+      setNotice(undefined);
+      setError(messageOf(reason));
     } finally {
       setWorking(false);
     }
@@ -185,6 +234,32 @@ export function FileManagerBrowser({
           </button>
           <button
             type="button"
+            disabled={!listing || working}
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            上传
+          </button>
+          <input
+            ref={uploadInputRef}
+            className="sr-only"
+            type="file"
+            multiple
+            aria-label="选择要上传的文件"
+            onChange={(event) => {
+              if (event.target.files?.length) {
+                void uploadFiles(event.target.files);
+              }
+            }}
+          />
+          <button
+            type="button"
+            disabled={!selected || selected.kind !== "file" || working}
+            onClick={() => void downloadSelected()}
+          >
+            下载
+          </button>
+          <button
+            type="button"
             disabled={loading || working}
             onClick={() => {
               setError(undefined);
@@ -199,6 +274,11 @@ export function FileManagerBrowser({
       {error && (
         <div className="file-manager-app__error" role="alert">
           {error}
+        </div>
+      )}
+      {notice && (
+        <div className="file-manager-app__notice" role="status">
+          {notice}
         </div>
       )}
 

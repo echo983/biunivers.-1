@@ -23,6 +23,8 @@ export interface FileTransferExecutor {
 
 interface FileTransferRouterOptions {
   appOrigin: string;
+  desktopOrigin?: string;
+  internalFileAppIds?: ReadonlySet<string>;
   capabilities: FileCapabilityRegistry;
   transfers: FileTransferExecutor;
 }
@@ -37,11 +39,7 @@ export function createFileTransferRouter(
       const identity = options.capabilities.inspectTransfer(
         request.params.transferId,
       );
-      const origin = requireAppOrigin(
-        request,
-        options.appOrigin,
-        identity.appId,
-      );
+      const origin = requireTransferOrigin(request, options, identity.appId);
       const requestedMethod = request
         .get("access-control-request-method")
         ?.toUpperCase();
@@ -70,11 +68,7 @@ export function createFileTransferRouter(
       const identity = options.capabilities.inspectTransfer(
         request.params.transferId,
       );
-      const origin = requireAppOrigin(
-        request,
-        options.appOrigin,
-        identity.appId,
-      );
+      const origin = requireTransferOrigin(request, options, identity.appId);
       if (identity.method !== "GET") {
         throw new AppError(
           "METHOD_FORBIDDEN",
@@ -113,11 +107,7 @@ export function createFileTransferRouter(
       const identity = options.capabilities.inspectTransfer(
         request.params.transferId,
       );
-      const origin = requireAppOrigin(
-        request,
-        options.appOrigin,
-        identity.appId,
-      );
+      const origin = requireTransferOrigin(request, options, identity.appId);
       if (identity.method !== "PUT") {
         throw new AppError(
           "METHOD_FORBIDDEN",
@@ -143,13 +133,29 @@ export function createFileTransferRouter(
   return router;
 }
 
-function requireAppOrigin(
+function requireTransferOrigin(
   request: express.Request,
-  appOrigin: string,
+  options: FileTransferRouterOptions,
   appId: string,
 ): string {
-  const expected = appSpecificOrigin(appOrigin, appId);
-  if (request.get("origin") !== expected) {
+  const internal = options.internalFileAppIds?.has(appId) ?? false;
+  const expected = internal
+    ? options.desktopOrigin
+    : appSpecificOrigin(options.appOrigin, appId);
+  if (!expected) {
+    throw new AppError(
+      "ORIGIN_FORBIDDEN",
+      "内部传输未配置可信桌面来源",
+      403,
+    );
+  }
+  const origin = request.get("origin");
+  const sameOriginGet =
+    internal &&
+    request.method === "GET" &&
+    origin === undefined &&
+    request.get("sec-fetch-site") === "same-origin";
+  if (origin !== expected && !sameOriginGet) {
     throw new AppError(
       "ORIGIN_FORBIDDEN",
       "传输请求来源与应用不匹配",
