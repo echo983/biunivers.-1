@@ -726,7 +726,6 @@ function MoveDialog({
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     void listFiles(instanceToken, directoryId)
       .then((value) => {
         if (active) {
