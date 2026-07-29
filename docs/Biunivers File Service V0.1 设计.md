@@ -198,6 +198,11 @@ V0.1 的句柄只保存在服务端内存中。窗口关闭、应用停用、卸
 绑定应用 ID 和窗口实例，用于后续 File HTTP API 请求；它不是管理员 token，不进入 URL、
 Cookie、localStorage 或应用持久配置。
 
+可信桌面页面通过同源 `POST /api/v1/host/instances` 为 active 应用创建实例。服务端要求
+请求的 `Origin` 精确等于 Desktop Origin，并校验 Fetch Metadata；第三方 App Origin
+不能读取响应。窗口卸载时桌面调用 `DELETE /api/v1/host/instances/current`，级联撤销该
+实例的全部句柄。File Service 未就绪时创建端点返回 `HOST_API_UNSUPPORTED`。
+
 ## 6. 本地状态
 
 File Service 使用独立 SQLite 数据库：
@@ -747,7 +752,8 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 - 每应用独立 origin；（已完成）
 - 安全消息桥；（v1 信封、大小/方法白名单、精确 origin 与 iframe source 校验已完成；
   文件能力 dispatcher 待接入）
-- 文件句柄；
+- 文件句柄；（内存注册表、实例绑定、读写权限、过期、级联撤销与容量上限已完成；
+  文件选择器签发流程待接入）
 - 传输 URL；
 - 文件选择器；
 - 保存对话框；

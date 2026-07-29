@@ -4,6 +4,10 @@ import {
   parseHostRequest,
   unsupportedResponse,
 } from "../hostApi/protocol";
+import {
+  closeHostInstance,
+  createHostInstance,
+} from "../hostApi/instanceClient";
 import type { AppDefinition } from "../types/desktop";
 import { openExternalApp } from "./openExternalApp";
 
@@ -13,7 +17,36 @@ interface IframeAppProps {
 
 export function IframeApp({ app }: IframeAppProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const instanceTokenRef = useRef<string | null>(null);
+  const windowInstanceIdRef = useRef(crypto.randomUUID());
   const appOrigin = app.url ? new URL(app.url).origin : null;
+
+  useEffect(() => {
+    const abortController = new AbortController();
+    void createHostInstance(
+      app.id,
+      windowInstanceIdRef.current,
+      abortController.signal,
+    )
+      .then((instance) => {
+        instanceTokenRef.current = instance?.instanceToken ?? null;
+      })
+      .catch((error: unknown) => {
+        if (
+          !(error instanceof DOMException && error.name === "AbortError")
+        ) {
+          instanceTokenRef.current = null;
+        }
+      });
+    return () => {
+      abortController.abort();
+      const instanceToken = instanceTokenRef.current;
+      instanceTokenRef.current = null;
+      if (instanceToken) {
+        void closeHostInstance(instanceToken);
+      }
+    };
+  }, [app.id]);
 
   useEffect(() => {
     if (!appOrigin) {

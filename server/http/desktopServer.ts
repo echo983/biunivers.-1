@@ -7,6 +7,10 @@ import type { InspectionService } from "../apps/inspectionService.js";
 import { projectInstalledApp } from "../apps/projection.js";
 import { createAdminAuth } from "../auth/adminAuth.js";
 import type { ServerConfig } from "../config.js";
+import {
+  FileCapabilityRegistry,
+  FileCapabilityError,
+} from "../files/fileCapabilityRegistry.js";
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
 
 interface DesktopServerDependencies {
@@ -16,6 +20,7 @@ interface DesktopServerDependencies {
   inspections?: InspectionService;
   appService?: AppService;
   fileServiceStatus?: FileServiceStatus;
+  fileCapabilities?: FileCapabilityRegistry;
 }
 
 export function createDesktopServer({
@@ -25,6 +30,7 @@ export function createDesktopServer({
   inspections,
   appService,
   fileServiceStatus,
+  fileCapabilities,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -44,6 +50,62 @@ export function createDesktopServer({
             projectInstalledApp(installed, config.appOrigin),
           ),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/host/instances", async (request, response, next) => {
+    try {
+      requireDesktopOrigin(request, config.desktopOrigin);
+      if (!fileCapabilities || fileServiceStatus?.mode !== "ready") {
+        throw new AppError(
+          "HOST_API_UNSUPPORTED",
+          "当前宿主尚未启用文件能力",
+          503,
+        );
+      }
+      const { appId, windowInstanceId } = request.body as Record<
+        string,
+        unknown
+      >;
+      if (typeof appId !== "string" || typeof windowInstanceId !== "string") {
+        throw new AppError(
+          "REQUEST_INVALID",
+          "appId 和 windowInstanceId 必须是字符串",
+        );
+      }
+      const state = await appStore.read();
+      if (
+        !state.apps.some(
+          (installed) =>
+            installed.appId === appId && installed.status === "active",
+        )
+      ) {
+        throw new AppError("APP_NOT_FOUND", "应用不存在或未启用", 404);
+      }
+      response
+        .status(201)
+        .set("Cache-Control", "no-store")
+        .json(fileCapabilities.createInstance(appId, windowInstanceId));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/host/instances/current", (request, response, next) => {
+    try {
+      requireDesktopOrigin(request, config.desktopOrigin);
+      if (!fileCapabilities) {
+        throw new AppError(
+          "HOST_API_UNSUPPORTED",
+          "当前宿主尚未启用文件能力",
+          503,
+        );
+      }
+      const instanceToken = readInstanceToken(request);
+      fileCapabilities.closeInstance(instanceToken);
+      response.set("Cache-Control", "no-store").status(204).end();
     } catch (error) {
       next(error);
     }
@@ -213,6 +275,16 @@ export function createDesktopServer({
         });
         return;
       }
+      if (error instanceof FileCapabilityError) {
+        response.status(error.code === "CAPABILITY_LIMIT_REACHED" ? 429 : 400)
+          .json({
+            error: {
+              code: error.code,
+              message: error.message,
+            },
+          });
+        return;
+      }
       console.error("Desktop server request failed", error);
       response.status(500).json({
         error: {
@@ -224,4 +296,35 @@ export function createDesktopServer({
   );
 
   return app;
+}
+
+function requireDesktopOrigin(
+  request: express.Request,
+  desktopOrigin: string,
+): void {
+  if (
+    request.get("origin") !== desktopOrigin ||
+    !["same-origin", "none", undefined].includes(
+      request.get("sec-fetch-site"),
+    )
+  ) {
+    throw new AppError(
+      "ORIGIN_FORBIDDEN",
+      "窗口实例只能由可信桌面页面创建",
+      403,
+    );
+  }
+}
+
+function readInstanceToken(request: express.Request): string {
+  const authorization = request.get("authorization");
+  const match = authorization?.match(/^Biunivers-Instance ([A-Za-z0-9_-]+)$/);
+  if (!match) {
+    throw new AppError(
+      "INSTANCE_TOKEN_REQUIRED",
+      "需要窗口实例凭据",
+      401,
+    );
+  }
+  return match[1];
 }
