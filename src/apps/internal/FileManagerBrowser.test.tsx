@@ -14,9 +14,17 @@ import {
   resetDirectoryLaunchBrokerForTests,
 } from "../../desktopSurface/directoryLaunchBroker";
 import { useDesktopSurfaceStore } from "../../desktopSurface/store";
+import type { FileTransferOptions } from "../../api/fileManagerTransfers";
+
+type UploadLocalFile = (
+  token: string,
+  parentEntryId: string,
+  file: File,
+  options?: FileTransferOptions,
+) => Promise<void>;
 
 const transferMocks = vi.hoisted(() => ({
-  uploadLocalFile: vi.fn(async () => {}),
+  uploadLocalFile: vi.fn<UploadLocalFile>(async () => {}),
   downloadFile: vi.fn(async () => {}),
 }));
 const windowMocks = vi.hoisted(() => ({
@@ -492,6 +500,10 @@ describe("FileManagerBrowser", () => {
         "a".repeat(43),
         rootId,
         localFile,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          onProgress: expect.any(Function),
+        }),
       ),
     );
     expect(
@@ -507,15 +519,68 @@ describe("FileManagerBrowser", () => {
           entryId: fileId,
           name: "note.txt",
         }),
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          onProgress: expect.any(Function),
+        }),
       ),
     );
     expect(
-      await screen.findByText("已开始下载“note.txt”。"),
+      await screen.findByText("已下载“note.txt”。"),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "关闭提示" }));
     expect(
-      screen.queryByText("已开始下载“note.txt”。"),
+      screen.queryByText("已下载“note.txt”。"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows transfer progress and cancels the active upload", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          revision: 3,
+          rootEntryId: rootId,
+          parent: {
+            entryId: rootId,
+            name: "",
+            kind: "directory",
+            mtimeMs: 0,
+          },
+          entries: [],
+        }),
+      ),
+    );
+    transferMocks.uploadLocalFile.mockImplementationOnce(
+      async (_token, _parent, file, options) => {
+        const transferOptions = options as {
+          signal: AbortSignal;
+          onProgress: (progress: { loaded: number; total: number }) => void;
+        };
+        transferOptions.onProgress({ loaded: 3, total: file.size });
+        await new Promise<void>((_resolve, reject) => {
+          transferOptions.signal.addEventListener("abort", () => {
+            reject(new DOMException("cancelled", "AbortError"));
+          });
+        });
+      },
+    );
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    await screen.findByText("此文件夹为空。");
+    await user.upload(
+      screen.getByLabelText("选择要上传的文件"),
+      new File(["123456"], "large.bin"),
+    );
+
+    expect(await screen.findByText(/正在上传 1\/1/)).toBeInTheDocument();
+    expect(screen.getByText("3 B / 6 B · 50%")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "上传进度" })).toHaveValue(
+      3,
+    );
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(await screen.findByText("上传已取消。")).toBeInTheDocument();
   });
 
   it("double-clicks a file into its unique handler", async () => {

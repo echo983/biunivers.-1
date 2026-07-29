@@ -14,8 +14,35 @@ describe("file manager transfers", () => {
     const file = new File(["hello"], "hello.txt", {
       type: "text/plain",
     });
+    const upload = new EventTarget();
+    const request = Object.assign(new EventTarget(), {
+      upload,
+      status: 0,
+      responseText: "",
+      open: vi.fn(),
+      setRequestHeader: vi.fn(),
+      send: vi.fn((body: File) => {
+        expect(body).toBe(file);
+        upload.dispatchEvent(
+          new ProgressEvent("progress", {
+            lengthComputable: true,
+            loaded: 5,
+            total: 5,
+          }),
+        );
+        request.status = 201;
+        request.dispatchEvent(new Event("load"));
+      }),
+      abort: vi.fn(),
+    });
+    class MockXMLHttpRequest {
+      constructor() {
+        return request;
+      }
+    }
+    vi.stubGlobal("XMLHttpRequest", MockXMLHttpRequest);
     const fetchMock = vi.fn(
-      async (input: string | URL | Request, init?: RequestInit) => {
+      async (input: string | URL | Request) => {
         const url = String(input);
         if (url === "/api/v1/host/save-handles") {
           return Response.json(
@@ -48,13 +75,6 @@ describe("file manager transfers", () => {
             { status: 201 },
           );
         }
-        if (url === "/api/v1/files/transfers/upload") {
-          expect(init).toMatchObject({
-            method: "PUT",
-            body: file,
-          });
-          return Response.json({ revision: 4 });
-        }
         if (url.includes("/api/v1/host/handles/")) {
           return new Response(null, { status: 204 });
         }
@@ -63,7 +83,8 @@ describe("file manager transfers", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await uploadLocalFile(instanceToken, "1".repeat(32), file);
+    const onProgress = vi.fn();
+    await uploadLocalFile(instanceToken, "1".repeat(32), file, { onProgress });
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/host/save-handles",
@@ -75,6 +96,16 @@ describe("file manager transfers", () => {
         }),
       }),
     );
+    expect(request.open).toHaveBeenCalledWith(
+      "PUT",
+      "/api/v1/files/transfers/upload",
+    );
+    expect(request.setRequestHeader).toHaveBeenCalledWith(
+      "Authorization",
+      `Biunivers-Instance ${instanceToken}`,
+    );
+    expect(request.send).toHaveBeenCalledWith(file);
+    expect(onProgress).toHaveBeenLastCalledWith({ loaded: 5, total: 5 });
   });
 
   it("downloads through a read handle and revokes the object URL", async () => {
@@ -134,16 +165,22 @@ describe("file manager transfers", () => {
       }),
     );
 
-    await downloadFile(instanceToken, {
-      entryId: "2".repeat(32),
-      name: "hello.txt",
-      kind: "file",
-      size: 5,
-      mtimeMs: 0,
-    });
+    const onProgress = vi.fn();
+    await downloadFile(
+      instanceToken,
+      {
+        entryId: "2".repeat(32),
+        name: "hello.txt",
+        kind: "file",
+        size: 5,
+        mtimeMs: 0,
+      },
+      { onProgress },
+    );
 
     expect(createObjectURL).toHaveBeenCalledOnce();
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test");
+    expect(onProgress).toHaveBeenLastCalledWith({ loaded: 5, total: 5 });
   });
 });

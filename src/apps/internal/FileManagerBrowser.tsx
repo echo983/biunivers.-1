@@ -72,6 +72,15 @@ interface OpenWithState {
   resolution: ResourceHandlerResolution;
 }
 
+interface TransferState {
+  kind: "upload" | "download";
+  name: string;
+  loaded: number;
+  total: number;
+  fileIndex?: number;
+  fileCount?: number;
+}
+
 export function FileManagerBrowser({
   instanceToken,
 }: FileManagerBrowserProps) {
@@ -86,10 +95,12 @@ export function FileManagerBrowser({
   const [editDialog, setEditDialog] = useState<EditDialog>(null);
   const [movingEntry, setMovingEntry] = useState<FileEntry>();
   const [notice, setNotice] = useState<string>();
+  const [transfer, setTransfer] = useState<TransferState>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const directoryNavigationPendingRef = useRef(false);
   const mutationPendingRef = useRef(false);
+  const transferAbortRef = useRef<AbortController | undefined>(undefined);
   const appRegistry = useDesktopStore((state) => state.apps);
   const defaultResourceHandlers = useDesktopStore(
     (state) => state.defaultResourceHandlers,
@@ -101,6 +112,13 @@ export function FileManagerBrowser({
     (state) => state.surface.items,
   );
   const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
+
+  useEffect(
+    () => () => {
+      transferAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -210,25 +228,53 @@ export function FileManagerBrowser({
 
   const uploadFiles = async (files: FileList) => {
     if (!listing) return;
+    const controller = new AbortController();
+    transferAbortRef.current = controller;
     setWorking(true);
     setError(undefined);
     setNotice(undefined);
     try {
-      for (const file of Array.from(files)) {
-        setNotice(`正在上传“${file.name}”…`);
+      const selectedFiles = Array.from(files);
+      for (const [index, file] of selectedFiles.entries()) {
+        setTransfer({
+          kind: "upload",
+          name: file.name,
+          loaded: 0,
+          total: file.size,
+          fileIndex: index + 1,
+          fileCount: selectedFiles.length,
+        });
         await uploadLocalFile(
           instanceToken,
           listing.parent.entryId,
           file,
+          {
+            signal: controller.signal,
+            onProgress: ({ loaded, total }) =>
+              setTransfer({
+                kind: "upload",
+                name: file.name,
+                loaded,
+                total,
+                fileIndex: index + 1,
+                fileCount: selectedFiles.length,
+              }),
+          },
         );
       }
       setNotice(`已上传 ${files.length} 个文件。`);
       refresh();
     } catch (reason) {
       setNotice(undefined);
-      setError(messageOf(reason));
+      if (isAbortError(reason)) {
+        setNotice("上传已取消。");
+      } else {
+        setError(messageOf(reason));
+      }
       refresh();
     } finally {
+      transferAbortRef.current = undefined;
+      setTransfer(undefined);
       setWorking(false);
       if (uploadInputRef.current) uploadInputRef.current.value = "";
     }
@@ -236,16 +282,39 @@ export function FileManagerBrowser({
 
   const downloadSelected = async () => {
     if (!selected || selected.kind !== "file") return;
+    const controller = new AbortController();
+    transferAbortRef.current = controller;
     setWorking(true);
     setError(undefined);
-    setNotice(`正在下载“${selected.name}”…`);
+    setNotice(undefined);
+    setTransfer({
+      kind: "download",
+      name: selected.name,
+      loaded: 0,
+      total: selected.size ?? 0,
+    });
     try {
-      await downloadFile(instanceToken, selected);
-      setNotice(`已开始下载“${selected.name}”。`);
+      await downloadFile(instanceToken, selected, {
+        signal: controller.signal,
+        onProgress: ({ loaded, total }) =>
+          setTransfer({
+            kind: "download",
+            name: selected.name,
+            loaded,
+            total,
+          }),
+      });
+      setNotice(`已下载“${selected.name}”。`);
     } catch (reason) {
       setNotice(undefined);
-      setError(messageOf(reason));
+      if (isAbortError(reason)) {
+        setNotice("下载已取消。");
+      } else {
+        setError(messageOf(reason));
+      }
     } finally {
+      transferAbortRef.current = undefined;
+      setTransfer(undefined);
       setWorking(false);
     }
   };
@@ -628,6 +697,12 @@ export function FileManagerBrowser({
             <span aria-hidden="true">×</span>
           </button>
         </div>
+      )}
+      {transfer && (
+        <TransferProgress
+          transfer={transfer}
+          onCancel={() => transferAbortRef.current?.abort()}
+        />
       )}
 
       <div className="file-manager-app__content">
@@ -1088,6 +1163,49 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function TransferProgress({
+  transfer,
+  onCancel,
+}: {
+  transfer: TransferState;
+  onCancel: () => void;
+}) {
+  const percentage =
+    transfer.total > 0
+      ? Math.min(100, Math.round((transfer.loaded / transfer.total) * 100))
+      : 0;
+  const action = transfer.kind === "upload" ? "上传" : "下载";
+  const sequence =
+    transfer.fileIndex && transfer.fileCount
+      ? ` ${transfer.fileIndex}/${transfer.fileCount}`
+      : "";
+  return (
+    <div className="file-manager-app__transfer" role="status">
+      <div>
+        <span>
+          正在{action}{sequence}：“{transfer.name}”
+        </span>
+        <span>
+          {formatSize(transfer.loaded)} / {formatSize(transfer.total)}
+          {transfer.total > 0 ? ` · ${percentage}%` : ""}
+        </span>
+      </div>
+      <progress
+        aria-label={`${action}进度`}
+        max={transfer.total > 0 ? transfer.total : undefined}
+        value={transfer.total > 0 ? transfer.loaded : undefined}
+      />
+      <button type="button" onClick={onCancel}>
+        取消
+      </button>
+    </div>
+  );
+}
+
+function isAbortError(reason: unknown): boolean {
+  return reason instanceof DOMException && reason.name === "AbortError";
 }
 
 function formatDate(value: number): string {
