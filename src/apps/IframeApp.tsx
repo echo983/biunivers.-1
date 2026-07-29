@@ -29,12 +29,16 @@ import {
   OPEN_RESOURCE_PROTOCOL,
   parseOpenResourceRequest,
 } from "../openResource/protocol";
+import { useDesktopStore } from "../store/desktopStore";
 
 interface IframeAppProps {
   app: AppDefinition;
 }
 
 export function IframeApp({ app }: IframeAppProps) {
+  const isActive = useDesktopStore(
+    (state) => state.activeAppId === app.id,
+  );
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const instanceTokenRef = useRef<string | null>(null);
   const instanceReadyRef = useRef<Promise<string | null>>(
@@ -278,6 +282,13 @@ export function IframeApp({ app }: IframeAppProps) {
         title={app.name}
         onLoad={notifyResourceAvailable}
       />
+      {!isActive && (
+        <div
+          className="iframe-app__activation-shield"
+          data-testid="iframe-activation-shield"
+          aria-hidden="true"
+        />
+      )}
       {picker ? (
         <HostFilePicker
           instanceToken={picker.instanceToken}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppDefinition } from "../types/desktop";
 import {
@@ -7,6 +7,7 @@ import {
   resetResourceLaunchBrokerForTests,
 } from "../openResource/launchBroker";
 import { OpenResourceClientError } from "../openResource/openResourceClient";
+import { useDesktopStore } from "../store/desktopStore";
 
 const mocks = vi.hoisted(() => ({
   claimResourceLaunch: vi.fn(),
@@ -60,6 +61,7 @@ function request(iframe: HTMLIFrameElement, origin = "http://notes.localhost:808
 
 describe("IframeApp Open Resource delivery", () => {
   beforeEach(() => {
+    useDesktopStore.setState({ activeAppId: null });
     resetResourceLaunchBrokerForTests();
     mocks.createHostInstance.mockResolvedValue({
       instanceToken: "i".repeat(43),
@@ -77,6 +79,19 @@ describe("IframeApp Open Resource delivery", () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("shields an inactive iframe and exposes it after activation", async () => {
+    render(<IframeApp app={app} />);
+    expect(screen.getByTestId("iframe-activation-shield")).toBeInTheDocument();
+
+    act(() => useDesktopStore.getState().setActiveApp(app.id));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId("iframe-activation-shield"),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("notifies an existing iframe and returns a claimed context", async () => {
