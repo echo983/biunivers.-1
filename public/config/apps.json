@@ -1,19 +1,5 @@
 [
   {
-    "id": "transmission",
-    "name": "Transmission",
-    "kind": "iframe",
-    "icon": "/icons/transmission.svg",
-    "url": "/services/transmission/",
-    "defaultWidth": 1100,
-    "defaultHeight": 720,
-    "minWidth": 700,
-    "minHeight": 450,
-    "desktop": true,
-    "pinned": true,
-    "trusted": true
-  },
-  {
     "id": "github",
     "name": "GitHub",
     "kind": "external",

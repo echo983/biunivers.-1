@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
   await expect(
     page
       .getByRole("group", { name: "桌面应用" })
-      .getByRole("button", { name: "Transmission" }),
+      .getByRole("button", { name: "文件" }),
   ).toBeVisible();
 });
 
