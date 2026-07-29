@@ -7,4 +7,5 @@ test-results/
 *.tsbuildinfo
 *.log
 target/
+/secret/
 .DS_Store

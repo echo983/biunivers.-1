@@ -194,7 +194,11 @@ list(prefix)  // 仅诊断和 GC 报告
 
 仓库内 `server/files/objectStore.ts` 是该合约的 TypeScript 边界；
 `LocalWormObjectStore` 使用同文件系统硬链接完成 create-only 原子发布，仅用于本地开发和
-合约测试。生产 S3 适配器必须通过同一套合约测试，不能因为后端不同而放宽不可变语义。
+合约测试。`S3WormObjectStore` 使用 `If-None-Match: *` 条件创建，并在对象已存在时完整
+比对字节。生产 S3 适配器必须通过同一套合约测试，不能因为后端不同而放宽不可变语义。
+
+2026-07-29 已在 Cloudflare R2 的真实隔离前缀上验证 create-only、幂等去重、冲突拒绝、
+get、head 和 list。真实测试只从环境变量读取配置；`secret/` 目录整体被 Git 忽略。
 
 其中 `create` 必须满足：
 

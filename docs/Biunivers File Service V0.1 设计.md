@@ -16,8 +16,8 @@ S3 兼容后端。
 施工准入项：
 
 - [x] 冻结 Deterministic CBOR 字段编号和黄金向量；
-- [ ] 实现并验证严格 WORM ObjectStore 适配器合约（合约与本地原子适配器已完成，
-  S3 适配器待实现）；
+- [x] 实现并验证严格 WORM ObjectStore 适配器合约（本地原子适配器、S3 条件创建适配器、
+  模拟测试和真实 S3 兼容桶合约测试均已通过）；
 - 完成每应用独立 origin 设计与本地开发方案；
 - 确定 SQLite RefStore 备份和恢复操作；
 - [ ] 冻结 PVLog Core WASM ABI、内存上限和基准测试方法（ABI v1 候选与
