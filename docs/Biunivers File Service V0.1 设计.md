@@ -13,13 +13,14 @@ S3 兼容后端。
 
 本设计不把 S3、FID、Head、Segment、Manifest 或 Chunk 暴露给第三方应用。
 
-进入施工前仍须完成：
+施工准入项：
 
-- 冻结 Deterministic CBOR 字段编号和黄金向量；
+- [x] 冻结 Deterministic CBOR 字段编号和黄金向量；
 - 实现并验证严格 WORM ObjectStore 适配器合约；
 - 完成每应用独立 origin 设计与本地开发方案；
 - 确定 SQLite RefStore 备份和恢复操作；
-- 冻结 PVLog Core WASM ABI、内存上限和基准测试方法。
+- [ ] 冻结 PVLog Core WASM ABI、内存上限和基准测试方法（ABI v1 候选与
+  128 MiB 线性内存上限已经落地，待解码/回放接口和基准结果）。
 
 ## 2. 目标
 
@@ -692,6 +693,9 @@ validate_checkpoint(checkpoint)
 - 所有返回缓冲区有明确所有权和释放规则；
 - 任何相同输入在支持的平台上产生完全相同的 CBOR 和 FID；
 - Rust 原生测试和 WASM 测试运行同一套黄金向量。
+
+ABI v1 候选规定单次跨 ABI 输入最大 4 MiB，大输入必须分段调用增量接口；编码对象最大
+32 MiB；WASM 最大线性内存为 128 MiB。三个上限必须在基准和恶意输入测试后才能正式冻结。
 
 ### 18.3 性能与鲁棒性判断
 

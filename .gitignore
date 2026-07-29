@@ -6,4 +6,5 @@ playwright-report/
 test-results/
 *.tsbuildinfo
 *.log
+target/
 .DS_Store
