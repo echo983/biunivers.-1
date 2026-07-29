@@ -721,9 +721,12 @@ function MoveDialog({
   const [stack, setStack] = useState<Breadcrumb[]>([]);
   const [listing, setListing] = useState<DirectoryListing>();
   const [error, setError] = useState<string>();
+  const [loading, setLoading] = useState(true);
+  const navigationPendingRef = useRef(false);
 
   useEffect(() => {
     let active = true;
+    setLoading(true);
     void listFiles(instanceToken, directoryId)
       .then((value) => {
         if (active) {
@@ -733,6 +736,12 @@ function MoveDialog({
       })
       .catch((reason: unknown) => {
         if (active) setError(messageOf(reason));
+      })
+      .finally(() => {
+        if (active) {
+          navigationPendingRef.current = false;
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -740,14 +749,38 @@ function MoveDialog({
   }, [directoryId, instanceToken]);
 
   const navigate = (index: number) => {
-    if (index < 0) {
-      setStack([]);
-      setDirectoryId(undefined);
+    const next = index < 0 ? [] : stack.slice(0, index + 1);
+    const targetDirectoryId = next.at(-1)?.entryId;
+    if (
+      navigationPendingRef.current ||
+      targetDirectoryId === directoryId
+    ) {
       return;
     }
-    const next = stack.slice(0, index + 1);
+    navigationPendingRef.current = true;
+    setLoading(true);
+    setListing(undefined);
     setStack(next);
-    setDirectoryId(next.at(-1)?.entryId);
+    setDirectoryId(targetDirectoryId);
+  };
+
+  const enterDirectory = (item: FileEntry) => {
+    if (
+      item.kind !== "directory" ||
+      navigationPendingRef.current ||
+      item.entryId === directoryId
+    ) {
+      return;
+    }
+    navigationPendingRef.current = true;
+    setLoading(true);
+    setListing(undefined);
+    setStack((current) =>
+      current.at(-1)?.entryId === item.entryId
+        ? current
+        : [...current, { entryId: item.entryId, name: item.name }],
+    );
+    setDirectoryId(item.entryId);
   };
 
   return (
@@ -780,13 +813,8 @@ function MoveDialog({
               <li key={item.entryId}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setStack((current) => [
-                      ...current,
-                      { entryId: item.entryId, name: item.name },
-                    ]);
-                    setDirectoryId(item.entryId);
-                  }}
+                  disabled={loading}
+                  onClick={() => enterDirectory(item)}
                 >
                   📁 {item.name}
                 </button>
@@ -802,6 +830,7 @@ function MoveDialog({
             type="button"
             disabled={
               working ||
+              loading ||
               !listing ||
               listing.parent.entryId === originalParentEntryId
             }

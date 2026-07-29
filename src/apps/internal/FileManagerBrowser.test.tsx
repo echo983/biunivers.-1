@@ -233,9 +233,20 @@ describe("FileManagerBrowser", () => {
     const moveDialog = screen.getByRole("dialog", {
       name: "移动“note.txt”",
     });
-    await user.click(
-      within(moveDialog).getByRole("button", { name: "📁 Documents" }),
-    );
+    const targetDirectory = within(moveDialog).getByRole("button", {
+      name: "📁 Documents",
+    });
+    act(() => {
+      targetDirectory.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+      targetDirectory.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      );
+    });
+    expect(
+      within(moveDialog).getAllByRole("button", { name: "Documents" }),
+    ).toHaveLength(1);
     const moveHere = within(moveDialog).getByRole("button", {
       name: "移动到这里",
     });
