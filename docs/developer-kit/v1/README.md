@@ -216,15 +216,27 @@ Biunivers 负责：
 - 更新、停用和卸载应用。
 
 支持 File Service 的宿主还可以选择提供独立的
-[`biunivers.host-api/1`](<../../protocols/Biunivers Host API v1.md>)。它不属于静态应用
-安装协议，应用必须先检测能力，并能处理 `HOST_API_UNSUPPORTED`。不使用文件能力的应用无需
-接入 Host API。
+[`biunivers.resource-session/1`](BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md)。新应用应
+优先使用它完成文件选择、重复读取、Range 读取、续租和保存。使用时把
+`BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md` 原文复制到应用仓库根目录，并先调用
+`resource.getCapabilities`。不使用文件能力的应用无需接入。
+
+可以从
+[`resource-session-client.example.js`](resource-session-client.example.js)
+复制最小客户端，并用
+[`biunivers.resource-session.message.schema.json`](biunivers.resource-session.message.schema.json)
+检查请求信封。示例覆盖启动资源领取、主动选取、完整/Range GET、PUT、续租与释放。
+
+旧应用仍可使用冻结兼容接口
+[`biunivers.host-api/1`](<../../protocols/Biunivers Host API v1.md>)，但新应用不应基于其
+一次性完整 transfer 模型设计大文件或媒体播放功能。
 
 ## 声明可以打开文件
 
 需要从文件管理器接收文件的应用可以选择接入
 [`biunivers.open-resource/1`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md)。它不会自动授予
-文件权限，也不会自动把应用设为默认程序。
+文件权限，也不会自动把应用设为默认程序。领取文件后，新应用使用 Resource Session；
+旧应用仍可使用 Host API。
 
 仓库根目录另外放置：
 

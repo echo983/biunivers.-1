@@ -41,6 +41,7 @@ interface InspectionServiceOptions {
   source: RepositorySource;
   validator: ManifestValidator;
   openResourceValidator: OpenResourceValidator;
+  resourceSessionProtocolBytes?: Buffer;
   appStore: AppStore;
   dataDir: string;
   maxAppBytes: number;
@@ -272,6 +273,23 @@ export class InspectionService {
             );
           }
           throw error;
+        }
+      }
+
+      const resourceSessionProtocolPath = await optionalRegularFile(
+        prepared.rootDir,
+        "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md",
+      );
+      if (resourceSessionProtocolPath) {
+        const expected = this.options.resourceSessionProtocolBytes;
+        if (
+          !expected ||
+          !(await readFile(resourceSessionProtocolPath)).equals(expected)
+        ) {
+          throw new AppError(
+            "RESOURCE_SESSION_PROTOCOL_MISMATCH",
+            "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md 不是宿主支持的协议原文",
+          );
         }
       }
 

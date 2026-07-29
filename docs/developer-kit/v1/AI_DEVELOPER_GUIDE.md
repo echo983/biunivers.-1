@@ -25,8 +25,9 @@
 - 协议原文固定为仓库根目录 `BIUNIVERS_APP_PROTOCOL_V1.md`；
 - 开源许可证固定放在仓库根目录 `LICENSE`；
 - Biunivers 不执行第三方构建命令；
-- Static App Protocol v1 不定义 Host API；需要文件能力时只能按独立的
-  `biunivers.host-api/1` 接入，并处理宿主不支持的情况；
+- Static App Protocol v1 不定义文件 API；新应用需要文件能力时优先按独立的
+  `biunivers.resource-session/1` 接入，并处理不支持、会话过期和版本冲突；
+- 只有兼容旧应用时才使用冻结的 `biunivers.host-api/1`；
 - 需要从文件管理器接收文件时，只能按可选的 `biunivers.open-resource/1` 声明 Handler
   并领取 Launch Context；
 - 配置会暴露给浏览器，不能包含 secret。

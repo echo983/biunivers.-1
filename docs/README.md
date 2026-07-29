@@ -36,6 +36,7 @@ Static App、Manifest 和 Management Protocol v1 仍保持发布候选/草案状
 | [File Service V0.1 首轮验收](<acceptance/File Service V0.1 首轮验收.md>) | 已通过 | 真实 R2、记事本、分片、重启、备份恢复和 GC 验收证据 |
 | [File Service RefStore 备份恢复](<runbooks/File Service RefStore 备份恢复.md>) | 当前运维手册 | SQLite 在线备份、恢复、内容扫描和只读 GC |
 | [Biunivers Host API v1](<protocols/Biunivers Host API v1.md>) | 已实现 | 第三方应用文件选择、读写传输、元数据、释放和冲突语义 |
+| [Biunivers Resource Session Protocol v1](<developer-kit/v1/BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md>) | 施工中 | 主推的可续租资源会话、重复 GET、Range 读取和完整保存 |
 
 Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的冻结原文，因此原文中
 “V1 不提供 Host API”保留其发布时语境，不做原地修改。V0.3 文件能力由独立、可选的

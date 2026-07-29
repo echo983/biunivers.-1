@@ -68,6 +68,17 @@
 - [ ] Open Resource 协议文件是官方原文，没有改写
 - [ ] 根目录存在 `biunivers.open-resource.json`
 - [ ] 声明通过 `biunivers.open-resource.schema.json`
+
+## 使用 Resource Session 时
+
+- [ ] 根目录存在 `BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`
+- [ ] 协议文件与开发包原文逐字节一致
+- [ ] 应用先检测 `resource.getCapabilities`
+- [ ] 应用约每 60 秒批量续租仍使用的会话
+- [ ] 应用在关闭资源时调用 `resource.release`
+- [ ] GET/PUT 同时携带实例凭据和资源会话请求头
+- [ ] 应用处理 206、416、会话过期、撤销和版本冲突
+- [ ] 大文件和媒体读取使用单区间 Range，而不是一次读取全部内容
 - [ ] Handler ID 在应用内唯一且更新时保持稳定
 - [ ] 扩展名为小写且带前导点
 - [ ] 声明 `edit` 的 Handler 使用 `read-write`

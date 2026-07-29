@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { AppService } from "./apps/appService.js";
 import { AppStore } from "./apps/appStore.js";
@@ -69,6 +70,14 @@ async function main() {
     source,
     validator,
     openResourceValidator,
+    resourceSessionProtocolBytes: await readFile(
+      resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md",
+      ),
+    ),
     appStore,
     dataDir: config.dataDir,
     maxAppBytes: config.maxAppBytes,
