@@ -867,6 +867,75 @@ pub fn encode_segment(segment: &Segment) -> Vec<u8> {
     encoder.finish()
 }
 
+pub fn combine_segments_packed(packed: &[u8]) -> Result<Vec<u8>, String> {
+    fn read_u32(packed: &[u8], offset: &mut usize) -> Result<u32, String> {
+        let end = offset
+            .checked_add(4)
+            .ok_or_else(|| "packed segment offset overflow".to_string())?;
+        let bytes: [u8; 4] = packed
+            .get(*offset..end)
+            .ok_or_else(|| "packed segments are truncated".to_string())?
+            .try_into()
+            .map_err(|_| "packed segment length is invalid".to_string())?;
+        *offset = end;
+        Ok(u32::from_be_bytes(bytes))
+    }
+    if packed.len() > MAX_ABI_INPUT_BYTES {
+        return Err("packed segments exceed 4 MiB ABI call limit".into());
+    }
+    let mut offset = 0usize;
+    let count = usize::try_from(read_u32(packed, &mut offset)?)
+        .map_err(|_| "packed segment count is invalid".to_string())?;
+    if count == 0 || count > 10_000 {
+        return Err("packed segment count must be 1 to 10000".into());
+    }
+    let mut segments = Vec::with_capacity(count);
+    for _ in 0..count {
+        let length = usize::try_from(read_u32(packed, &mut offset)?)
+            .map_err(|_| "packed segment length is invalid".to_string())?;
+        let end = offset
+            .checked_add(length)
+            .ok_or_else(|| "packed segment offset overflow".to_string())?;
+        let bytes = packed
+            .get(offset..end)
+            .ok_or_else(|| "packed segments are truncated".to_string())?;
+        offset = end;
+        let segment = decode_segment(bytes)?;
+        if segment.operations.len() != 1 {
+            return Err("each source Segment must contain exactly one operation".into());
+        }
+        segments.push(segment);
+    }
+    if offset != packed.len() {
+        return Err("packed segments contain trailing bytes".into());
+    }
+    let first = segments
+        .first()
+        .cloned()
+        .ok_or_else(|| "packed segments are empty".to_string())?;
+    let mut operations = Vec::with_capacity(count);
+    for segment in segments {
+        if segment.lineage_id != first.lineage_id
+            || segment.base_head != first.base_head
+            || segment.previous_segment != first.previous_segment
+            || segment.revision != first.revision
+            || segment.transaction_id != first.transaction_id
+            || segment.created_at_ms != first.created_at_ms
+            || segment.writer_id != first.writer_id
+        {
+            return Err("source Segment transaction headers do not match".into());
+        }
+        operations.extend(segment.operations);
+    }
+    let combined = Segment {
+        operations,
+        ..first
+    };
+    let bytes = encode_segment(&combined);
+    decode_segment(&bytes)?;
+    Ok(bytes)
+}
+
 pub fn decode_segment(bytes: &[u8]) -> Result<Segment, String> {
     let mut decoder = Decoder::new(bytes)?;
     decoder.map(10)?;
@@ -1339,8 +1408,9 @@ mod wasm {
     use super::{
         ABI_VERSION, Checkpoint, CheckpointRef, ChunkRef, Entry, EntryId, EntryKind, Fid, Head,
         IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest, Operation, Segment, apply_segment,
-        decode_checkpoint, decode_head, decode_manifest, decode_segment, encode_checkpoint,
-        encode_head, encode_manifest, encode_segment, fid_bytes, fid_hex, validate_entry_id,
+        combine_segments_packed, decode_checkpoint, decode_head, decode_manifest, decode_segment,
+        encode_checkpoint, encode_head, encode_manifest, encode_segment, fid_bytes, fid_hex,
+        validate_entry_id,
     };
     use wasm_bindgen::prelude::*;
 
@@ -1422,10 +1492,7 @@ mod wasm {
     #[wasm_bindgen(js_name = headParentFid)]
     pub fn head_parent_fid_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
         decode_head(bytes)
-            .map(|head| {
-                head.parent_head
-                    .map_or_else(Vec::new, |fid| fid.0.to_vec())
-            })
+            .map(|head| head.parent_head.map_or_else(Vec::new, |fid| fid.0.to_vec()))
             .map_err(|error| JsError::new(&error))
     }
 
@@ -1748,6 +1815,11 @@ mod wasm {
         validated_segment_bytes(segment)
     }
 
+    #[wasm_bindgen(js_name = combineSegmentsPacked)]
+    pub fn combine_segments_packed_wasm(packed: &[u8]) -> Result<Vec<u8>, JsError> {
+        combine_segments_packed(packed).map_err(|error| JsError::new(&error))
+    }
+
     #[wasm_bindgen(js_name = applySegment)]
     pub fn apply_segment_wasm(
         checkpoint_bytes: &[u8],
@@ -1970,6 +2042,55 @@ mod tests {
         hasher.update(b"Biu");
         hasher.update(b"nivers");
         assert_eq!(hasher.finish_hex(), fid_hex(b"Biunivers"));
+    }
+
+    #[test]
+    fn packed_segments_combine_only_matching_transaction_headers() {
+        fn pack(segments: &[Vec<u8>]) -> Vec<u8> {
+            let mut packed = Vec::new();
+            packed.extend_from_slice(&(segments.len() as u32).to_be_bytes());
+            for segment in segments {
+                packed.extend_from_slice(&(segment.len() as u32).to_be_bytes());
+                packed.extend_from_slice(segment);
+            }
+            packed
+        }
+        let base = Segment {
+            lineage_id: bytes(1),
+            base_head: Fid(bytes(2)),
+            previous_segment: Some(Fid(bytes(3))),
+            revision: 7,
+            transaction_id: bytes(4),
+            created_at_ms: 100,
+            writer_id: "test".into(),
+            operations: vec![Operation::MoveEntry {
+                entry_id: EntryId(bytes(5)),
+                new_parent_id: EntryId(bytes(6)),
+                new_name: "Moved".into(),
+            }],
+        };
+        let second = Segment {
+            operations: vec![Operation::RemoveEntry {
+                entry_id: EntryId(bytes(7)),
+                recursive: true,
+            }],
+            ..base.clone()
+        };
+        let combined =
+            combine_segments_packed(&pack(&[encode_segment(&base), encode_segment(&second)]))
+                .unwrap();
+        assert_eq!(decode_segment(&combined).unwrap().operations.len(), 2);
+
+        let mismatched = Segment {
+            revision: 8,
+            ..second
+        };
+        assert!(
+            combine_segments_packed(&pack(
+                &[encode_segment(&base), encode_segment(&mismatched),]
+            ))
+            .is_err()
+        );
     }
 
     #[test]

@@ -305,6 +305,9 @@ describe("desktop and app origins", () => {
           copyFile,
           moveEntry: vi.fn(),
           removeEntry: vi.fn(),
+          moveEntries: vi.fn(),
+          copyEntries: vi.fn(),
+          removeEntries: vi.fn(),
         },
       }).listen(0, "127.0.0.1"),
     );

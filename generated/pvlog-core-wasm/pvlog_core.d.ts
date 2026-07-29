@@ -15,6 +15,8 @@ export function applySegment(checkpoint_bytes: Uint8Array, segment_bytes: Uint8A
 
 export function checkpointEntriesPacked(bytes: Uint8Array): Uint8Array;
 
+export function combineSegmentsPacked(packed: Uint8Array): Uint8Array;
+
 export function encodeAdvancedHead(previous_head_bytes: Uint8Array, segment_fid: Uint8Array, checkpoint_fid: Uint8Array, created_at_ms: bigint, writer_id: string): Uint8Array;
 
 export function encodeCreateDirectorySegment(lineage_id: Uint8Array, base_head_fid: Uint8Array, previous_segment_fid: Uint8Array, revision: bigint, transaction_id: Uint8Array, created_at_ms: bigint, writer_id: string, entry_id: Uint8Array, parent_id: Uint8Array, name: string, mtime_ms: bigint): Uint8Array;

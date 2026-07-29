@@ -55,6 +55,104 @@ afterEach(() => {
 });
 
 describe("FileManagerBrowser", () => {
+  it("Shift-selects a range without browser text selection and submits one batch move", async () => {
+    const user = userEvent.setup();
+    const firstId = "4".repeat(32);
+    const secondId = "5".repeat(32);
+    const mutations: Array<{ url: string; body: string }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.startsWith("/api/v1/host/files")) {
+          const nested = url.includes(`parent=${directoryId}`);
+          return Response.json({
+            revision: 3,
+            rootEntryId: rootId,
+            parent: {
+              entryId: nested ? directoryId : rootId,
+              name: nested ? "Documents" : "",
+              kind: "directory",
+              mtimeMs: 0,
+            },
+            entries: nested
+              ? []
+              : [
+                  {
+                    entryId: directoryId,
+                    name: "Documents",
+                    kind: "directory",
+                    mtimeMs: 0,
+                  },
+                  {
+                    entryId: firstId,
+                    name: "first.txt",
+                    kind: "file",
+                    size: 1,
+                    mtimeMs: 0,
+                  },
+                  {
+                    entryId: secondId,
+                    name: "second.txt",
+                    kind: "file",
+                    size: 1,
+                    mtimeMs: 0,
+                  },
+                ],
+          });
+        }
+        mutations.push({
+          url,
+          body: typeof init?.body === "string" ? init.body : "",
+        });
+        return Response.json({
+          entryIds: [firstId, secondId],
+          revision: 4,
+        });
+      }),
+    );
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    await user.click(await screen.findByText("first.txt"));
+    const secondRow = screen.getByText("second.txt").closest("tr");
+    expect(secondRow).not.toBeNull();
+    expect(
+      secondRow!.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          shiftKey: true,
+        }),
+      ),
+    ).toBe(false);
+    await user.keyboard("{Shift>}");
+    await user.click(screen.getByText("second.txt"));
+    await user.keyboard("{/Shift}");
+
+    expect(screen.getByRole("status")).toHaveTextContent("已选择 2 项");
+    expect(screen.getByRole("button", { name: "重命名" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "移动" }));
+    const dialog = screen.getByRole("dialog", { name: "移动 2 项" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "📁 Documents" }),
+    );
+    const moveHere = within(dialog).getByRole("button", {
+      name: "移动到这里",
+    });
+    await waitFor(() => expect(moveHere).toBeEnabled());
+    await user.click(moveHere);
+
+    await waitFor(() => expect(mutations).toHaveLength(1));
+    expect(mutations[0]).toEqual({
+      url: "/api/v1/internal/files/batch/move",
+      body: JSON.stringify({
+        entryIds: [firstId, secondId],
+        newParentEntryId: directoryId,
+        expectedRevision: 3,
+      }),
+    });
+  });
+
   it("shows the complete launched desktop directory ancestry", async () => {
     vi.stubGlobal(
       "fetch",

@@ -44,6 +44,9 @@ type InternalFileManagerExecutor = Pick<
   | "copyFile"
   | "moveEntry"
   | "removeEntry"
+  | "moveEntries"
+  | "copyEntries"
+  | "removeEntries"
 >;
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 type OpenResourceLaunchExecutor = Pick<
@@ -876,6 +879,110 @@ export function createDesktopServer({
               request.params.entryId,
               { recursive, expectedRevision },
             ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/files/batch/move",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { entryIds, newParentEntryId, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(entryIds) ||
+          typeof newParentEntryId !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds、newParentEntryId 和 expectedRevision 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.moveEntries(instanceToken, {
+              entryIds: entryIds as string[],
+              newParentEntryId,
+              expectedRevision,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/files/batch/copy",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { entryIds, newParentEntryId, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(entryIds) ||
+          typeof newParentEntryId !== "string" ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds、newParentEntryId 和 expectedRevision 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.copyEntries(instanceToken, {
+              entryIds: entryIds as string[],
+              newParentEntryId,
+              expectedRevision,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/files/batch/remove",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalFileManager(
+          request,
+          config,
+          internalFileManager,
+        );
+        const { entryIds, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (!Array.isArray(entryIds) || !isRevision(expectedRevision)) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds 和 expectedRevision 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.removeEntries(instanceToken, {
+              entryIds: entryIds as string[],
+              expectedRevision,
+            }),
           );
       } catch (error) {
         next(error);

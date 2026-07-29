@@ -188,4 +188,84 @@ describe("InternalFileManagerService", () => {
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     genesis.store.close();
   });
+
+  it("copies, moves and removes multiple entries with one revision each", async () => {
+    const { repository, genesis, service, instanceToken } = await setup();
+    const source = await service.createDirectory(instanceToken, {
+      parentEntryId: genesis.rootEntryIdHex,
+      name: "Source",
+      expectedRevision: 0,
+    });
+    const destination = await service.createDirectory(instanceToken, {
+      parentEntryId: genesis.rootEntryIdHex,
+      name: "Destination",
+      expectedRevision: 1,
+    });
+    const file = await service.createFile(instanceToken, {
+      parentEntryId: source.entryId,
+      name: "note.txt",
+      expectedRevision: 2,
+    });
+    const nested = await service.createDirectory(instanceToken, {
+      parentEntryId: source.entryId,
+      name: "Nested",
+      expectedRevision: 3,
+    });
+    const nestedFile = await service.createFile(instanceToken, {
+      parentEntryId: nested.entryId,
+      name: "deep.txt",
+      expectedRevision: 4,
+    });
+
+    const copied = await service.copyEntries(instanceToken, {
+      entryIds: [source.entryId, nestedFile.entryId],
+      newParentEntryId: destination.entryId,
+      expectedRevision: 5,
+    });
+    expect(copied.revision).toBe(6);
+    expect(copied.entryIds).toHaveLength(1);
+    let index = await loadCurrentEntryIndex(repository, genesis.store);
+    const copiedRoot = index.get(copied.entryIds[0]);
+    expect(copiedRoot).toMatchObject({
+      name: "Source",
+      kind: "directory",
+      parentEntryIdHex: destination.entryId,
+    });
+    const copiedFile = index
+      .listChildren(copiedRoot!.entryIdHex)
+      .find((entry) => entry.name === "note.txt");
+    const copiedNested = index
+      .listChildren(copiedRoot!.entryIdHex)
+      .find((entry) => entry.name === "Nested");
+    expect(copiedFile?.content).toEqual(index.get(file.entryId)?.content);
+    expect(
+      index
+        .listChildren(copiedNested!.entryIdHex)
+        .some((entry) => entry.name === "deep.txt"),
+    ).toBe(true);
+
+    const moved = await service.moveEntries(instanceToken, {
+      entryIds: [file.entryId, nested.entryId],
+      newParentEntryId: destination.entryId,
+      expectedRevision: 6,
+    });
+    expect(moved.revision).toBe(7);
+    index = await loadCurrentEntryIndex(repository, genesis.store);
+    expect(index.get(file.entryId)?.parentEntryIdHex).toBe(destination.entryId);
+    expect(index.get(nested.entryId)?.parentEntryIdHex).toBe(
+      destination.entryId,
+    );
+
+    const removed = await service.removeEntries(instanceToken, {
+      entryIds: [copiedRoot!.entryIdHex, copiedNested!.entryIdHex],
+      expectedRevision: 7,
+    });
+    expect(removed).toEqual({
+      entryIds: [copiedRoot!.entryIdHex],
+      revision: 8,
+    });
+    index = await loadCurrentEntryIndex(repository, genesis.store);
+    expect(index.has(copiedRoot!.entryIdHex)).toBe(false);
+    genesis.store.close();
+  });
 });
