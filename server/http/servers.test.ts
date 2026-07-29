@@ -421,6 +421,59 @@ describe("desktop and app origins", () => {
     );
   });
 
+  it("streams internal ZIP exports with snapshot metadata and safe headers", async () => {
+    const dependencies = await createDependencies();
+    const createZipExport = vi.fn(async () => ({
+      fileName: "资料.zip",
+      revision: 7,
+      entryCount: 3,
+      archive: {
+        size: 5,
+        stream: (async function* () {
+          yield Buffer.from("he");
+          yield Buffer.from("llo");
+        })(),
+      },
+    }));
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        internalZipExporter: { createZipExport },
+      }).listen(0, "127.0.0.1"),
+    );
+
+    const response = await fetch(
+      `${origin}/api/v1/internal/files/exports/zip`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          entryIds: ["11".repeat(16)],
+          expectedRevision: 7,
+        }),
+      },
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/zip");
+    expect(response.headers.get("content-length")).toBe("5");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-biunivers-export-entries")).toBe("3");
+    expect(response.headers.get("content-disposition")).toContain(
+      "filename*=UTF-8''%E8%B5%84%E6%96%99.zip",
+    );
+    await expect(response.text()).resolves.toBe("hello");
+    expect(createZipExport).toHaveBeenCalledWith("a".repeat(43), {
+      entryIds: ["11".repeat(16)],
+      expectedRevision: 7,
+    });
+  });
+
   it("protects and validates internal resource handler resolution", async () => {
     const dependencies = await createDependencies();
     const resolveHandlers = vi.fn(async () => ({

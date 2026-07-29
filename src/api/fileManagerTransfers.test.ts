@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { downloadFile, uploadLocalFile } from "./fileManagerTransfers";
+import {
+  downloadFile,
+  downloadZip,
+  uploadLocalFile,
+} from "./fileManagerTransfers";
 
 const instanceToken = "a".repeat(43);
 const handleId = "b".repeat(43);
@@ -182,5 +186,63 @@ describe("file manager transfers", () => {
     expect(click).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:test");
     expect(onProgress).toHaveBeenLastCalledWith({ loaded: 5, total: 5 });
+  });
+
+  it("downloads a selected directory as one ZIP with progress", async () => {
+    const createObjectURL = vi.fn(() => "blob:zip");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    let savedName = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(
+      function (this: HTMLAnchorElement) {
+        savedName = this.download;
+      },
+    );
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        expect(init).toMatchObject({
+          method: "POST",
+          body: JSON.stringify({
+            entryIds: ["3".repeat(32)],
+            expectedRevision: 9,
+          }),
+        });
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          `Biunivers-Instance ${instanceToken}`,
+        );
+        return new Response("archive", {
+          headers: { "content-length": "7" },
+        });
+      },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onProgress = vi.fn();
+    await expect(
+      downloadZip(
+        instanceToken,
+        [{
+          entryId: "3".repeat(32),
+          name: "资料",
+          kind: "directory",
+          mtimeMs: 0,
+        }],
+        9,
+        { onProgress },
+      ),
+    ).resolves.toBe("资料.zip");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/internal/files/exports/zip",
+      expect.any(Object),
+    );
+    expect(savedName).toBe("资料.zip");
+    expect(createObjectURL).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:zip");
+    expect(onProgress).toHaveBeenLastCalledWith({ loaded: 7, total: 7 });
   });
 });
