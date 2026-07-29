@@ -40,5 +40,16 @@ curl -X POST \
 6. 验证 Head FID、lineage ID 和 revision 与 Ref 完全一致。
 7. 全部验证通过后才允许 File Service 写入；失败时保持离线或只读。
 
+从恢复实例启动后，可在项目根目录运行只读内容扫描：
+
+```sh
+docker exec -i <恢复容器名> node --input-type=module \
+  < scripts/verify-file-service-recovery.mjs
+```
+
+该脚本遍历当前 checkpoint 中的所有文件，从对象存储读取 Manifest 和 Chunk，并通过正常的
+Repository 读取路径重新校验每个对象的 XXH3-128 FID。只有全部文件的实际读取长度与元数据
+一致时，`allVerified` 才为 `true`。
+
 恢复备份可能回到较早 Head。备份之后上传到 S3、但从未被恢复 Ref 引用的对象是不可达对象；
 V1 只报告，不自动删除。

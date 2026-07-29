@@ -35,6 +35,12 @@
     67,108,865 字节（64 MiB + 1），revision 推进到 3；
 13. 使用新的只读句柄和一次性 GET 从 R2 读回该文件，响应长度精确为 67,108,865 字节，
     验证 Chunk/Manifest 边界路径可用。
+14. 运行中的宿主通过受管理员鉴权的备份接口生成在线一致性 SQLite 备份；备份报告
+    revision 3、根 Entry ID 与在线状态一致；
+15. 将该备份复制到全新的 Docker 持久卷，以 `INITIALIZE=false` 启动独立恢复实例；
+16. 恢复实例成功从 R2 验证 Ref → Head → checkpoint 链，并报告 revision 3；
+17. 从恢复实例逐个读取所有可达文件并重新校验对象 FID：`first-note.txt` 读取 17 字节；
+    `large-boundary.bin` 通过 Manifest 读取两个 Chunk，共 67,108,865 字节；全部验证通过。
 
 最终观测状态：
 
@@ -63,7 +69,6 @@
 - 两个旧句柄的覆盖保护与 `FILE_VERSION_CONFLICT` 已通过自动化验证；多窗口人工交互仍待验收；
 - 64 MiB + 1 字节文件已通过真实 HTTP 流式上传和读回；浏览器 UI 发起的大文件交互仍待验收；
 - R2 断网、超时和部分上传故障注入；
-- RefStore 备份恢复演练；
 - 保存对话框中的覆盖已有文件交互；
 - 文件 MIME/扩展名筛选。
 
