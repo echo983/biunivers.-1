@@ -11,7 +11,7 @@ describe("AboutApp", () => {
     ).toBeVisible();
     expect(screen.getByText("版本 0.9.0")).toBeVisible();
     expect(
-      screen.getByText("File Service · Resource Session v1"),
+      screen.getByText("File Service · 批量操作 · Resource Session v1"),
     ).toBeVisible();
     expect(
       screen.getByText("Biunivers Static App Protocol v1"),
