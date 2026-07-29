@@ -1,3 +1,5 @@
+import packageJson from "../../../package.json";
+
 export function AboutApp() {
   return (
     <article className="about-app">
@@ -6,7 +8,7 @@ export function AboutApp() {
       </div>
       <div>
         <h1>Biunivers 桌面</h1>
-        <p className="about-app__version">版本 0.7.0</p>
+        <p className="about-app__version">版本 {packageJson.version}</p>
       </div>
       <p>
         一个部署在个人服务器上、通过浏览器访问的轻量个人桌面。

@@ -49,6 +49,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [ADR-0002：第三方应用使用独立 Origin](decisions/0002-第三方应用使用独立-Origin.md) | 已接受 | 文件 capability 的应用级 origin 隔离 |
 | [PVLogS3Lite](PVLogS3Lite.md) | 规范评审通过 | S3 不可变对象、XXH3-128 FID、稳定 Entry ID、64 MiB 分片和本地 RefStore |
 | [PVLogS3Lite CBOR v1](<protocols/PVLogS3Lite CBOR v1.md>) | 格式基线候选 | 已实现的确定性 CBOR 字段编号、对象类型和跨实现黄金向量 |
+| [Biunivers 数据卷备份恢复](<runbooks/Biunivers 数据卷备份恢复.md>) | 当前运维手册 | `/data` 整卷一致性备份、非破坏性恢复演练和单写者切换原则 |
 
 ## V0.4：文件管理器已完成并归档
 

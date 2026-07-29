@@ -1,21 +1,15 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持基础桌面，V0.2
-实现第三方静态应用安装与管理，V0.3 增加基于不可变 S3 对象和本地 RefStore 的文件服务。
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.7.0` 已具备窗口与
+自由布局桌面、第三方静态应用安装、不可变文件服务、文件管理器、资源关联打开和桌面快捷入口。
 
 ## 项目状态
 
-V0.1 已完成并归档，对应 `main` 历史基线提交：
+`v0.1.0` 至 `v0.7.0` 均已完成并按里程碑归档。当前 `main` 对应 `v0.7.0` 后续维护线；
+各版本需求、技术设计、施工计划和真实验收证据统一收录在 [`docs/`](docs/)。
 
-```text
-8586732 implement browser desktop V0.1
-```
-
-V0.2 已完成施工和人工验收，并作为 `v0.2.0` 里程碑交付。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
-
-V0.3 File Service 已完成实现、真实 R2 验收、备份恢复演练和只读 GC 扫描，并以
-`v0.3.0` 归档。归档入口见
-[`V0.3 施工与验收归档`](<docs/浏览器云端个人桌面 V0.3 施工与验收归档.md>)。
+当前定位是单用户、单实例的个人部署版本。公网使用时应在 Biunivers 前增加 VPN、
+Cloudflare Access 或反向代理认证；管理员 token 只保护管理接口，不等同于桌面登录。
 
 ## 环境要求
 
@@ -107,11 +101,11 @@ https://desktop.example.com/services/example/
 
 ## Docker
 
-V0.3 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件和可选 File Service。
+V0.7 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件和可选 File Service。
 构建并运行：
 
 ```bash
-docker build -t biunivers:v0.3.0 .
+docker build -t biunivers:v0.7.0 .
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
@@ -120,12 +114,12 @@ docker run --rm \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.3.0
+  biunivers:v0.7.0
 ```
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
 
-### V0.3 File Service
+### File Service
 
 File Service 默认关闭，不影响现有桌面和应用管理。启用时额外传入：
 
@@ -214,7 +208,7 @@ docker run --rm \
   -v "$PWD/apps.json:/app/dist/client/config/apps.json:ro" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.3.0
+  biunivers:v0.7.0
 ```
 
 也可复制 `compose.example.yml`，在同目录准备 `apps.json` 并设置管理员 token：
@@ -234,15 +228,23 @@ biunivers.desktop.v1
 
 设置应用可以分别恢复默认壁纸、默认固定应用、默认窗口状态，或确认后清除本产品的全部本地数据。项目不会调用 `localStorage.clear()`。
 
+## 备份
+
+S3 保存不可变文件内容，但当前文件树、已安装应用和桌面布局仍依赖 `/data`。生产部署必须
+备份整个数据卷，而不能只备份 S3 或 File Service 的 `latest.sqlite`。一致性备份、非破坏性
+恢复演练和环境变量保管方式见
+[`Biunivers 数据卷备份与恢复`](<docs/runbooks/Biunivers 数据卷备份恢复.md>)。
+
 ## 已知限制
 
 - 只安装公开 `github.com` 仓库根目录中的应用；
 - 安装期间不执行依赖安装或构建脚本；
 - 配置是公开浏览器配置，不是 secret 存储；
-- 单进程 JSON 状态适合个人部署，不支持多副本并发写入；
+- 单进程本地状态适合个人部署，不支持多副本并发写入；
 - 第三方应用使用独立 App Origin；文件能力采用短期实例、句柄和一次性传输 capability；
 - File Service 为可选的单用户、单写者能力，不支持多副本并发写入；
 - V0.3 GC 只生成报告，不删除不可变对象；
 - 不提供账号、多用户、应用商店、多桌面或应用间资源交换。
+- 不内置桌面登录认证；公网部署必须使用额外访问控制。
 
 当前范围和验收记录参见 [`docs/`](docs/)。
