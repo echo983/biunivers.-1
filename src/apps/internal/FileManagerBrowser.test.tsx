@@ -1,5 +1,5 @@
 import {
-  fireEvent,
+  act,
   render,
   screen,
   waitFor,
@@ -81,8 +81,14 @@ describe("FileManagerBrowser", () => {
     render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
 
     const directory = await screen.findByText("Documents");
-    fireEvent.doubleClick(directory);
-    fireEvent.doubleClick(directory);
+    act(() => {
+      directory.dispatchEvent(
+        new MouseEvent("dblclick", { bubbles: true }),
+      );
+      directory.dispatchEvent(
+        new MouseEvent("dblclick", { bubbles: true }),
+      );
+    });
     expect(await screen.findByText("此文件夹为空。")).toBeInTheDocument();
     expect(
       screen.getAllByRole("button", { name: "Documents" }),

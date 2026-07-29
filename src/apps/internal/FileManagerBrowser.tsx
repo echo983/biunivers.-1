@@ -66,6 +66,7 @@ export function FileManagerBrowser({
   const [notice, setNotice] = useState<string>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const directoryNavigationPendingRef = useRef(false);
   const appRegistry = useDesktopStore((state) => state.apps);
   const defaultResourceHandlers = useDesktopStore(
     (state) => state.defaultResourceHandlers,
@@ -92,7 +93,10 @@ export function FileManagerBrowser({
         setError(messageOf(reason));
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) {
+          directoryNavigationPendingRef.current = false;
+          setLoading(false);
+        }
       });
     return () => {
       active = false;
@@ -165,7 +169,14 @@ export function FileManagerBrowser({
   };
 
   const enterDirectory = (entry: FileEntry) => {
-    if (entry.kind !== "directory") return;
+    if (
+      entry.kind !== "directory" ||
+      directoryNavigationPendingRef.current ||
+      directoryId === entry.entryId
+    ) {
+      return;
+    }
+    directoryNavigationPendingRef.current = true;
     setError(undefined);
     setLoading(true);
     setBreadcrumbs((current) =>
@@ -295,16 +306,19 @@ export function FileManagerBrowser({
   };
 
   const navigateTo = (index: number) => {
-    setError(undefined);
-    setLoading(true);
-    if (index < 0) {
-      setBreadcrumbs([]);
-      setDirectoryId(undefined);
+    const next = index < 0 ? [] : breadcrumbs.slice(0, index + 1);
+    const targetDirectoryId = next.at(-1)?.entryId;
+    if (
+      directoryNavigationPendingRef.current ||
+      targetDirectoryId === directoryId
+    ) {
       return;
     }
-    const next = breadcrumbs.slice(0, index + 1);
+    directoryNavigationPendingRef.current = true;
+    setError(undefined);
+    setLoading(true);
     setBreadcrumbs(next);
-    setDirectoryId(next.at(-1)?.entryId);
+    setDirectoryId(targetDirectoryId);
   };
 
   return (
