@@ -31,6 +31,10 @@
 9. 关闭并重新打开 iframe 窗口后再次读取成功；
 10. 重启整个 Docker 宿主进程后，状态仍为 revision 2；
 11. 重启后再次打开 `first-note.txt`，内容保持一致。
+12. 通过真实 Host API 和 File HTTP API 流式上传 `large-boundary.bin`，大小为
+    67,108,865 字节（64 MiB + 1），revision 推进到 3；
+13. 使用新的只读句柄和一次性 GET 从 R2 读回该文件，响应长度精确为 67,108,865 字节，
+    验证 Chunk/Manifest 边界路径可用。
 
 最终观测状态：
 
@@ -38,7 +42,7 @@
 {
   "mode": "ready",
   "writable": true,
-  "revision": 2,
+  "revision": 3,
   "rootEntryIdHex": "90cf06b0e2b9aabde9caeb5c7f3ecab0"
 }
 ```
@@ -57,7 +61,7 @@
 ## 尚未覆盖
 
 - 两个旧句柄的覆盖保护与 `FILE_VERSION_CONFLICT` 已通过自动化验证；多窗口人工交互仍待验收；
-- 超过 64 MiB 文件的真实浏览器上传；
+- 64 MiB + 1 字节文件已通过真实 HTTP 流式上传和读回；浏览器 UI 发起的大文件交互仍待验收；
 - R2 断网、超时和部分上传故障注入；
 - RefStore 备份恢复演练；
 - 保存对话框中的覆盖已有文件交互；

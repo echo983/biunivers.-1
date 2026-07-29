@@ -22,11 +22,15 @@ const roots: string[] = [];
 
 class MemoryStore implements ImmutableObjectStore {
   readonly objects = new Map<string, Uint8Array>();
+  failCreates = false;
 
   async create(
     key: ObjectKey,
     bytes: Uint8Array,
   ): Promise<CreateObjectResult> {
+    if (this.failCreates) {
+      throw new Error("simulated object store outage");
+    }
     const encoded = JSON.stringify(key);
     const existing = this.objects.get(encoded);
     if (existing) {
@@ -56,10 +60,8 @@ class MemoryStore implements ImmutableObjectStore {
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), "biunivers-transfer-service-"));
   roots.push(root);
-  const repository = new ImmutableObjectRepository(
-    new MemoryStore(),
-    "users/test",
-  );
+  const objectStore = new MemoryStore();
+  const repository = new ImmutableObjectRepository(objectStore, "users/test");
   const ids = [id(0x10), id(0x20)];
   const genesis = await initializeGenesisFileSystem({
     databasePath: join(root, "refs.sqlite"),
@@ -90,6 +92,7 @@ async function setup() {
   );
   return {
     repository,
+    objectStore,
     refStore: genesis.store,
     contentStore,
     capabilities,
@@ -361,6 +364,41 @@ describe("FileTransferService", () => {
       chunks.push(chunk);
     }
     expect(Buffer.concat(chunks).toString()).toBe("winner");
+    fixture.refStore.close();
+  });
+
+  it("does not publish a file when immutable storage fails mid-save", async () => {
+    const fixture = await setup();
+    const listing = await fixture.host.listDirectory(fixture.instanceToken);
+    const pending = await fixture.host.issueSaveHandle(
+      fixture.instanceToken,
+      listing.rootEntryId,
+      "must-not-appear.txt",
+    );
+    const transfer = fixture.host.issueTransfer(
+      fixture.instanceToken,
+      pending.handleId,
+      "PUT",
+    );
+    fixture.objectStore.failCreates = true;
+    async function* source() {
+      yield Buffer.from("uncommitted");
+    }
+    await expect(
+      fixture.service.write(
+        fixture.instanceToken,
+        transfer.transferId,
+        source(),
+        11,
+      ),
+    ).rejects.toThrow("simulated object store outage");
+    fixture.objectStore.failCreates = false;
+
+    const after = await fixture.host.listDirectory(fixture.instanceToken);
+    expect(after.revision).toBe(1);
+    expect(after.entries.map((entry) => entry.name)).not.toContain(
+      "must-not-appear.txt",
+    );
     fixture.refStore.close();
   });
 });
