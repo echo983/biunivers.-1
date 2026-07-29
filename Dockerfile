@@ -13,6 +13,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
+RUN node -e "import('hash-wasm')"
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/generated ./generated
 COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \
