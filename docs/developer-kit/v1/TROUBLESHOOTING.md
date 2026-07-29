@@ -133,12 +133,45 @@ body,
 
 ## 想从一个应用打开另一个应用
 
-Static App Protocol v1 尚未定义应用间调用、文件关联或资源交换。
+Open Resource Protocol v1 只定义宿主从文件管理器向已声明 Handler 的应用交付文件，不是
+通用应用间调用。
 
-不要通过访问 `window.parent` 或自行约定私有消息绕过限制。该需求属于未来 Resource Exchange Protocol。
+不要通过访问 `window.parent` 或自行约定私有消息绕过限制。通用应用间调用仍属于未来能力。
 
 ## GitHub 仓库已经更新，但应用没有变化
 
 Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 
 请在 Biunivers 中显式发起更新，并选择包含新内容的 ref。
+# Open Resource 常见问题
+
+## 应用安装成功但不出现在“打开方式”
+
+检查：
+
+- 根目录是否同时存在 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md` 和
+  `biunivers.open-resource.json`；
+- 协议原文是否逐字一致；
+- `protocol` 是否为 `biunivers.open-resource/1`；
+- 扩展名是否使用小写和前导点；
+- 应用是否已启用；
+- Handler 是否声明了当前动作。
+
+## 普通启动返回 `NO_LAUNCH_CONTEXT`
+
+这是正常行为，表示用户直接从桌面启动应用，而不是用文件打开。应用应显示空白文档、欢迎页
+或自己的打开按钮。
+
+## 已打开应用收到 `launch.contextAvailable`
+
+这表示用户又选择了一个文件。先处理当前未保存内容，再调用 `launch.getContext`。通知本身
+不携带资源信息。
+
+## 能读取但不能保存
+
+检查 Launch Context 返回的实际 `permissions`。`read-write` Handler 只是最大能力声明；
+只读文件或只读打开仍只会得到 `read`。
+
+## 保存返回 `FILE_VERSION_CONFLICT`
+
+文件已被其他窗口修改。保留当前编辑内容，提示重新打开或另存为，不要自动重试覆盖。

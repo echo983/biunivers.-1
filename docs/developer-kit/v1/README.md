@@ -220,6 +220,46 @@ Biunivers 负责：
 安装协议，应用必须先检测能力，并能处理 `HOST_API_UNSUPPORTED`。不使用文件能力的应用无需
 接入 Host API。
 
+## 声明可以打开文件
+
+需要从文件管理器接收文件的应用可以选择接入
+[`biunivers.open-resource/1`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md)。它不会自动授予
+文件权限，也不会自动把应用设为默认程序。
+
+仓库根目录另外放置：
+
+```text
+BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md
+biunivers.open-resource.json
+```
+
+不要改写协议原文。声明可以从
+[`biunivers.open-resource.example.json`](biunivers.open-resource.example.json) 开始，并用
+[`biunivers.open-resource.schema.json`](biunivers.open-resource.schema.json) 校验。
+
+例如文本编辑器：
+
+```json
+{
+  "protocol": "biunivers.open-resource/1",
+  "handlers": [
+    {
+      "id": "text-editor",
+      "actions": ["open", "edit"],
+      "extensions": [".txt", ".md"],
+      "mediaTypes": ["text/plain", "text/markdown"],
+      "access": "read-write"
+    }
+  ]
+}
+```
+
+应用启动后请求 `launch.getContext`。普通桌面启动会返回 `NO_LAUNCH_CONTEXT`，应用应继续
+显示空白文档或自己的“打开”按钮。资源启动成功后，应用取得 `handleId`，再使用 Host API
+完成读取、保存和释放。
+
+应用不得把 handle 放入 URL、日志或本地持久化，也不能转交给其他应用。
+
 应用负责：
 
 - iframe 内部界面；
@@ -233,15 +273,14 @@ Biunivers 负责：
 Static App Protocol v1 本身不定义：
 
 - 应用之间互相调用；
-- 文件关联；
-- 跨应用资源传递；
+- 未经宿主授权的文件关联或跨应用资源传递；
 - secret 管理；
 - 应用专属后端；
 - 自动更新；
 - Biunivers 内部 store 或父页面 DOM。
 
-文件打开与保存已经由独立、可选的 Host API v1 定义；其他未来能力也会使用独立、带版本的
-协议。不要自行设计私有的父页面调用方式。
+文件打开与保存由独立、可选的 Host API v1 定义；文件处理器声明和窗口启动资源由独立、
+可选的 Open Resource Protocol v1 定义。不要自行设计私有的父页面调用方式。
 
 ## 给 AI 开发代理
 
@@ -252,6 +291,8 @@ Static App Protocol v1 本身不定义：
 3. [Manifest 规范](<../../protocols/Biunivers App Manifest v1.md>)。
 
 AI 不得猜测文件摘要、Host API 或未定义字段，也不得为了“增强兼容性”修改协议原文。
+如果应用接入资源打开能力，还必须完整阅读
+[`BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md)。
 
 ## 遇到问题
 

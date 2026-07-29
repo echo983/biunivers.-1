@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "biunivers.open-resource.schema.json",
+  "title": "Biunivers Open Resource Protocol v1 Handler Declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "handlers"
+  ],
+  "properties": {
+    "protocol": {
+      "const": "biunivers.open-resource/1"
+    },
+    "handlers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/definitions/handler"
+      }
+    }
+  },
+  "definitions": {
+    "handler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "actions",
+        "extensions",
+        "access"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "open",
+              "edit"
+            ]
+          }
+        },
+        "extensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 16,
+            "pattern": "^\\.[a-z0-9]+$"
+          }
+        },
+        "mediaTypes": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 127,
+            "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$"
+          }
+        },
+        "access": {
+          "enum": [
+            "read",
+            "read-write"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "actions": {
+                "contains": {
+                  "const": "edit"
+                }
+              }
+            },
+            "required": [
+              "actions"
+            ]
+          },
+          "then": {
+            "properties": {
+              "access": {
+                "const": "read-write"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

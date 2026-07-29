@@ -60,11 +60,14 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.4 文件管理器技术设计](<浏览器云端个人桌面 V0.4 文件管理器技术设计.md>) | 设计基线 | internal 实例、管理 API、事务校验、上传下载和历史兼容 |
 | [V0.4 文件管理器施工计划](<浏览器云端个人桌面 V0.4 文件管理器施工计划.md>) | 验收完成 | 五阶段任务、验收记录、出口条件和合并门槛 |
 
-## V0.5：资源打开设计中
+## V0.5：资源打开待施工
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
-| [V0.5 资源打开设计](<浏览器云端个人桌面 V0.5 资源打开设计.md>) | 待规范评审 | 应用自报 Handler、系统默认关联、打开方式、窗口启动上下文和 capability 重新签发 |
+| [V0.5 资源打开设计](<浏览器云端个人桌面 V0.5 资源打开设计.md>) | 评审通过 | 应用自报 Handler、系统默认关联、打开方式、窗口启动上下文和 capability 重新签发 |
+| [V0.5 资源打开规范评审](<浏览器云端个人桌面 V0.5 资源打开规范评审.md>) | 评审通过 | 必要性审查、七项冻结决策、单实例窗口修正和实施门槛 |
+| [V0.5 资源打开技术设计](<浏览器云端个人桌面 V0.5 资源打开技术设计.md>) | 待施工 | Handler 安装投影、默认关联、Pending Launch、claim 和 Launch Broker |
+| [V0.5 资源打开施工计划](<浏览器云端个人桌面 V0.5 资源打开施工计划.md>) | 待施工 | 主仓库七阶段实施、记事本适配、真实环境验收和合并门槛 |
 
 ## 第三方应用生态 V1：发布候选
 
@@ -74,6 +77,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Biunivers Static App Protocol v1](developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md) | 草案 | 第三方仓库必须保存的协议原文；定义 `index.html`、iframe、公开配置和宿主责任 |
 | [Biunivers App Manifest v1](<protocols/Biunivers App Manifest v1.md>) | 草案 | `biunivers.app.json` 的最小身份、窗口默认值和配置 schema |
 | [Biunivers App Management Protocol v1](<protocols/Biunivers App Management Protocol v1.md>) | 草案 | GitHub 安装、固定 commit、可靠注册、更新、停用、卸载和基本恢复 |
+| [Biunivers Open Resource Protocol v1](developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md) | V1 冻结候选 | 可选 Handler 声明、单实例 Launch Context 和窗口级文件 capability 交付 |
 | [Static App Protocol v1 发布候选摘要](<protocols/Biunivers Static App Protocol v1 发布候选摘要.md>) | 发布候选 | 第三方最小交付、宿主承诺、边界和冻结判断 |
 | [Nassau App Manifest v1](<Nassau App Manifest v1.txt>) | 参考材料 | 内容寻址应用清单参考；不是 Biunivers V1 的直接运行协议 |
 

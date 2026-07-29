@@ -27,6 +27,8 @@
 - Biunivers 不执行第三方构建命令；
 - Static App Protocol v1 不定义 Host API；需要文件能力时只能按独立的
   `biunivers.host-api/1` 接入，并处理宿主不支持的情况；
+- 需要从文件管理器接收文件时，只能按可选的 `biunivers.open-resource/1` 声明 Handler
+  并领取 Launch Context；
 - 配置会暴露给浏览器，不能包含 secret。
 
 不要向用户重复询问这些已经由协议确定的事项。
@@ -133,6 +135,25 @@ body,
 - secret 配置。
 
 如果需求必须依赖这些能力，应明确说明它超出 Static App Protocol v1，而不是静默制造非标准实现。
+
+已经接入 Open Resource Protocol v1 的应用可以使用该协议明确规定的窗口级资源交付；这不
+允许应用直接把 handle 传给另一个应用，也不允许扩展私有方法。
+
+## 可选资源启动
+
+只有用户要求应用能从文件管理器打开文件时才接入：
+
+1. 完整复制 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`；
+2. 根据 `biunivers.open-resource.schema.json` 创建声明；
+3. 只声明应用实际支持的扩展名、动作和最大权限；
+4. 在消息监听器就绪后请求 `launch.getContext`；
+5. 将 `NO_LAUNCH_CONTEXT` 作为普通启动；
+6. 用返回的 handle 调用 Host API；
+7. 按实际权限提供只读或编辑界面；
+8. 保存冲突时保留未保存内容；
+9. 关闭文档时释放 handle。
+
+不要把 handle 写入 URL、localStorage、IndexedDB、日志或远程分析服务。
 
 ## 验证要求
 

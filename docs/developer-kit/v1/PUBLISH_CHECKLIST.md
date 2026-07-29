@@ -59,3 +59,20 @@
 - [ ] 已在 Biunivers 测试安装
 - [ ] 安装后可以打开、调整尺寸、最小化、还原和关闭
 - [ ] 更新失败时没有破坏原已安装版本
+
+## 可选：Open Resource v1
+
+仅在应用声明文件处理能力时检查：
+
+- [ ] 根目录存在 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`
+- [ ] Open Resource 协议文件是官方原文，没有改写
+- [ ] 根目录存在 `biunivers.open-resource.json`
+- [ ] 声明通过 `biunivers.open-resource.schema.json`
+- [ ] Handler ID 在应用内唯一且更新时保持稳定
+- [ ] 扩展名为小写且带前导点
+- [ ] 声明 `edit` 的 Handler 使用 `read-write`
+- [ ] 普通启动的 `NO_LAUNCH_CONTEXT` 被当作正常路径
+- [ ] 应用只使用实际返回的 `permissions`
+- [ ] 文件 handle 不进入 URL、日志、分析事件或持久化存储
+- [ ] 保存冲突不会静默覆盖用户文件
+- [ ] 完成或关闭文档时调用 `file.release`
