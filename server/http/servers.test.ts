@@ -11,9 +11,12 @@ import type { ServerConfig } from "../config.js";
 import { FileCapabilityRegistry } from "../files/fileCapabilityRegistry.js";
 import { createAppServer } from "./appServer.js";
 import { createDesktopServer } from "./desktopServer.js";
+import { DesktopSurfaceStore } from "../desktopSurface/desktopSurfaceStore.js";
+import { DesktopSurfaceService } from "../desktopSurface/desktopSurfaceService.js";
 
 const servers: Server[] = [];
 const temporaryDirectories: string[] = [];
+const desktopSurfaceStores: DesktopSurfaceStore[] = [];
 
 async function listen(server: Server) {
   servers.push(server);
@@ -49,6 +52,7 @@ async function createDependencies() {
 }
 
 afterEach(async () => {
+  desktopSurfaceStores.splice(0).forEach((store) => store.close());
   await Promise.all(
     servers.splice(0).map(
       (server) =>
@@ -139,6 +143,104 @@ describe("desktop and app origins", () => {
     expect(unavailableGc.status).toBe(503);
     await expect(unavailableGc.json()).resolves.toMatchObject({
       error: { code: "HOST_API_UNSUPPORTED" },
+    });
+  });
+
+  it("protects desktop surface mutations and applies revision CAS", async () => {
+    const dependencies = await createDependencies();
+    const store = await DesktopSurfaceStore.open(
+      join(dependencies.config.dataDir, "desktop-surface.sqlite"),
+    );
+    desktopSurfaceStores.push(store);
+    const desktopSurface = new DesktopSurfaceService({
+      store,
+      appStore: dependencies.appStore,
+      appOrigin: dependencies.config.appOrigin,
+      internalApps: [
+        {
+          id: "system.files",
+          name: "文件",
+          desktop: true,
+        },
+        {
+          id: "system.about",
+          name: "关于",
+          desktop: false,
+        },
+      ],
+    });
+    await desktopSurface.initialize();
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        desktopSurface,
+      }).listen(0, "127.0.0.1"),
+    );
+
+    const read = await fetch(`${origin}/api/v1/desktop-surface`, {
+      headers: { "sec-fetch-site": "same-origin" },
+    });
+    expect(read.status).toBe(200);
+    const initial = (await read.json()) as { revision: number };
+
+    const forbidden = await fetch(
+      `${origin}/api/v1/desktop-surface/items`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+          "sec-fetch-site": "cross-site",
+        },
+        body: JSON.stringify({
+          target: { type: "app", handle: "system.about" },
+          position: { column: 1, row: 0 },
+          expectedRevision: initial.revision,
+        }),
+      },
+    );
+    expect(forbidden.status).toBe(403);
+
+    const created = await fetch(
+      `${origin}/api/v1/desktop-surface/items`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          target: { type: "app", handle: "system.about" },
+          position: { column: 1, row: 0 },
+          expectedRevision: initial.revision,
+        }),
+      },
+    );
+    expect(created.status).toBe(201);
+    await expect(created.json()).resolves.toMatchObject({
+      revision: initial.revision + 1,
+    });
+
+    const stale = await fetch(
+      `${origin}/api/v1/desktop-surface/items`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body: JSON.stringify({
+          target: { type: "app", handle: "system.about" },
+          position: { column: 2, row: 0 },
+          expectedRevision: initial.revision,
+        }),
+      },
+    );
+    expect(stale.status).toBe(409);
+    await expect(stale.json()).resolves.toMatchObject({
+      error: { code: "DESKTOP_SURFACE_CONFLICT" },
     });
   });
 

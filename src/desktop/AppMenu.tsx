@@ -120,7 +120,10 @@ export function AppMenu() {
                   item.target.handle === app.id,
               )}
               onClick={() =>
-                void addDesktopItem({ type: "app", handle: app.id })
+                void addDesktopItem({
+                  type: "app",
+                  handle: app.id,
+                }).catch(() => undefined)
               }
             >
               ＋

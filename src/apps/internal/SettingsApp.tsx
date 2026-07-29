@@ -140,7 +140,11 @@ export function SettingsApp() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => void removeDesktopItems([item.id])}
+                  onClick={() =>
+                    void removeDesktopItems([item.id]).catch(
+                      () => undefined,
+                    )
+                  }
                 >
                   从桌面移除
                 </button>
@@ -159,7 +163,7 @@ export function SettingsApp() {
           type="button"
           onClick={() => {
             if (window.confirm("恢复默认桌面项目和窗口状态？")) {
-              void resetDesktopSurface();
+              void resetDesktopSurface().catch(() => undefined);
               queueMicrotask(resetDesktopWindows);
             }
           }}

@@ -121,12 +121,13 @@ export class DesktopSurfaceStore {
       const createdAtMs = Date.now();
       targets.forEach((target, index) => {
         validateTarget(target);
+        const position = migrationPosition(index);
         insert.run(
           randomId(),
           target.type,
           target.handle,
-          0,
-          index,
+          position.column,
+          position.row,
           createdAtMs + index,
         );
       });
@@ -297,12 +298,13 @@ export class DesktopSurfaceStore {
       );
       const createdAtMs = Date.now();
       targets.forEach((target, index) => {
+        const position = migrationPosition(index);
         insert.run(
           randomId(),
           target.type,
           target.handle,
-          0,
-          index,
+          position.column,
+          position.row,
           createdAtMs + index,
         );
       });
@@ -394,6 +396,13 @@ function invalid(message: string) {
 
 function randomId() {
   return randomBytes(16).toString("hex");
+}
+
+function migrationPosition(index: number) {
+  return {
+    column: Math.floor(index / 5),
+    row: index % 5,
+  };
 }
 
 function isConstraint(error: unknown, detail?: string) {

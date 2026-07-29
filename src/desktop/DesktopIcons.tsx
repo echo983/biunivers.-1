@@ -8,9 +8,9 @@ import { useDesktopStore } from "../store/desktopStore";
 import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import type {
   DesktopItem,
-  DesktopPosition,
 } from "../desktopSurface/types";
 import { activateDesktopItem } from "../desktopSurface/activate";
+import { findGroupPlacement } from "../desktopSurface/layout";
 
 const CELL_WIDTH = 106;
 const CELL_HEIGHT = 104;
@@ -85,7 +85,8 @@ export function DesktopIcons() {
       ) {
         void useDesktopSurfaceStore
           .getState()
-          .remove([...selectedItemIds]);
+          .remove([...selectedItemIds])
+          .catch(() => undefined);
       }
     };
     window.addEventListener("blur", cancel);
@@ -220,8 +221,22 @@ export function DesktopIcons() {
           pending.baseline,
           columnDelta,
           rowDelta,
+          {
+            maxColumn: Math.max(
+              0,
+              Math.floor(
+                (event.currentTarget.clientWidth - 20) / CELL_WIDTH,
+              ) - 1,
+            ),
+            maxRow: Math.max(
+              0,
+              Math.floor(
+                (event.currentTarget.clientHeight - 28) / CELL_HEIGHT,
+              ) - 1,
+            ),
+          },
         );
-        if (moves) void moveItems(moves);
+        if (moves) void moveItems(moves).catch(() => undefined);
       }
       setDragPreview(undefined);
       setDragItemIds(undefined);
@@ -287,6 +302,19 @@ export function DesktopIcons() {
               if (event.key === " ") {
                 event.preventDefault();
                 toggleSelection(item.id);
+              }
+              if (
+                ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+                  event.key,
+                )
+              ) {
+                event.preventDefault();
+                focusGridNeighbor(
+                  event.currentTarget,
+                  item,
+                  surface.items,
+                  event.key,
+                );
               }
             }}
           >
@@ -411,43 +439,38 @@ function updateMarqueeSelection(
   }
 }
 
-function findGroupPlacement(
+function focusGridNeighbor(
+  current: HTMLElement,
+  item: DesktopItem,
   items: DesktopItem[],
-  selectedIds: Set<string>,
-  requestedColumnDelta: number,
-  requestedRowDelta: number,
-): Array<{ itemId: string; position: DesktopPosition }> | undefined {
-  const selected = items.filter((item) => selectedIds.has(item.id));
-  const occupied = new Set(
-    items
-      .filter((item) => !selectedIds.has(item.id))
-      .map(({ position }) => `${position.column}:${position.row}`),
-  );
-  for (let distance = 0; distance <= 24; distance += 1) {
-    for (let x = -distance; x <= distance; x += 1) {
-      const yDistance = distance - Math.abs(x);
-      for (const y of new Set([yDistance, -yDistance])) {
-        const columnDelta = requestedColumnDelta + x;
-        const rowDelta = requestedRowDelta + y;
-        const moves = selected.map((item) => ({
-          itemId: item.id,
-          position: {
-            column: item.position.column + columnDelta,
-            row: item.position.row + rowDelta,
-          },
-        }));
-        if (
-          moves.every(
-            ({ position }) =>
-              position.column >= 0 &&
-              position.row >= 0 &&
-              !occupied.has(`${position.column}:${position.row}`),
-          )
-        ) {
-          return moves;
-        }
-      }
-    }
-  }
-  return undefined;
+  key: string,
+) {
+  const candidates = items
+    .filter((candidate) => {
+      if (candidate.id === item.id) return false;
+      const columnDelta =
+        candidate.position.column - item.position.column;
+      const rowDelta = candidate.position.row - item.position.row;
+      if (key === "ArrowLeft") return columnDelta < 0;
+      if (key === "ArrowRight") return columnDelta > 0;
+      if (key === "ArrowUp") return rowDelta < 0;
+      return rowDelta > 0;
+    })
+    .sort((left, right) => {
+      const leftDistance =
+        Math.abs(left.position.column - item.position.column) +
+        Math.abs(left.position.row - item.position.row);
+      const rightDistance =
+        Math.abs(right.position.column - item.position.column) +
+        Math.abs(right.position.row - item.position.row);
+      return leftDistance - rightDistance;
+    });
+  const targetId = candidates[0]?.id;
+  if (!targetId) return;
+  current
+    .closest(".desktop-icons")
+    ?.querySelector<HTMLElement>(
+      `[data-desktop-item-id="${targetId}"]`,
+    )
+    ?.focus();
 }

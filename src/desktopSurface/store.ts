@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  DesktopSurfaceClientError,
   addDesktopItem,
   moveDesktopItems,
   readDesktopSurface,
@@ -114,6 +115,21 @@ async function runMutation(
   try {
     set({ status: "ready", surface: await operation() });
   } catch (error) {
+    if (
+      error instanceof DesktopSurfaceClientError &&
+      error.code === "DESKTOP_SURFACE_CONFLICT"
+    ) {
+      try {
+        set({
+          status: "ready",
+          surface: await readDesktopSurface(),
+          error: "桌面已在其他页面中发生变化，请重新操作。",
+        });
+      } catch {
+        set({ status: "error", error: messageOf(error) });
+      }
+      throw error;
+    }
     set({ status: "error", error: messageOf(error) });
     throw error;
   }
@@ -125,8 +141,12 @@ function firstFreePosition(surface: DesktopSurface): DesktopPosition {
       ({ position }) => `${position.column}:${position.row}`,
     ),
   );
+  const visibleRows = Math.max(
+    1,
+    Math.floor((window.innerHeight - 76) / 104),
+  );
   for (let column = 0; column < 1000; column += 1) {
-    for (let row = 0; row < 1000; row += 1) {
+    for (let row = 0; row < visibleRows; row += 1) {
       if (!occupied.has(`${column}:${row}`)) return { column, row };
     }
   }
