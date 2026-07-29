@@ -143,7 +143,7 @@ Open Resource Protocol v1 只定义宿主从文件管理器向已声明 Handler 
 Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 
 请在 Biunivers 中显式发起更新，并选择包含新内容的 ref。
-# Open Resource 常见问题
+# Open Resource 与 Resource Session 常见问题
 
 ## 应用安装成功但不出现在“打开方式”
 
@@ -157,6 +157,18 @@ Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 - 应用是否已启用；
 - Handler 是否声明了当前动作。
 
+## `resource.getCapabilities` 没有响应
+
+确认消息监听器在发送请求前已经注册，并检查：
+
+- 应用是否位于 Biunivers 管理的 iframe 中；
+- `event.source` 是否严格等于 `window.parent`；
+- `event.origin` 和 `postMessage` target origin 是否来自 `document.referrer`；
+- 请求协议是否为 `biunivers.resource-session/1`；
+- 当前宿主是否启用了 File Service。
+
+新应用应显示“当前宿主不支持文件能力”，不能静默改用自创接口。
+
 ## 普通启动返回 `NO_LAUNCH_CONTEXT`
 
 这是正常行为，表示用户直接从桌面启动应用，而不是用文件打开。应用应显示空白文档、欢迎页
@@ -164,14 +176,30 @@ Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 
 ## 已打开应用收到 `launch.contextAvailable`
 
-这表示用户又选择了一个文件。先处理当前未保存内容，再调用 `launch.getContext`。通知本身
-不携带资源信息。
+这表示用户又选择了一个文件。先处理当前未保存内容，再调用 `resource.claimLaunch`。通知
+本身不携带资源信息，也不是资源授权。
 
 ## 能读取但不能保存
 
-检查 Launch Context 返回的实际 `permissions`。`read-write` Handler 只是最大能力声明；
-只读文件或只读打开仍只会得到 `read`。
+检查 session 返回的实际 `access`。`read-write` Handler 只是最大能力声明；只读打开仍会
+得到只读 session。
 
-## 保存返回 `FILE_VERSION_CONFLICT`
+## GET 返回 401、404 或 410
+
+检查实例凭据和资源会话请求头是否都存在。404/410 还可能表示 session 已释放、超过 300 秒
+未续租、被宿主撤销，或宿主已经重启。不要继续重试旧 session，应请用户重新选择文件。
+
+## Range 返回 416
+
+请求区间超出当前内容长度。读取 `Content-Range: bytes */<total>`，更新长度并重新计算区间。
+V1 只支持单区间，不要发送 multipart Range。
+
+## 保存返回版本冲突
 
 文件已被其他窗口修改。保留当前编辑内容，提示重新打开或另存为，不要自动重试覆盖。
+
+## 维护旧 Host API 应用
+
+冻结的 Open Resource v1 原文描述 `launch.getContext` 和 Host API handle，这是兼容路径，不是
+新应用首选路径。需要兼容时，将 Host API 和 Resource Session 分别检测；一个资源一旦选择
+transport，就不要在其生命周期内切换。

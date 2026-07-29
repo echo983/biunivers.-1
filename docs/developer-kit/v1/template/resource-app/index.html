@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Biunivers Resource App</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <button id="open" type="button">打开</button>
+        <button id="save" type="button" disabled>保存</button>
+        <button id="save-as" type="button">另存为</button>
+        <strong id="name">未打开文件</strong>
+      </header>
+      <textarea aria-label="文本内容" placeholder="选择一个文本文件……"></textarea>
+      <footer role="status">正在检测宿主文件能力……</footer>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -10,6 +10,7 @@
 - [ ] `LICENSE` 与 manifest 的 `license` 一致
 - [ ] 发布 commit 已经包含可直接运行的构建产物
 - [ ] 推荐的 release tag 已指向准备安装的 commit
+- [ ] 若使用 AI 开发，仓库根目录的 `AGENTS.md` 与当前协议和工作流一致
 
 ## 协议和 Manifest
 
@@ -68,22 +69,21 @@
 - [ ] Open Resource 协议文件是官方原文，没有改写
 - [ ] 根目录存在 `biunivers.open-resource.json`
 - [ ] 声明通过 `biunivers.open-resource.schema.json`
+- [ ] Handler ID 在应用内唯一且更新时保持稳定
+- [ ] 扩展名为小写且带前导点
+- [ ] 声明 `edit` 的 Handler 使用 `read-write`
 
-## 使用 Resource Session 时
+## 可选：Resource Session v1
 
 - [ ] 根目录存在 `BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`
 - [ ] 协议文件与开发包原文逐字节一致
 - [ ] 应用先检测 `resource.getCapabilities`
+- [ ] 普通启动的 `NO_LAUNCH_CONTEXT` 被当作正常路径
+- [ ] 应用按照 session 的实际 `access` 提供只读或编辑功能
 - [ ] 应用约每 60 秒批量续租仍使用的会话
 - [ ] 应用在关闭资源时调用 `resource.release`
 - [ ] GET/PUT 同时携带实例凭据和资源会话请求头
 - [ ] 应用处理 206、416、会话过期、撤销和版本冲突
 - [ ] 大文件和媒体读取使用单区间 Range，而不是一次读取全部内容
-- [ ] Handler ID 在应用内唯一且更新时保持稳定
-- [ ] 扩展名为小写且带前导点
-- [ ] 声明 `edit` 的 Handler 使用 `read-write`
-- [ ] 普通启动的 `NO_LAUNCH_CONTEXT` 被当作正常路径
-- [ ] 应用只使用实际返回的 `permissions`
-- [ ] 文件 handle 不进入 URL、日志、分析事件或持久化存储
+- [ ] session、实例凭据和内容 URL 不进入日志、分析事件或持久化存储
 - [ ] 保存冲突不会静默覆盖用户文件
-- [ ] 完成或关闭文档时调用 `file.release`

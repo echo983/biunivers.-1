@@ -1,0 +1,19 @@
+{
+  "formatVersion": 1,
+  "protocol": "biunivers.static-app/1",
+  "appId": "io.github.example.resource-app",
+  "version": "1.0.0",
+  "name": "Biunivers Resource App",
+  "description": "An Open Resource and Resource Session v1 application template.",
+  "license": "MIT",
+  "icon": "icon.svg",
+  "window": {
+    "defaultWidth": 720,
+    "defaultHeight": 520,
+    "minWidth": 420,
+    "minHeight": 300,
+    "desktop": true,
+    "pinned": false
+  },
+  "configuration": []
+}
