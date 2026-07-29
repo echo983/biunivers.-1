@@ -187,6 +187,103 @@ export class FileContentStore {
       throw integrityFailure("Read chunks do not add up to the file size.");
     }
   }
+
+  async *readRange(
+    content: FileContentRef,
+    start: number,
+    endInclusive: number,
+  ): AsyncGenerator<Uint8Array> {
+    validateContentRef(content);
+    if (
+      !Number.isSafeInteger(start) ||
+      !Number.isSafeInteger(endInclusive) ||
+      start < 0 ||
+      endInclusive < start ||
+      endInclusive >= content.size
+    ) {
+      throw new ObjectStoreError(
+        "OBJECT_INVALID",
+        "File byte range is invalid.",
+      );
+    }
+
+    if (content.kind === "chunk") {
+      const bytes = await this.repository.get("chunks", content.fidHex);
+      if (bytes.byteLength !== content.size) {
+        throw integrityFailure("Chunk length does not match the file metadata.");
+      }
+      yield bytes.subarray(start, endInclusive + 1);
+      return;
+    }
+
+    const manifestBytes = await this.repository.get(
+      "manifests",
+      content.fidHex,
+    );
+    this.core.validateManifest(manifestBytes);
+    const fileSize = this.core.manifestFileSize(manifestBytes);
+    if (fileSize !== BigInt(content.size)) {
+      throw integrityFailure("Manifest size does not match the file metadata.");
+    }
+    const fidBytes = this.core.manifestChunkFids(manifestBytes);
+    const lengths = this.core.manifestChunkLengths(manifestBytes);
+    if (fidBytes.byteLength !== lengths.length * 16) {
+      throw integrityFailure("Manifest chunk arrays are inconsistent.");
+    }
+
+    const chunks: Array<{
+      fidHex: string;
+      length: number;
+      start: number;
+      endInclusive: number;
+    }> = [];
+    let total = 0;
+    for (let index = 0; index < lengths.length; index += 1) {
+      const length = Number(lengths[index]);
+      if (!Number.isSafeInteger(length) || length < 0) {
+        throw integrityFailure("Manifest contains an invalid Chunk length.");
+      }
+      const chunkStart = total;
+      total += length;
+      if (!Number.isSafeInteger(total)) {
+        throw integrityFailure("Manifest file size exceeds the safe range.");
+      }
+      chunks.push({
+        fidHex: Buffer.from(
+          fidBytes.subarray(index * 16, (index + 1) * 16),
+        ).toString("hex"),
+        length,
+        start: chunkStart,
+        endInclusive: total - 1,
+      });
+    }
+    if (total !== content.size) {
+      throw integrityFailure("Manifest chunks do not add up to the file size.");
+    }
+
+    let yielded = 0;
+    for (const descriptor of chunks) {
+      if (
+        descriptor.endInclusive < start ||
+        descriptor.start > endInclusive
+      ) {
+        continue;
+      }
+      const chunk = await this.repository.get("chunks", descriptor.fidHex);
+      if (chunk.byteLength !== descriptor.length) {
+        throw integrityFailure("Chunk length does not match its Manifest.");
+      }
+      const localStart = Math.max(start, descriptor.start) - descriptor.start;
+      const localEnd =
+        Math.min(endInclusive, descriptor.endInclusive) - descriptor.start;
+      const result = chunk.subarray(localStart, localEnd + 1);
+      yielded += result.byteLength;
+      yield result;
+    }
+    if (yielded !== endInclusive - start + 1) {
+      throw integrityFailure("Read range did not produce the requested bytes.");
+    }
+  }
 }
 
 function concatBytes(chunks: Uint8Array[], length: number): Uint8Array {

@@ -14,6 +14,7 @@ import type {
 
 class MemoryStore implements ImmutableObjectStore {
   readonly objects = new Map<string, Uint8Array>();
+  readonly getKeys: ObjectKey[] = [];
 
   async create(
     key: ObjectKey,
@@ -24,6 +25,7 @@ class MemoryStore implements ImmutableObjectStore {
   }
 
   async get(key: ObjectKey): Promise<Uint8Array> {
+    this.getKeys.push(key);
     const bytes = this.objects.get(JSON.stringify(key));
     if (!bytes) {
       throw new Error("missing");
@@ -159,5 +161,76 @@ describe("FileContentStore", () => {
     await expect(contentStore.putStream(tooLarge(), 3)).rejects.toMatchObject({
       code: "OBJECT_TOO_LARGE",
     });
+  });
+
+  it("reads an exact range from a direct Chunk", async () => {
+    const { contentStore } = createContentStore();
+    const content = await contentStore.putBytes(
+      Uint8Array.from([0, 1, 2, 3, 4, 5]),
+    );
+    const parts = [];
+    for await (const part of contentStore.readRange(content, 2, 4)) {
+      parts.push(...part);
+    }
+    expect(parts).toEqual([2, 3, 4]);
+  });
+
+  it("reads only Manifest chunks intersecting a cross-boundary range", async () => {
+    const { contentStore, objectStore } = createContentStore();
+    const bytes = new Uint8Array(MAX_CHUNK_BYTES + 4);
+    bytes[MAX_CHUNK_BYTES - 2] = 10;
+    bytes[MAX_CHUNK_BYTES - 1] = 11;
+    bytes[MAX_CHUNK_BYTES] = 12;
+    bytes[MAX_CHUNK_BYTES + 1] = 13;
+    const content = await contentStore.putBytes(bytes);
+    objectStore.getKeys.length = 0;
+
+    const parts = [];
+    for await (const part of contentStore.readRange(
+      content,
+      MAX_CHUNK_BYTES - 2,
+      MAX_CHUNK_BYTES + 1,
+    )) {
+      parts.push(...part);
+    }
+
+    expect(parts).toEqual([10, 11, 12, 13]);
+    expect(objectStore.getKeys.map((key) => key.kind)).toEqual([
+      "manifests",
+      "chunks",
+      "chunks",
+    ]);
+  });
+
+  it("skips unrelated Manifest chunks for a tail range", async () => {
+    const { contentStore, objectStore } = createContentStore();
+    const bytes = new Uint8Array(MAX_CHUNK_BYTES + 3);
+    bytes[MAX_CHUNK_BYTES + 1] = 21;
+    bytes[MAX_CHUNK_BYTES + 2] = 22;
+    const content = await contentStore.putBytes(bytes);
+    objectStore.getKeys.length = 0;
+
+    const parts = [];
+    for await (const part of contentStore.readRange(
+      content,
+      MAX_CHUNK_BYTES + 1,
+      MAX_CHUNK_BYTES + 2,
+    )) {
+      parts.push(...part);
+    }
+
+    expect(parts).toEqual([21, 22]);
+    expect(objectStore.getKeys.map((key) => key.kind)).toEqual([
+      "manifests",
+      "chunks",
+    ]);
+  });
+
+  it("rejects ranges outside the content snapshot", async () => {
+    const { contentStore } = createContentStore();
+    const content = await contentStore.putBytes(Uint8Array.from([1, 2, 3]));
+    await expect(
+      contentStore.readRange(content, 1, 3).next(),
+    ).rejects.toMatchObject({ code: "OBJECT_INVALID" });
   });
 });
