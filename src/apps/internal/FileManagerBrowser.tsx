@@ -778,6 +778,9 @@ export function FileManagerBrowser({
                   }
                   tabIndex={0}
                   aria-selected={selection.entryIds.has(entry.entryId)}
+                  onMouseDown={(event) => {
+                    if (event.shiftKey) event.preventDefault();
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
                     setSelection((current) =>

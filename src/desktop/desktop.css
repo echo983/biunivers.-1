@@ -984,6 +984,7 @@
 
 .file-manager-app__content {
   overflow: auto;
+  user-select: none;
 }
 
 .file-manager-app table {

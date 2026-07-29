@@ -55,7 +55,7 @@ afterEach(() => {
 });
 
 describe("FileManagerBrowser", () => {
-  it("Ctrl-selects multiple entries and submits one batch move", async () => {
+  it("Shift-selects a range without browser text selection and submits one batch move", async () => {
     const user = userEvent.setup();
     const firstId = "4".repeat(32);
     const secondId = "5".repeat(32);
@@ -114,9 +114,20 @@ describe("FileManagerBrowser", () => {
 
     render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
     await user.click(await screen.findByText("first.txt"));
-    await user.keyboard("{Control>}");
+    const secondRow = screen.getByText("second.txt").closest("tr");
+    expect(secondRow).not.toBeNull();
+    expect(
+      secondRow!.dispatchEvent(
+        new MouseEvent("mousedown", {
+          bubbles: true,
+          cancelable: true,
+          shiftKey: true,
+        }),
+      ),
+    ).toBe(false);
+    await user.keyboard("{Shift>}");
     await user.click(screen.getByText("second.txt"));
-    await user.keyboard("{/Control}");
+    await user.keyboard("{/Shift}");
 
     expect(screen.getByRole("status")).toHaveTextContent("已选择 2 项");
     expect(screen.getByRole("button", { name: "重命名" })).toBeDisabled();
