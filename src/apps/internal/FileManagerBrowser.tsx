@@ -185,6 +185,7 @@ export function FileManagerBrowser({
     setError(undefined);
     try {
       await operation();
+      await useDesktopSurfaceStore.getState().load();
       setEditDialog(null);
       setMovingEntry(undefined);
       if (successMessage) setNotice(successMessage);

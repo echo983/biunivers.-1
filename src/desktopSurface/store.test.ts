@@ -3,14 +3,17 @@ import type { DesktopSurface } from "./types";
 
 const mocks = vi.hoisted(() => ({
   moveDesktopItems: vi.fn(),
+  readDesktopSurface: vi.fn(),
 }));
 
 vi.mock("./client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./client")>()),
   moveDesktopItems: mocks.moveDesktopItems,
+  readDesktopSurface: mocks.readDesktopSurface,
 }));
 
 import { useDesktopSurfaceStore } from "./store";
+import { DesktopSurfaceClientError } from "./client";
 
 const initial: DesktopSurface = {
   schemaVersion: 1,
@@ -33,6 +36,7 @@ const initial: DesktopSurface = {
 describe("desktop surface optimistic layout", () => {
   beforeEach(() => {
     mocks.moveDesktopItems.mockReset();
+    mocks.readDesktopSurface.mockReset();
     useDesktopSurfaceStore.setState({
       status: "ready",
       surface: initial,
@@ -85,5 +89,38 @@ describe("desktop surface optimistic layout", () => {
       ]),
     ).rejects.toThrow("network failed");
     expect(useDesktopSurfaceStore.getState().surface).toEqual(initial);
+  });
+
+  it("reloads the winning layout after a tab revision conflict", async () => {
+    const remote = {
+      ...initial,
+      revision: 5,
+      items: [
+        {
+          ...initial.items[0],
+          position: { x: 140, y: 80 },
+        },
+      ],
+    };
+    mocks.moveDesktopItems.mockRejectedValue(
+      new DesktopSurfaceClientError(
+        "DESKTOP_SURFACE_CONFLICT",
+        "conflict",
+      ),
+    );
+    mocks.readDesktopSurface.mockResolvedValue(remote);
+
+    await expect(
+      useDesktopSurfaceStore.getState().move([
+        {
+          itemId: initial.items[0].id,
+          position: { x: 50, y: 25 },
+        },
+      ]),
+    ).rejects.toMatchObject({ code: "DESKTOP_SURFACE_CONFLICT" });
+    expect(useDesktopSurfaceStore.getState().surface).toEqual(remote);
+    expect(useDesktopSurfaceStore.getState().error).toContain(
+      "其他页面",
+    );
   });
 });

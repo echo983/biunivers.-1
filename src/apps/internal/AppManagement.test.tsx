@@ -1,7 +1,8 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useDesktopStore } from "../../store/desktopStore";
+import { useDesktopSurfaceStore } from "../../desktopSurface/store";
 import { AppManagement } from "./AppManagement";
 
 const inspection = {
@@ -62,6 +63,12 @@ const installed = {
     configuration: inspection.manifest.configuration,
   },
 };
+
+beforeEach(() => {
+  useDesktopSurfaceStore.setState({
+    load: vi.fn(async () => {}),
+  });
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();

@@ -6,13 +6,14 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileManagerBrowser } from "./FileManagerBrowser";
 import { useDesktopStore } from "../../store/desktopStore";
 import {
   queueDirectoryLaunch,
   resetDirectoryLaunchBrokerForTests,
 } from "../../desktopSurface/directoryLaunchBroker";
+import { useDesktopSurfaceStore } from "../../desktopSurface/store";
 
 const transferMocks = vi.hoisted(() => ({
   uploadLocalFile: vi.fn(async () => {}),
@@ -28,6 +29,12 @@ vi.mock("../../windows/windowController", () => windowMocks);
 const rootId = "1".repeat(32);
 const directoryId = "2".repeat(32);
 const deepDirectoryId = "3".repeat(32);
+
+beforeEach(() => {
+  useDesktopSurfaceStore.setState({
+    load: vi.fn(async () => {}),
+  });
+});
 
 afterEach(() => {
   vi.clearAllMocks();

@@ -7,6 +7,7 @@ import {
   type InstalledApp,
 } from "../../api/appManagementClient";
 import { refreshApplicationRegistry } from "../../app/bootstrap";
+import { useDesktopSurfaceStore } from "../../desktopSurface/store";
 import { useDesktopStore } from "../../store/desktopStore";
 import { closeApp } from "../../windows/windowController";
 
@@ -242,6 +243,7 @@ export function AppManagement() {
               finalConfiguration,
             );
       await refreshApplicationRegistry();
+      await useDesktopSurfaceStore.getState().load();
       if (
         inspection.operation === "install" &&
         inspection.manifest.window.pinned
@@ -297,6 +299,7 @@ export function AppManagement() {
         closeApp(app.appId);
       }
       await refreshApplicationRegistry();
+      await useDesktopSurfaceStore.getState().load();
       setInstalledApps(await client.list());
       setSuccess(
         `“${app.manifest.name}”已${
@@ -325,6 +328,7 @@ export function AppManagement() {
       await client.uninstall(app.appId);
       closeApp(app.appId);
       await refreshApplicationRegistry();
+      await useDesktopSurfaceStore.getState().load();
       setInstalledApps(await client.list());
       setSuccess(`“${app.manifest.name}”已卸载`);
       if (editingApp?.appId === app.appId) {
