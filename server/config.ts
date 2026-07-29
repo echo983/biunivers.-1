@@ -10,6 +10,21 @@ export interface ServerConfig {
   githubToken?: string;
   maxAppBytes: number;
   maxAppFiles: number;
+  fileService?: FileServiceConfig;
+}
+
+export interface FileServiceConfig {
+  initialize: boolean;
+  databasePath: string;
+  endpoint: string;
+  region: string;
+  bucket: string;
+  keyPrefix: string;
+  namespace: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  forcePathStyle: boolean;
+  writerId: string;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -71,6 +86,23 @@ function parsePositiveInteger(
   return result;
 }
 
+function parseBoolean(
+  value: string | undefined,
+  fallback: boolean,
+  key: string,
+) {
+  if (value === undefined || value.trim() === "") {
+    return fallback;
+  }
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  throw new Error(`${key} 必须是 true 或 false`);
+}
+
 export function loadServerConfig(
   environment: Environment = process.env,
 ): ServerConfig {
@@ -94,9 +126,50 @@ export function loadServerConfig(
     throw new Error("BIUNIVERS_DESKTOP_ORIGIN 和 BIUNIVERS_APP_ORIGIN 必须不同");
   }
 
+  const dataDir = resolve(environment.BIUNIVERS_DATA_DIR?.trim() || "/data");
+  const fileEnabled = parseBoolean(
+    environment.BIUNIVERS_FILE_ENABLED,
+    false,
+    "BIUNIVERS_FILE_ENABLED",
+  );
+  const fileService = fileEnabled
+    ? {
+        initialize: parseBoolean(
+          environment.BIUNIVERS_FILE_INITIALIZE,
+          false,
+          "BIUNIVERS_FILE_INITIALIZE",
+        ),
+        databasePath: resolve(dataDir, "file-service", "file-service.sqlite"),
+        endpoint: parseOrigin(
+          required(environment, "BIUNIVERS_FILE_S3_ENDPOINT"),
+          "BIUNIVERS_FILE_S3_ENDPOINT",
+        ),
+        region: environment.BIUNIVERS_FILE_S3_REGION?.trim() || "auto",
+        bucket: required(environment, "BIUNIVERS_FILE_S3_BUCKET"),
+        keyPrefix:
+          environment.BIUNIVERS_FILE_S3_PREFIX?.trim() || "biunivers-files",
+        namespace: required(environment, "BIUNIVERS_FILE_NAMESPACE"),
+        accessKeyId: required(
+          environment,
+          "BIUNIVERS_FILE_S3_ACCESS_KEY_ID",
+        ),
+        secretAccessKey: required(
+          environment,
+          "BIUNIVERS_FILE_S3_SECRET_ACCESS_KEY",
+        ),
+        forcePathStyle: parseBoolean(
+          environment.BIUNIVERS_FILE_S3_FORCE_PATH_STYLE,
+          true,
+          "BIUNIVERS_FILE_S3_FORCE_PATH_STYLE",
+        ),
+        writerId:
+          environment.BIUNIVERS_FILE_WRITER_ID?.trim() || "biunivers-host",
+      }
+    : undefined;
+
   return {
     adminToken,
-    dataDir: resolve(environment.BIUNIVERS_DATA_DIR?.trim() || "/data"),
+    dataDir,
     desktopPort: parsePort(
       environment.BIUNIVERS_DESKTOP_PORT,
       8080,
@@ -120,5 +193,6 @@ export function loadServerConfig(
       5_000,
       "BIUNIVERS_MAX_APP_FILES",
     ),
+    fileService,
   };
 }

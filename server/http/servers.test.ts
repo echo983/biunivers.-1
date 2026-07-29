@@ -98,6 +98,19 @@ describe("desktop and app origins", () => {
       schemaVersion: 1,
       apps: [],
     });
+
+    const fileService = await fetch(
+      `${origin}/api/v1/admin/file-service`,
+      {
+        headers: {
+          authorization: `Bearer ${dependencies.config.adminToken}`,
+        },
+      },
+    );
+    await expect(fileService.json()).resolves.toEqual({
+      mode: "disabled",
+      writable: false,
+    });
   });
 
   it("does not expose desktop or admin routes on the app origin", async () => {

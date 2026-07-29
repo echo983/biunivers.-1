@@ -120,6 +120,33 @@ docker run --rm \
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
 
+### File Service 施工期启动
+
+File Service 默认关闭，不影响现有桌面和应用管理。启用时额外传入：
+
+```text
+BIUNIVERS_FILE_ENABLED=true
+BIUNIVERS_FILE_INITIALIZE=true
+BIUNIVERS_FILE_S3_ENDPOINT=https://your-s3-endpoint.example
+BIUNIVERS_FILE_S3_REGION=auto
+BIUNIVERS_FILE_S3_BUCKET=your-bucket
+BIUNIVERS_FILE_S3_PREFIX=biunivers-files
+BIUNIVERS_FILE_NAMESPACE=users/your-user
+BIUNIVERS_FILE_S3_ACCESS_KEY_ID=...
+BIUNIVERS_FILE_S3_SECRET_ACCESS_KEY=...
+BIUNIVERS_FILE_S3_FORCE_PATH_STYLE=true
+BIUNIVERS_FILE_WRITER_ID=your-host-id
+```
+
+`BIUNIVERS_FILE_INITIALIZE=true` 只用于第一次显式创建文件系统。成功后必须改为 `false`；
+重复初始化会被拒绝，不会覆盖既有 RefStore。SQLite 位于持久卷
+`/data/file-service/file-service.sqlite`。
+
+RefStore 缺失/损坏、对象存储不可用或 Head 校验失败时，File Service 进入不可写的
+`offline` 状态，桌面和应用管理继续启动。管理员可通过
+`GET /api/v1/admin/file-service` 查看不含凭据的状态。Access Key 和 Secret 只能通过 secret
+管理或环境变量提供，不能写入应用配置、日志或 Git。
+
 公网部署必须为两个 origin 分配不同的主机名。例如 Nginx：
 
 ```nginx

@@ -9,6 +9,7 @@ import { GitHubSource } from "./github/githubSource.js";
 import { createAppServer } from "./http/appServer.js";
 import { createDesktopServer } from "./http/desktopServer.js";
 import { ManifestValidator } from "./manifests/manifestValidator.js";
+import { startFileService } from "./files/fileServiceRuntime.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -50,6 +51,16 @@ async function main() {
     operationLock: new OperationLock(),
     dataDir: config.dataDir,
   });
+  const fileService = await startFileService(config.fileService);
+  if (fileService.status.mode === "ready") {
+    console.log(
+      `Biunivers File Service ready at revision ${fileService.status.revision}`,
+    );
+  } else if (fileService.status.mode === "offline") {
+    console.warn(
+      `Biunivers File Service offline (${fileService.status.code}): ${fileService.status.message}`,
+    );
+  }
 
   const clientDir = fileURLToPath(new URL("../client/", import.meta.url));
   const desktopServer = createDesktopServer({
@@ -58,6 +69,7 @@ async function main() {
     clientDir,
     inspections,
     appService,
+    fileServiceStatus: fileService.status,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
@@ -74,6 +86,7 @@ async function main() {
   });
 
   const shutdown = () => {
+    fileService.close();
     desktopServer.close();
     appServer.close();
   };

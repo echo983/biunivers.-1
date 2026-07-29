@@ -7,6 +7,7 @@ import type { InspectionService } from "../apps/inspectionService.js";
 import { projectInstalledApp } from "../apps/projection.js";
 import { createAdminAuth } from "../auth/adminAuth.js";
 import type { ServerConfig } from "../config.js";
+import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -14,6 +15,7 @@ interface DesktopServerDependencies {
   clientDir: string;
   inspections?: InspectionService;
   appService?: AppService;
+  fileServiceStatus?: FileServiceStatus;
 }
 
 export function createDesktopServer({
@@ -22,6 +24,7 @@ export function createDesktopServer({
   clientDir,
   inspections,
   appService,
+  fileServiceStatus,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -54,6 +57,15 @@ export function createDesktopServer({
     } catch (error) {
       next(error);
     }
+  });
+
+  app.get("/api/v1/admin/file-service", (_request, response) => {
+    response.set("Cache-Control", "no-store").json(
+      fileServiceStatus ?? {
+        mode: "disabled",
+        writable: false,
+      },
+    );
   });
 
   if (inspections && appService) {
