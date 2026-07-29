@@ -1210,6 +1210,39 @@ mod wasm {
             .map_err(|error| JsError::new(&error))
     }
 
+    #[wasm_bindgen(js_name = manifestFileSize)]
+    pub fn manifest_file_size_wasm(bytes: &[u8]) -> Result<u64, JsError> {
+        decode_manifest(bytes)
+            .map(|manifest| manifest.file_size)
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = manifestChunkFids)]
+    pub fn manifest_chunk_fids_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        decode_manifest(bytes)
+            .map(|manifest| {
+                manifest
+                    .chunks
+                    .into_iter()
+                    .flat_map(|chunk| chunk.fid.0)
+                    .collect()
+            })
+            .map_err(|error| JsError::new(&error))
+    }
+
+    #[wasm_bindgen(js_name = manifestChunkLengths)]
+    pub fn manifest_chunk_lengths_wasm(bytes: &[u8]) -> Result<Vec<u64>, JsError> {
+        decode_manifest(bytes)
+            .map(|manifest| {
+                manifest
+                    .chunks
+                    .into_iter()
+                    .map(|chunk| chunk.length)
+                    .collect()
+            })
+            .map_err(|error| JsError::new(&error))
+    }
+
     #[wasm_bindgen(js_name = validateSegment)]
     pub fn validate_segment_wasm(bytes: &[u8]) -> Result<(), JsError> {
         decode_segment(bytes)

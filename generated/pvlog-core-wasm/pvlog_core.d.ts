@@ -19,6 +19,12 @@ export function encodeManifest(file_size: bigint, chunk_fids: Uint8Array, chunk_
 
 export function fidHex(bytes: Uint8Array): string;
 
+export function manifestChunkFids(bytes: Uint8Array): Uint8Array;
+
+export function manifestChunkLengths(bytes: Uint8Array): BigUint64Array;
+
+export function manifestFileSize(bytes: Uint8Array): bigint;
+
 export function validateCheckpoint(bytes: Uint8Array): void;
 
 export function validateHead(bytes: Uint8Array): void;

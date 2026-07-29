@@ -280,6 +280,11 @@ CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 
 文件中完整创建，关闭并清空 WAL 后通过 create-only 硬链接发布。失败最多留下不可达的不可变
 对象，不会留下半初始化或空的权威 RefStore。
 
+`FileContentStore` 强制执行 64 MiB 边界：小于等于边界时直接引用 Chunk，超过边界时按固定
+大小写入 Chunk 并由 WASM 生成 Manifest。读取 Manifest 后从 WASM 取得文件长度、Chunk FID
+和长度，随后逐 Chunk 读回并验证 FID、单块长度及总长度。2026-07-29 已在真实 R2 隔离前缀
+验证 64 MiB + 1 字节得到两个 Chunk 和一个 Manifest，并完成逐块读回。
+
 ## 8. Head
 
 Head 是不可变、内容寻址的文件系统版本根。

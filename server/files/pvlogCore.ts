@@ -16,10 +16,18 @@ export interface PvlogCore {
     createdAtMs: bigint,
     writerId: string,
   ): Uint8Array;
+  encodeManifest(
+    fileSize: bigint,
+    chunkFids: Uint8Array,
+    chunkLengths: BigUint64Array,
+  ): Uint8Array;
   validateCheckpoint(bytes: Uint8Array): void;
   validateHead(bytes: Uint8Array): void;
   validateManifest(bytes: Uint8Array): void;
   validateSegment(bytes: Uint8Array): void;
+  manifestFileSize(bytes: Uint8Array): bigint;
+  manifestChunkFids(bytes: Uint8Array): Uint8Array;
+  manifestChunkLengths(bytes: Uint8Array): BigUint64Array;
 }
 
 let cached: PvlogCore | undefined;

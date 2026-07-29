@@ -153,6 +153,55 @@ exports.fidHex = fidHex;
 
 /**
  * @param {Uint8Array} bytes
+ * @returns {Uint8Array}
+ */
+function manifestChunkFids(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.manifestChunkFids(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+exports.manifestChunkFids = manifestChunkFids;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {BigUint64Array}
+ */
+function manifestChunkLengths(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.manifestChunkLengths(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU64FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 8, 8);
+    return v2;
+}
+exports.manifestChunkLengths = manifestChunkLengths;
+
+/**
+ * @param {Uint8Array} bytes
+ * @returns {bigint}
+ */
+function manifestFileSize(bytes) {
+    const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.manifestFileSize(ptr0, len0);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return BigInt.asUintN(64, ret[0]);
+}
+exports.manifestFileSize = manifestFileSize;
+
+/**
+ * @param {Uint8Array} bytes
  */
 function validateCheckpoint(bytes) {
     const ptr0 = passArray8ToWasm0(bytes, wasm.__wbindgen_malloc);
@@ -231,6 +280,11 @@ function __wbg_get_imports() {
 const FidHasherFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_fidhasher_free(ptr, 1));
+
+function getArrayU64FromWasm0(ptr, len) {
+    ptr = ptr >>> 0;
+    return getBigUint64ArrayMemory0().subarray(ptr / 8, ptr / 8 + len);
+}
 
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;

@@ -727,7 +727,7 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 ### 阶段 1：不可变对象和 RefStore
 
 - S3 ObjectStore；（已完成）
-- Chunk、Manifest、Segment 和 Head；
+- Chunk、Manifest、Segment 和 Head；（Chunk、Manifest、创世 Head 已完成）
 - SQLite RefStore；（已完成）
 - CAS 发布；（已完成）
 - 创世文件系统；（已完成）
@@ -737,7 +737,7 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 
 - Entry 索引；
 - 新建、读取、保存、移动、重命名和删除；
-- 流式分片；
+- 流式分片；（固定分片与流式读取已完成，HTTP 流式写入待接入）
 - Checkpoint；
 - 冲突和重试。
 
