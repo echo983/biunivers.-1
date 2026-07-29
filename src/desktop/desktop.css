@@ -36,6 +36,10 @@
   pointer-events: auto;
 }
 
+.window-layer .winbox:not(.focus) iframe {
+  pointer-events: none;
+}
+
 .window-layer .winbox:not(.max) .wb-max {
   background-image: url("/icons/window-maximize.svg");
   background-size: 15px;

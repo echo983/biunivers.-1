@@ -9,6 +9,8 @@ const winboxMock = vi.hoisted(() => ({
     close: () => void;
     focus: ReturnType<typeof vi.fn>;
     show: ReturnType<typeof vi.fn>;
+    focused: boolean;
+    window: HTMLElement;
   }>,
 }));
 
@@ -133,6 +135,25 @@ describe("window controller", () => {
     expect(instance.show).toHaveBeenCalledOnce();
     expect(instance.focus).toHaveBeenCalledOnce();
     expect(windowRuntimeMap.has("system.about")).toBe(true);
+  });
+
+  it("focuses a covered window when its visible area is pressed", () => {
+    act(() => {
+      openApp("system.about");
+      openApp("system.settings");
+    });
+    const covered = winboxMock.instances[0];
+    covered.focused = false;
+    covered.focus.mockClear();
+
+    act(() => {
+      covered.window.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true }),
+      );
+    });
+
+    expect(covered.focus).toHaveBeenCalledOnce();
+    expect(useDesktopStore.getState().activeAppId).toBe("system.about");
   });
 
   it("cleans runtime and product state even if close is requested twice", () => {

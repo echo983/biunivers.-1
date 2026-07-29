@@ -91,7 +91,13 @@ function wireWindowControls(appId: string, winbox: WinBox) {
       action();
     }
   };
+  const activateWindow = () => {
+    if (!winbox.hidden && !winbox.focused) {
+      winbox.focus();
+    }
+  };
 
+  winbox.window.addEventListener("pointerdown", activateWindow, true);
   minimizeControl?.addEventListener("click", minimize, true);
   minimizeControl?.addEventListener("keydown", (event) =>
     activateOnKeyboard(event, () => hideWindow(appId)),
