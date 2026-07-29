@@ -88,6 +88,7 @@ export interface PvlogCore {
     entryId: Uint8Array,
     recursive: boolean,
   ): Uint8Array;
+  combineSegmentsPacked(packed: Uint8Array): Uint8Array;
   applySegment(
     checkpointBytes: Uint8Array,
     segmentBytes: Uint8Array,

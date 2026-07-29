@@ -6,11 +6,14 @@ import {
   type FormEvent,
 } from "react";
 import {
+  copyEntries,
   copyFile,
   createFile,
   createResourceLaunch,
   createDirectory,
+  moveEntries,
   moveEntry,
+  removeEntries,
   removeEntry,
   resolveResourceHandlers,
   type ResourceHandlerCandidate,
@@ -37,6 +40,10 @@ import {
   consumeDirectoryLaunch,
   subscribeDirectoryLaunch,
 } from "../../desktopSurface/directoryLaunchBroker";
+import {
+  updateFileSelection,
+  type FileSelection,
+} from "./fileSelection";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -87,13 +94,18 @@ export function FileManagerBrowser({
   const [directoryId, setDirectoryId] = useState<string>();
   const [breadcrumbs, setBreadcrumbs] = useState<Breadcrumb[]>([]);
   const [listing, setListing] = useState<DirectoryListing>();
-  const [selected, setSelected] = useState<FileEntry>();
+  const [selection, setSelection] = useState<FileSelection>({
+    entryIds: new Set(),
+  });
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string>();
   const [refreshKey, setRefreshKey] = useState(0);
   const [editDialog, setEditDialog] = useState<EditDialog>(null);
-  const [movingEntry, setMovingEntry] = useState<FileEntry>();
+  const [destinationDialog, setDestinationDialog] = useState<{
+    mode: "move" | "copy";
+    entries: FileEntry[];
+  }>();
   const [notice, setNotice] = useState<string>();
   const [transfer, setTransfer] = useState<TransferState>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
@@ -112,6 +124,11 @@ export function FileManagerBrowser({
     (state) => state.surface.items,
   );
   const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
+  const selectedEntries =
+    listing?.entries.filter((entry) => selection.entryIds.has(entry.entryId)) ??
+    [];
+  const selected =
+    selectedEntries.length === 1 ? selectedEntries[0] : undefined;
 
   useEffect(
     () => () => {
@@ -149,7 +166,7 @@ export function FileManagerBrowser({
       .then((value) => {
         if (!active) return;
         setListing(value);
-        setSelected(undefined);
+        setSelection({ entryIds: new Set() });
         if (value.breadcrumbs) {
           setBreadcrumbs(
             value.breadcrumbs.map((entry) => ({
@@ -207,7 +224,7 @@ export function FileManagerBrowser({
       await useDesktopSurfaceStore.getState().load();
       afterRefresh?.();
       setEditDialog(null);
-      setMovingEntry(undefined);
+      setDestinationDialog(undefined);
       if (successMessage) setNotice(successMessage);
       refresh();
     } catch (reason) {
@@ -517,8 +534,13 @@ export function FileManagerBrowser({
               type="button"
               aria-label="移动"
               title="移动"
-              disabled={!selected || working}
-              onClick={() => setMovingEntry(selected)}
+              disabled={selectedEntries.length === 0 || working}
+              onClick={() =>
+                setDestinationDialog({
+                  mode: "move",
+                  entries: selectedEntries,
+                })
+              }
             >
               <ToolbarIcon kind="move" />
             </button>
@@ -527,12 +549,18 @@ export function FileManagerBrowser({
               aria-label="复制"
               title="复制"
               disabled={
-                !selected || selected.kind !== "file" || working
+                selectedEntries.length === 0 || working
               }
-              onClick={() =>
-                selected &&
-                setEditDialog({ mode: "copy", entry: selected })
-              }
+              onClick={() => {
+                if (selected?.kind === "file") {
+                  setEditDialog({ mode: "copy", entry: selected });
+                } else {
+                  setDestinationDialog({
+                    mode: "copy",
+                    entries: selectedEntries,
+                  });
+                }
+              }}
             >
               <ToolbarIcon kind="copy" />
             </button>
@@ -540,38 +568,48 @@ export function FileManagerBrowser({
               type="button"
               aria-label="移除"
               title="移除"
-              disabled={!selected || working}
+              disabled={selectedEntries.length === 0 || working}
               onClick={() => {
                 if (
-                  selected &&
                   listing &&
                   window.confirm(
-                    selected.kind === "directory"
-                      ? `从当前文件树移除文件夹“${selected.name}”及其内容？`
-                      : `从当前文件树移除文件“${selected.name}”？`,
+                    selectedEntries.length === 1
+                      ? selectedEntries[0].kind === "directory"
+                        ? `从当前文件树移除文件夹“${selectedEntries[0].name}”及其内容？`
+                        : `从当前文件树移除文件“${selectedEntries[0].name}”？`
+                      : `从当前文件树移除选中的 ${selectedEntries.length} 项及其中的目录内容？`,
                   )
                 ) {
                   void runMutation(() =>
-                    removeEntry(
+                    selectedEntries.length === 1
+                      ? removeEntry(
                       instanceToken,
-                      selected.entryId,
-                      selected.kind === "directory",
+                      selectedEntries[0].entryId,
+                      selectedEntries[0].kind === "directory",
                       listing.revision,
-                    ),
+                        )
+                      : removeEntries(
+                          instanceToken,
+                          selectedEntries.map((entry) => entry.entryId),
+                          listing.revision,
+                        ),
                     undefined,
-                    () =>
+                    () => {
+                      for (const entry of selectedEntries) {
                       useDesktopSurfaceStore
                         .getState()
                         .patchResolvedTarget(
                           {
-                            type: selected.kind,
-                            handle: selected.entryId,
+                              type: entry.kind,
+                              handle: entry.entryId,
                           },
                           {
                             available: false,
                             reason: "文件或目录不存在",
                           },
-                        ),
+                          );
+                      }
+                    },
                   );
                 }
               }}
@@ -664,6 +702,11 @@ export function FileManagerBrowser({
               <ToolbarIcon kind="refresh" />
             </button>
           </div>
+          {selectedEntries.length > 0 && (
+            <span className="file-manager-app__selection-count" role="status">
+              已选择 {selectedEntries.length} 项
+            </span>
+          )}
         </div>
         <nav aria-label="当前位置" className="file-manager-app__breadcrumbs">
           <button type="button" onClick={() => navigateTo(-1)}>
@@ -705,7 +748,14 @@ export function FileManagerBrowser({
         />
       )}
 
-      <div className="file-manager-app__content">
+      <div
+        className="file-manager-app__content"
+        onClick={(event) => {
+          if (event.target === event.currentTarget) {
+            setSelection({ entryIds: new Set() });
+          }
+        }}
+      >
         {loading ? (
           <p className="file-manager-app__empty">正在读取目录…</p>
         ) : listing && listing.entries.length > 0 ? (
@@ -722,13 +772,26 @@ export function FileManagerBrowser({
                 <tr
                   key={entry.entryId}
                   className={
-                    selected?.entryId === entry.entryId
+                    selection.entryIds.has(entry.entryId)
                       ? "is-selected"
                       : undefined
                   }
                   tabIndex={0}
-                  aria-selected={selected?.entryId === entry.entryId}
-                  onClick={() => setSelected(entry)}
+                  aria-selected={selection.entryIds.has(entry.entryId)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelection((current) =>
+                      updateFileSelection(
+                        listing.entries.map((item) => item.entryId),
+                        current,
+                        entry.entryId,
+                        {
+                          toggle: event.ctrlKey || event.metaKey,
+                          range: event.shiftKey,
+                        },
+                      ),
+                    );
+                  }}
                   onDoubleClick={() => activateEntry(entry)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") activateEntry(entry);
@@ -829,23 +892,46 @@ export function FileManagerBrowser({
         />
       )}
 
-      {listing && movingEntry && (
-        <MoveDialog
+      {listing && destinationDialog && (
+        <DestinationDialog
           instanceToken={instanceToken}
-          entry={movingEntry}
+          mode={destinationDialog.mode}
+          entries={destinationDialog.entries}
           originalParentEntryId={listing.parent.entryId}
           expectedRevision={listing.revision}
           working={working}
-          onCancel={() => setMovingEntry(undefined)}
-          onMove={(parentEntryId) =>
-            void runMutation(() =>
-              moveEntry(
-                instanceToken,
-                movingEntry.entryId,
-                parentEntryId,
-                movingEntry.name,
-                listing.revision,
-              ),
+          onCancel={() => setDestinationDialog(undefined)}
+          onConfirm={(parentEntryId) =>
+            void runMutation(
+              () =>
+                destinationDialog.mode === "move"
+                  ? destinationDialog.entries.length === 1
+                    ? moveEntry(
+                        instanceToken,
+                        destinationDialog.entries[0].entryId,
+                        parentEntryId,
+                        destinationDialog.entries[0].name,
+                        listing.revision,
+                      )
+                    : moveEntries(
+                        instanceToken,
+                        destinationDialog.entries.map(
+                          (entry) => entry.entryId,
+                        ),
+                        parentEntryId,
+                        listing.revision,
+                      )
+                  : copyEntries(
+                      instanceToken,
+                      destinationDialog.entries.map(
+                        (entry) => entry.entryId,
+                      ),
+                      parentEntryId,
+                      listing.revision,
+                    ),
+              destinationDialog.mode === "move"
+                ? `已移动 ${destinationDialog.entries.length} 项。`
+                : `已复制 ${destinationDialog.entries.length} 项。`,
             )
           }
         />
@@ -1011,22 +1097,24 @@ function NameDialog({
   );
 }
 
-function MoveDialog({
+function DestinationDialog({
   instanceToken,
-  entry,
+  mode,
+  entries,
   originalParentEntryId,
   expectedRevision,
   working,
   onCancel,
-  onMove,
+  onConfirm,
 }: {
   instanceToken: string;
-  entry: FileEntry;
+  mode: "move" | "copy";
+  entries: FileEntry[];
   originalParentEntryId: string;
   expectedRevision: number;
   working: boolean;
   onCancel: () => void;
-  onMove: (parentEntryId: string) => void;
+  onConfirm: (parentEntryId: string) => void;
 }) {
   const [directoryId, setDirectoryId] = useState<string>();
   const [stack, setStack] = useState<Breadcrumb[]>([]);
@@ -1101,7 +1189,11 @@ function MoveDialog({
       aria-labelledby="file-manager-move-dialog-title"
     >
       <section>
-        <h2 id="file-manager-move-dialog-title">移动“{entry.name}”</h2>
+        <h2 id="file-manager-move-dialog-title">
+          {entries.length === 1
+            ? `${mode === "move" ? "移动" : "复制"}“${entries[0].name}”`
+            : `${mode === "move" ? "移动" : "复制"} ${entries.length} 项`}
+        </h2>
         <nav aria-label="目标文件夹">
           <button type="button" onClick={() => navigate(-1)}>
             文件
@@ -1145,9 +1237,9 @@ function MoveDialog({
               !listing ||
               listing.parent.entryId === originalParentEntryId
             }
-            onClick={() => listing && onMove(listing.parent.entryId)}
+            onClick={() => listing && onConfirm(listing.parent.entryId)}
           >
-            移动到这里
+            {mode === "move" ? "移动到这里" : "复制到这里"}
           </button>
         </div>
       </section>

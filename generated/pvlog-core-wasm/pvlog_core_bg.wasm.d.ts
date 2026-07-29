@@ -5,6 +5,7 @@ export const __wbg_fidhasher_free: (a: number, b: number) => void;
 export const abiVersion: () => number;
 export const applySegment: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const checkpointEntriesPacked: (a: number, b: number) => [number, number, number, number];
+export const combineSegmentsPacked: (a: number, b: number) => [number, number, number, number];
 export const encodeAdvancedHead: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number) => [number, number, number, number];
 export const encodeCreateDirectorySegment: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: bigint, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: bigint) => [number, number, number, number];
 export const encodeCreateFileSegment: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: bigint, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: bigint, w: bigint) => [number, number, number, number];

@@ -853,6 +853,14 @@
   flex-wrap: wrap;
 }
 
+.file-manager-app__selection-count {
+  margin-left: auto;
+  padding: 2px 6px;
+  color: #526174;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .file-manager-app__actions > [role="group"] + [role="group"] {
   padding-left: 8px;
   border-left: 1px solid #d8dee8;

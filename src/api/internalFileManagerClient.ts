@@ -5,6 +5,11 @@ export interface FileMutationResult {
   revision: number;
 }
 
+export interface BatchFileMutationResult {
+  entryIds: string[];
+  revision: number;
+}
+
 export interface ResourceHandlerCandidate {
   appId: string;
   appName: string;
@@ -151,6 +156,41 @@ export function removeEntry(
       body: JSON.stringify({ recursive, expectedRevision }),
     },
   );
+}
+
+export function moveEntries(
+  instanceToken: string,
+  entryIds: string[],
+  newParentEntryId: string,
+  expectedRevision: number,
+): Promise<BatchFileMutationResult> {
+  return internalFetch("/api/v1/internal/files/batch/move", instanceToken, {
+    method: "POST",
+    body: JSON.stringify({ entryIds, newParentEntryId, expectedRevision }),
+  });
+}
+
+export function copyEntries(
+  instanceToken: string,
+  entryIds: string[],
+  newParentEntryId: string,
+  expectedRevision: number,
+): Promise<BatchFileMutationResult> {
+  return internalFetch("/api/v1/internal/files/batch/copy", instanceToken, {
+    method: "POST",
+    body: JSON.stringify({ entryIds, newParentEntryId, expectedRevision }),
+  });
+}
+
+export function removeEntries(
+  instanceToken: string,
+  entryIds: string[],
+  expectedRevision: number,
+): Promise<BatchFileMutationResult> {
+  return internalFetch("/api/v1/internal/files/batch/remove", instanceToken, {
+    method: "POST",
+    body: JSON.stringify({ entryIds, expectedRevision }),
+  });
 }
 
 async function internalFetch<T>(
