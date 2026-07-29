@@ -1,6 +1,6 @@
 # Biunivers Resource Session Protocol v1 设计
 
-状态：设计草案，逻辑闭环评审通过，待施工评审
+状态：主推资源协议设计基线，逻辑闭环评审通过
 
 日期：2026-07-29
 
@@ -18,8 +18,22 @@ Host API v1 一次性完整传输不适合大型文件、随机读取和长期�
 3. 应用建议每 60 秒批量续租，超过 300 秒未续租则会话终止；
 4. 会话有效期间允许按权限反复读取、Range 读取和保存，不为每次请求重新签发授权。
 
-本协议是 Host API v1 和 Open Resource Protocol v1 之外的独立扩展，不修改两个 V1 原文，
-也不改变静态应用安装协议。
+本协议完成施工和兼容验收后，作为新第三方应用首选的资源使用协议。Host API v1 冻结为
+兼容接口，Open Resource Protocol v1 继续负责 Handler 路由，Static App Protocol v1 继续
+负责安装与运行。既有协议原文均不修改。
+
+协议分工为：
+
+```text
+Static App Protocol v1       安装、托管和应用身份
+Open Resource Protocol v1    Handler、默认关联和对象路由
+Resource Session Protocol v1 对象领取、续租、读取和保存（主推）
+Host API v1                  旧应用完整传输兼容
+File Service                 两套资源接口共同使用的实现底座
+```
+
+Host API v1 不是新协议的逐层调用底座。宿主应让两套应用接口共同复用 File Service、
+不可变内容、RefStore CAS 和应用身份校验，避免新协议继承一次性 transfer 的限制。
 
 ## 2. 非目标
 
@@ -255,7 +269,11 @@ CORS 必须允许 `Range` 请求头，并向目标应用 Origin 暴露 `Accept-R
 
 - Host API v1 的 handle 和一次性 transfer 保持原样；
 - Open Resource Protocol v1 的 Launch Context 保持原样；
-- 新应用可以优先请求 `biunivers.resource-session/1`，不支持时回退 Host API v1 完整传输；
+- 新应用应优先请求 `biunivers.resource-session/1`，不支持时可以回退 Host API v1 完整传输；
+- 新版开发者包把 Resource Session 标为“推荐”，Host API v1 标为“兼容”；
+- 宿主内部可以通过共同 File Service Core 实现 V1 兼容适配，但不能改变旧应用观察到的
+  一次性语义；
+- Open Resource 路由给支持本协议的应用时交付待领取资源会话；旧应用仍领取 V1 handle；
 - 宿主不得用私有字段改变两个既有 V1 协议；
 - 正式施工前应把能力发现方式和消息 Schema 固定到开发者包。
 
