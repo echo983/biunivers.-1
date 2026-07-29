@@ -135,3 +135,7 @@ File 额外包含 `6 content` 和 `7 size`；Directory map 不包含这两个字
 - 对该字节计算得到的 32 位小写十六进制 XXH3-128 FID。
 
 向量是格式兼容性约束，不只是测试样例。修改任一既有向量意味着不兼容的格式变更。
+
+仓库内 Rust PVLog Core 已实现 Head、Segment、Checkpoint 和 Manifest 的严格解码与
+重新编码一致性检查。Checkpoint 解码还验证唯一根目录、Entry ID 唯一、父目录存在且类型正确、
+同目录名称唯一以及父子图无环。原生核心与 WASM 导出使用同一实现和同一组黄金向量。
