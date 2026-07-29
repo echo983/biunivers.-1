@@ -313,6 +313,26 @@ describe("FileManagerBrowser", () => {
   it("renames, moves and removes a selected entry", async () => {
     const user = userEvent.setup();
     const fileId = "4".repeat(32);
+    useDesktopSurfaceStore.setState({
+      surface: {
+        schemaVersion: 1,
+        revision: 2,
+        items: [
+          {
+            id: "5".repeat(32),
+            target: { type: "file", handle: fileId },
+            position: { x: 0, y: 0 },
+            createdAtMs: 1,
+            resolved: {
+              available: true,
+              name: "note.txt",
+              kind: "file",
+              fileRevision: 3,
+            },
+          },
+        ],
+      },
+    });
     const mutationRequests: Array<{
       url: string;
       method: string | undefined;
@@ -377,6 +397,9 @@ describe("FileManagerBrowser", () => {
       newName: "renamed.txt",
       expectedRevision: 3,
     });
+    expect(
+      useDesktopSurfaceStore.getState().surface.items[0].resolved.name,
+    ).toBe("renamed.txt");
 
     await user.click(await screen.findByText("note.txt"));
     await user.click(screen.getByRole("button", { name: "移动" }));
@@ -419,6 +442,12 @@ describe("FileManagerBrowser", () => {
     expect(JSON.parse(mutationRequests[2].body!)).toEqual({
       recursive: false,
       expectedRevision: 3,
+    });
+    expect(
+      useDesktopSurfaceStore.getState().surface.items[0].resolved,
+    ).toMatchObject({
+      available: false,
+      reason: "文件或目录不存在",
     });
   });
 

@@ -33,6 +33,10 @@ interface DesktopSurfaceState {
   setSelection: (itemIds: Iterable<string>) => void;
   toggleSelection: (itemId: string) => void;
   clearSelection: () => void;
+  patchResolvedTarget: (
+    target: DesktopTarget,
+    resolved: Partial<DesktopSurface["items"][number]["resolved"]>,
+  ) => void;
 }
 
 const EMPTY_SURFACE: DesktopSurface = {
@@ -145,6 +149,21 @@ export const useDesktopSurfaceStore = create<DesktopSurfaceState>(
         return { selectedItemIds };
       }),
     clearSelection: () => set({ selectedItemIds: new Set() }),
+    patchResolvedTarget: (target, resolved) =>
+      set((state) => ({
+        surface: {
+          ...state.surface,
+          items: state.surface.items.map((item) =>
+            item.target.type === target.type &&
+            item.target.handle === target.handle
+              ? {
+                  ...item,
+                  resolved: { ...item.resolved, ...resolved },
+                }
+              : item,
+          ),
+        },
+      })),
   }),
 );
 

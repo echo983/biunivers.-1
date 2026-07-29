@@ -178,6 +178,7 @@ export function FileManagerBrowser({
   const runMutation = async (
     operation: () => Promise<unknown>,
     successMessage?: string,
+    afterRefresh?: () => void,
   ) => {
     if (mutationPendingRef.current) return;
     mutationPendingRef.current = true;
@@ -186,6 +187,7 @@ export function FileManagerBrowser({
     try {
       await operation();
       await useDesktopSurfaceStore.getState().load();
+      afterRefresh?.();
       setEditDialog(null);
       setMovingEntry(undefined);
       if (successMessage) setNotice(successMessage);
@@ -487,6 +489,20 @@ export function FileManagerBrowser({
                       selected.kind === "directory",
                       listing.revision,
                     ),
+                    undefined,
+                    () =>
+                      useDesktopSurfaceStore
+                        .getState()
+                        .patchResolvedTarget(
+                          {
+                            type: selected.kind,
+                            handle: selected.entryId,
+                          },
+                          {
+                            available: false,
+                            reason: "文件或目录不存在",
+                          },
+                        ),
                   );
                 }
               }}
@@ -717,7 +733,23 @@ export function FileManagerBrowser({
               ? `已新建“${name}”。`
               : mode === "copy"
                 ? `已创建副本“${name}”。`
-                : undefined);
+                : undefined,
+            mode === "rename"
+              ? () =>
+                  useDesktopSurfaceStore
+                    .getState()
+                    .patchResolvedTarget(
+                      {
+                        type: editDialog.entry.kind,
+                        handle: editDialog.entry.entryId,
+                      },
+                      {
+                        available: true,
+                        name,
+                        reason: undefined,
+                      },
+                    )
+              : undefined);
           }}
         />
       )}
