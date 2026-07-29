@@ -62,6 +62,12 @@ const openResourceSchemaPath = resolve(
   "v1",
   "biunivers.open-resource.schema.json",
 );
+const resourceSessionProtocolPath = resolve(
+  "docs",
+  "developer-kit",
+  "v1",
+  "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md",
+);
 
 function fetchApp(
   origin: string,
@@ -100,6 +106,7 @@ const commitSha = "0123456789abcdef0123456789abcdef01234567";
 
 let validator: ManifestValidator;
 let openResourceValidator: OpenResourceValidator;
+let resourceSessionProtocolBytes: Buffer;
 const temporaryDirectories: string[] = [];
 const servers: Server[] = [];
 
@@ -147,6 +154,7 @@ async function createServices(source: RepositorySource = new FixtureSource()) {
     source,
     validator,
     openResourceValidator,
+    resourceSessionProtocolBytes,
     appStore,
     dataDir,
     maxAppBytes: 10 * 1024 * 1024,
@@ -182,6 +190,9 @@ beforeAll(async () => {
   openResourceValidator = await OpenResourceValidator.create(
     openResourceSchemaPath,
     openResourceProtocolPath,
+  );
+  resourceSessionProtocolBytes = await readFile(
+    resourceSessionProtocolPath,
   );
 });
 
@@ -299,6 +310,15 @@ describe("inspect and install flow", () => {
         )
       ).status,
     ).toBe(404);
+    expect(
+      (
+        await fetchApp(
+          origin,
+          installed.appId,
+          `${base}/BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it("rejects changed protocol bytes before an app is registered", async () => {
@@ -410,6 +430,42 @@ describe("inspect and install flow", () => {
       ),
     ).rejects.toMatchObject({
       code: "OPEN_RESOURCE_PROTOCOL_MISMATCH",
+    });
+  });
+
+  it("accepts the exact Resource Session protocol and rejects edits", async () => {
+    const exact = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md"),
+          resourceSessionProtocolBytes,
+        );
+      }),
+    );
+    await expect(
+      exact.inspections.create(
+        "https://github.com/example/hello",
+        "v1.0.0",
+      ),
+    ).resolves.toMatchObject({
+      manifest: { appId: "io.github.example.hello" },
+    });
+
+    const changed = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md"),
+          "modified",
+        );
+      }),
+    );
+    await expect(
+      changed.inspections.create(
+        "https://github.com/example/hello",
+        "v1.0.0",
+      ),
+    ).rejects.toMatchObject({
+      code: "RESOURCE_SESSION_PROTOCOL_MISMATCH",
     });
   });
 

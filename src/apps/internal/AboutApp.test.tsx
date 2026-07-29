@@ -9,8 +9,10 @@ describe("AboutApp", () => {
     expect(
       screen.getByRole("heading", { name: "Biunivers 桌面" }),
     ).toBeVisible();
-    expect(screen.getByText("版本 0.7.0")).toBeVisible();
-    expect(screen.getByText("Biunivers File Service")).toBeVisible();
+    expect(screen.getByText("版本 0.8.0")).toBeVisible();
+    expect(
+      screen.getByText("File Service · Resource Session v1"),
+    ).toBeVisible();
     expect(
       screen.getByText("Biunivers Static App Protocol v1"),
     ).toBeVisible();

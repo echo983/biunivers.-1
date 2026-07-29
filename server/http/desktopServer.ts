@@ -25,6 +25,17 @@ import {
 } from "./fileTransferRouter.js";
 import type { DesktopSurfaceService } from "../desktopSurface/desktopSurfaceService.js";
 import { DesktopSurfaceError } from "../desktopSurface/desktopSurfaceStore.js";
+import {
+  ResourceSessionError,
+  type PublicResourceSession,
+  type ResourceSessionRegistry,
+} from "../resources/resourceSessionRegistry.js";
+import type { ResourceSessionService } from "../resources/resourceSessionService.js";
+import {
+  createResourceContentRouter,
+  type ResourceContentExecutor,
+} from "./resourceContentRouter.js";
+import { appSpecificOrigin } from "../apps/appOrigin.js";
 
 type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
@@ -37,7 +48,7 @@ type InternalFileManagerExecutor = Pick<
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 type OpenResourceLaunchExecutor = Pick<
   OpenResourceLaunchService,
-  "create" | "claim" | "cancelTarget"
+  "create" | "claim" | "claimResourceSession" | "cancelTarget"
 >;
 
 interface DesktopServerDependencies {
@@ -50,6 +61,9 @@ interface DesktopServerDependencies {
   getFileServiceStatus?: () => Promise<FileServiceStatus>;
   fileCapabilities?: FileCapabilityRegistry;
   fileTransfers?: FileTransferExecutor;
+  resourceContent?: ResourceContentExecutor;
+  resourceSessionService?: ResourceSessionService;
+  resourceSessions?: ResourceSessionRegistry;
   fileHost?: FileHostService;
   fileServiceBackup?: {
     createLatest(): Promise<FileServiceBackupResult>;
@@ -74,6 +88,9 @@ export function createDesktopServer({
   getFileServiceStatus,
   fileCapabilities,
   fileTransfers,
+  resourceContent,
+  resourceSessionService,
+  resourceSessions,
   fileHost,
   fileServiceBackup,
   fileServiceGcScanner,
@@ -457,6 +474,199 @@ export function createDesktopServer({
     }
   });
 
+  app.post(
+    "/api/v1/host/resource-sessions",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { entryId, access } = request.body as Record<string, unknown>;
+        if (
+          typeof entryId !== "string" ||
+          (access !== "read" && access !== "edit")
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryId 和 read/edit access 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            presentResourceSession(
+              await resourceSessionService.issueFile(
+                instanceToken,
+                entryId,
+                access,
+              ),
+              instanceToken,
+              config.desktopOrigin,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/resource-sessions/save-targets",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { parentEntryId, name } = request.body as Record<
+          string,
+          unknown
+        >;
+        if (
+          typeof parentEntryId !== "string" ||
+          typeof name !== "string"
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "parentEntryId 和 name 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            presentResourceSession(
+              await resourceSessionService.issueSaveTarget(
+                instanceToken,
+                parentEntryId,
+                name,
+              ),
+              instanceToken,
+              config.desktopOrigin,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/resource-sessions/metadata",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { sessionId } = request.body as Record<string, unknown>;
+        if (typeof sessionId !== "string") {
+          throw new AppError("REQUEST_INVALID", "sessionId 必填");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            presentResourceSession(
+              await resourceSessionService.metadata(
+                instanceToken,
+                sessionId,
+              ),
+              instanceToken,
+              config.desktopOrigin,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/resource-sessions/renew",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { sessionIds } = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(sessionIds) ||
+          sessionIds.some((value) => typeof value !== "string")
+        ) {
+          throw new AppError("REQUEST_INVALID", "sessionIds 必须是字符串数组");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await resourceSessionService.renew(
+              instanceToken,
+              sessionIds as string[],
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/resource-sessions/release",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { sessionIds } = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(sessionIds) ||
+          sessionIds.some((value) => typeof value !== "string")
+        ) {
+          throw new AppError("REQUEST_INVALID", "sessionIds 必须是字符串数组");
+        }
+        await resourceSessionService.release(
+          instanceToken,
+          sessionIds as string[],
+        );
+        response.set("Cache-Control", "no-store").status(204).end();
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/host/resource-sessions/launches/claim",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceLaunchService || !resourceSessionService) {
+          throw resourceUnsupported();
+        }
+        const instanceToken = readInstanceToken(request);
+        const { launchId } = request.body as Record<string, unknown>;
+        if (typeof launchId !== "string") {
+          throw new AppError("REQUEST_INVALID", "launchId 必填");
+        }
+        const result =
+          await openResourceLaunchService.claimResourceSession(
+            instanceToken,
+            launchId,
+          );
+        response
+          .set("Cache-Control", "no-store")
+          .json({
+            action: result.action,
+            resource: presentResourceSession(
+              result.resource,
+              instanceToken,
+              config.desktopOrigin,
+            ),
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   if (fileCapabilities && fileTransfers) {
     app.use(
       "/api/v1/files/transfers",
@@ -466,6 +676,27 @@ export function createDesktopServer({
         internalFileAppIds,
         capabilities: fileCapabilities,
         transfers: fileTransfers,
+      }),
+    );
+  }
+
+  if (fileCapabilities && resourceContent) {
+    app.use(
+      "/api/v1/resource-content",
+      createResourceContentRouter({
+        appOrigin: config.appOrigin,
+        capabilities: fileCapabilities,
+        resources: resourceContent,
+        isAppActive: async (appId) =>
+          (await appStore.read()).apps.some(
+            (app) => app.appId === appId && app.status === "active",
+          ),
+        resolveAppIdForOrigin: async (origin) =>
+          (await appStore.read()).apps.find(
+            (app) =>
+              app.status === "active" &&
+              appSpecificOrigin(config.appOrigin, app.appId) === origin,
+          )?.appId,
       }),
     );
   }
@@ -898,6 +1129,7 @@ export function createDesktopServer({
               configuration ?? {},
             );
           openResourceLaunchService?.cancelTarget(request.params.appId);
+          resourceSessions?.revokeApp(request.params.appId);
           response.json(updated);
         } catch (error) {
           next(error);
@@ -936,6 +1168,7 @@ export function createDesktopServer({
             });
           if (updated.status === "disabled") {
             openResourceLaunchService?.cancelTarget(request.params.appId);
+            resourceSessions?.revokeApp(request.params.appId);
           }
           response.json(updated);
         } catch (error) {
@@ -950,6 +1183,7 @@ export function createDesktopServer({
         try {
           await appService.uninstall(request.params.appId);
           openResourceLaunchService?.cancelTarget(request.params.appId);
+          resourceSessions?.revokeApp(request.params.appId);
           response.status(204).end();
         } catch (error) {
           next(error);
@@ -1007,6 +1241,25 @@ export function createDesktopServer({
               message: error.message,
             },
           });
+        return;
+      }
+      if (error instanceof ResourceSessionError) {
+        const status = {
+          REQUEST_INVALID: 400,
+          RESOURCE_SESSION_NOT_FOUND: 404,
+          RESOURCE_SESSION_EXPIRED: 410,
+          RESOURCE_SESSION_REVOKED: 403,
+          RESOURCE_ACCESS_DENIED: 403,
+          RESOURCE_TRANSFER_TOO_LARGE: 413,
+          FILE_VERSION_CONFLICT: 409,
+          RESOURCE_SESSION_LIMIT_REACHED: 429,
+        }[error.code];
+        response.status(status).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
         return;
       }
       if (error instanceof OpenResourceError) {
@@ -1076,6 +1329,30 @@ function requireDesktopOrigin(
       403,
     );
   }
+}
+
+function presentResourceSession(
+  session: PublicResourceSession,
+  instanceToken: string,
+  desktopOrigin: string,
+) {
+  return {
+    ...session,
+    content: {
+      url: `${desktopOrigin}/api/v1/resource-content`,
+      sessionHeader: "Biunivers-Resource-Session",
+      authorization: "Biunivers-Instance",
+      instanceToken,
+    },
+  };
+}
+
+function resourceUnsupported(): AppError {
+  return new AppError(
+    "HOST_API_UNSUPPORTED",
+    "当前宿主尚未启用资源会话能力",
+    503,
+  );
 }
 
 function readInstanceToken(request: express.Request): string {
