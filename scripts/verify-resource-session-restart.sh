@@ -76,8 +76,11 @@ after="$(
     -H "Biunivers-Resource-Session: ${session_id}" \
     "${desktop_origin}/api/v1/resource-content"
 )"
-test "${after}" = "401"
 
 echo "重启前资源读取：HTTP ${before}"
 echo "重启后旧凭据读取：HTTP ${after}"
+if [ "${after}" != "404" ]; then
+  echo "预期旧实例和会话返回 HTTP 404，实际为 ${after}。" >&2
+  exit 1
+fi
 echo "宿主重启未恢复旧实例和资源会话，符合预期。"
