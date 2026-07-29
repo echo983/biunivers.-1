@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppStore } from "../apps/appStore.js";
 import type { ServerConfig } from "../config.js";
 import { FileCapabilityRegistry } from "../files/fileCapabilityRegistry.js";
@@ -178,6 +178,80 @@ describe("desktop and app origins", () => {
     expect(created.status).toBe(201);
     expect(created.headers.get("cache-control")).toBe("no-store");
     await expect(created.json()).resolves.toEqual(result);
+  });
+
+  it("protects internal file mutations by desktop origin and instance token", async () => {
+    const dependencies = await createDependencies();
+    const createDirectory = vi.fn(async () => ({
+      entryId: "22".repeat(16),
+      revision: 4,
+    }));
+    const origin = await listen(
+      createDesktopServer({
+        ...dependencies,
+        internalFileManager: {
+          createDirectory,
+          moveEntry: vi.fn(),
+          removeEntry: vi.fn(),
+        },
+      }).listen(0, "127.0.0.1"),
+    );
+    const body = JSON.stringify({
+      parentEntryId: "11".repeat(16),
+      name: "Documents",
+      expectedRevision: 3,
+    });
+
+    const forbidden = await fetch(
+      `${origin}/api/v1/internal/files/directories`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+        },
+        body,
+      },
+    );
+    expect(forbidden.status).toBe(403);
+
+    const missingToken = await fetch(
+      `${origin}/api/v1/internal/files/directories`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body,
+      },
+    );
+    expect(missingToken.status).toBe(401);
+
+    const created = await fetch(
+      `${origin}/api/v1/internal/files/directories`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Biunivers-Instance ${"a".repeat(43)}`,
+          "content-type": "application/json",
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
+        },
+        body,
+      },
+    );
+    expect(created.status).toBe(201);
+    await expect(created.json()).resolves.toEqual({
+      entryId: "22".repeat(16),
+      revision: 4,
+    });
+    expect(createDirectory).toHaveBeenCalledWith("a".repeat(43), {
+      parentEntryId: "11".repeat(16),
+      name: "Documents",
+      expectedRevision: 3,
+    });
   });
 
   it("bootstraps file instances only for the trusted desktop and active apps", async () => {

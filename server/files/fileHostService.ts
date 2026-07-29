@@ -10,6 +10,7 @@ import {
 } from "./entryIndex.js";
 import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import type { SqliteRefStore } from "./sqliteRefStore.js";
+import { validateEntryName } from "./entryName.js";
 
 interface FileHostServiceOptions {
   repository: ImmutableObjectRepository;
@@ -182,29 +183,6 @@ export class FileHostService {
       handleId,
       method,
       method === "PUT" ? this.#maxWriteBytes : 0,
-    );
-  }
-}
-
-function validateEntryName(name: string): void {
-  if (
-    !name ||
-    Buffer.byteLength(name, "utf8") > 255 ||
-    name === "." ||
-    name === ".." ||
-    name.normalize("NFC") !== name ||
-    [...name].some((character) => {
-      const codePoint = character.codePointAt(0)!;
-      return (
-        character === "/" ||
-        codePoint <= 0x1f ||
-        (codePoint >= 0x7f && codePoint <= 0x9f)
-      );
-    })
-  ) {
-    throw new FileCapabilityError(
-      "REQUEST_INVALID",
-      "File name is invalid.",
     );
   }
 }

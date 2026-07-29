@@ -15,6 +15,7 @@ import { FileTransferService } from "./files/fileTransferService.js";
 import { FileHostService } from "./files/fileHostService.js";
 import { FileServiceBackup } from "./files/fileServiceBackup.js";
 import { FileServiceGcScanner } from "./files/fileServiceGcScanner.js";
+import { InternalFileManagerService } from "./files/internalFileManagerService.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -105,6 +106,18 @@ async function main() {
           refStore: fileService.refStore,
         })
       : undefined;
+  const internalFileManager =
+    fileCapabilities &&
+    fileService.repository &&
+    fileService.refStore &&
+    config.fileService
+      ? new InternalFileManagerService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          capabilities: fileCapabilities,
+          writerId: config.fileService.writerId,
+        })
+      : undefined;
   if (fileService.status.mode === "ready") {
     console.log(
       `Biunivers File Service ready at revision ${fileService.status.revision}`,
@@ -130,6 +143,7 @@ async function main() {
     fileServiceBackup,
     fileServiceGcScanner,
     internalFileAppIds: new Set(["system.files"]),
+    internalFileManager,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
