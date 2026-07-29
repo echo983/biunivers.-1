@@ -264,6 +264,12 @@ RefStore 是关键控制数据，必须位于持久卷并具备备份和恢复�
 
 快照名称、分支名称和 Pin 状态也属于上层 RefStore，不进入 S3 可变 Key。
 
+仓库内 `SqliteRefStore` 将“首次初始化”和“打开既有库”分为两个入口。普通启动只允许
+`openExisting`；数据库缺失、损坏、schema 不受支持或表不完整时停止启动，不能静默创建空库。
+CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 每次只前进一个 revision。
+在线一致性备份和恢复步骤见
+[`runbooks/File Service RefStore 备份恢复.md`](./runbooks/File%20Service%20RefStore%20备份恢复.md)。
+
 ## 8. Head
 
 Head 是不可变、内容寻址的文件系统版本根。

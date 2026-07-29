@@ -19,7 +19,7 @@ S3 兼容后端。
 - [x] 实现并验证严格 WORM ObjectStore 适配器合约（本地原子适配器、S3 条件创建适配器、
   模拟测试和真实 S3 兼容桶合约测试均已通过）；
 - 完成每应用独立 origin 设计与本地开发方案；
-- 确定 SQLite RefStore 备份和恢复操作；
+- [x] 确定 SQLite RefStore 备份和恢复操作；
 - [ ] 冻结 PVLog Core WASM ABI、内存上限和基准测试方法（ABI v1 候选与
   128 MiB 线性内存上限已经落地，待解码/回放接口和基准结果）。
 
@@ -725,10 +725,10 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 
 ### 阶段 1：不可变对象和 RefStore
 
-- S3 ObjectStore；
+- S3 ObjectStore；（已完成）
 - Chunk、Manifest、Segment 和 Head；
-- SQLite RefStore；
-- CAS 发布；
+- SQLite RefStore；（已完成）
+- CAS 发布；（已完成）
 - 创世文件系统；
 - 完整回放和验证工具。
 
