@@ -296,7 +296,71 @@ describe("FileTransferService", () => {
     );
     await expect(
       fixture.service.read(fixture.instanceToken, transfer.transferId),
-    ).rejects.toMatchObject({ code: "HANDLE_EXPIRED" });
+    ).rejects.toMatchObject({ code: "FILE_VERSION_CONFLICT" });
+    fixture.refStore.close();
+  });
+
+  it("prevents a stale writable handle from overwriting a newer revision", async () => {
+    const fixture = await setup();
+    const first = fixture.capabilities.issueHandle(
+      fixture.instanceToken,
+      fixture.entry,
+      1,
+      true,
+    );
+    const stale = fixture.capabilities.issueHandle(
+      fixture.instanceToken,
+      fixture.entry,
+      1,
+      true,
+    );
+    const firstTransfer = fixture.capabilities.issueTransfer(
+      fixture.instanceToken,
+      first.handleId,
+      "PUT",
+      100,
+    );
+    async function* firstWrite() {
+      yield Buffer.from("winner");
+    }
+    await fixture.service.write(
+      fixture.instanceToken,
+      firstTransfer.transferId,
+      firstWrite(),
+      6,
+    );
+
+    const staleTransfer = fixture.capabilities.issueTransfer(
+      fixture.instanceToken,
+      stale.handleId,
+      "PUT",
+      100,
+    );
+    async function* staleWrite() {
+      yield Buffer.from("loser");
+    }
+    await expect(
+      fixture.service.write(
+        fixture.instanceToken,
+        staleTransfer.transferId,
+        staleWrite(),
+        5,
+      ),
+    ).rejects.toMatchObject({
+      code: "FILE_VERSION_CONFLICT",
+    });
+    const index = await loadCurrentEntryIndex(
+      fixture.repository,
+      fixture.refStore,
+    );
+    expect(index.revision).toBe(2);
+    const chunks = [];
+    for await (const chunk of fixture.contentStore.readChunks(
+      index.get(fixture.entry.entryIdHex)!.content!,
+    )) {
+      chunks.push(chunk);
+    }
+    expect(Buffer.concat(chunks).toString()).toBe("winner");
     fixture.refStore.close();
   });
 });

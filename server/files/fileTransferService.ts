@@ -72,10 +72,7 @@ export class FileTransferService {
         !entry.content ||
         entry.content.fidHex !== transfer.expectedContentFidHex
       ) {
-        throw new FileCapabilityError(
-          "HANDLE_EXPIRED",
-          "File changed after this handle was issued.",
-        );
+        throw versionConflict();
       }
       const source = this.#contentStore.readChunks(entry.content);
       return {
@@ -126,10 +123,7 @@ export class FileTransferService {
           !entry.content ||
           entry.content.fidHex !== transfer.expectedContentFidHex
         ) {
-          throw new FileCapabilityError(
-            "HANDLE_EXPIRED",
-            "File changed after this handle was issued.",
-          );
+          throw versionConflict();
         }
       }
       const content = await this.#contentStore.putStream(
@@ -182,6 +176,13 @@ export class FileTransferService {
           "Transfer exceeds its byte limit.",
         );
       }
+      if (
+        error instanceof Error &&
+        "code" in error &&
+        error.code === "REF_CONFLICT"
+      ) {
+        throw versionConflict();
+      }
       throw error;
     } finally {
       this.#capabilities.finishTransfer(instanceToken, transferId);
@@ -199,4 +200,11 @@ export class FileTransferService {
       this.#capabilities.finishTransfer(instanceToken, transferId);
     }
   }
+}
+
+function versionConflict(): FileCapabilityError {
+  return new FileCapabilityError(
+    "FILE_VERSION_CONFLICT",
+    "文件已被其他窗口修改，请重新打开后再保存。",
+  );
 }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "protocol": "biunivers.static-app/1",
   "appId": "io.github.echo983.biunivers-notepad",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "name": "Biunivers Notepad",
   "description": "A minimal text editor used to validate Biunivers Host API v1.",
   "license": "MIT",

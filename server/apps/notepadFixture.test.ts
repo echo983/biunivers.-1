@@ -34,7 +34,7 @@ describe("Biunivers Notepad validation fixture", () => {
     ).toMatchObject({
       appId: "io.github.echo983.biunivers-notepad",
       protocol: "biunivers.static-app/1",
-      version: "0.1.0",
+      version: "0.1.1",
     });
     expect(index).toContain('src="./app.js"');
     for (const method of [

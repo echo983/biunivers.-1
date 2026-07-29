@@ -45,7 +45,7 @@ export async function readTransfer(transfer) {
     },
   });
   if (!response.ok) {
-    throw new Error(`读取失败：HTTP ${response.status}`);
+    throw await responseError(response, "读取");
   }
   return await response.text();
 }
@@ -64,7 +64,21 @@ export async function writeTransfer(transfer, text) {
     body: bytes,
   });
   if (!response.ok) {
-    throw new Error(`保存失败：HTTP ${response.status}`);
+    throw await responseError(response, "保存");
   }
   return await response.json();
+}
+
+async function responseError(response, action) {
+  let body = null;
+  try {
+    body = await response.json();
+  } catch {
+    // The host may close a failed streaming response without JSON.
+  }
+  const error = new Error(
+    body?.error?.message || `${action}失败：HTTP ${response.status}`,
+  );
+  error.code = body?.error?.code || "TRANSFER_FAILED";
+  return error;
 }

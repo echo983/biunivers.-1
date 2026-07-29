@@ -454,6 +454,7 @@ export function createDesktopServer({
           TRANSFER_NOT_FOUND: 404,
           TRANSFER_EXPIRED: 410,
           TRANSFER_TOO_LARGE: 413,
+          FILE_VERSION_CONFLICT: 409,
           PERMISSION_DENIED: 403,
           CAPABILITY_LIMIT_REACHED: 429,
           REQUEST_INVALID: 400,

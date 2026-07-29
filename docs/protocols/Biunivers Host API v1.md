@@ -145,6 +145,8 @@ await fetch(transfer.url, {
 - `PERMISSION_DENIED`：当前句柄没有所需权限；
 - `TRANSFER_EXPIRED`：重新申请传输；
 - `TRANSFER_TOO_LARGE`：提示用户缩小内容；
-- `REF_CONFLICT`：文件系统已被其他写入推进，应重新打开或重试。
+- `FILE_VERSION_CONFLICT`：文件已被其他窗口修改；保留编辑内容，提示用户重新打开或另存为。
+- `REF_CONFLICT`：文件系统发布期间发生竞争；宿主通常会转换为
+  `FILE_VERSION_CONFLICT`，应用仍应按冲突处理。
 
 应用不得根据错误差异探测其他应用、窗口或未授权文件。
