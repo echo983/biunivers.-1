@@ -21,9 +21,10 @@ export interface HostRequest {
 export interface HostResponse {
   protocol: typeof HOST_API_PROTOCOL;
   requestId: string;
-  ok: false;
-  error: {
-    code: "HOST_API_UNSUPPORTED" | "REQUEST_INVALID";
+  ok: boolean;
+  result?: unknown;
+  error?: {
+    code: string;
     message: string;
   };
 }

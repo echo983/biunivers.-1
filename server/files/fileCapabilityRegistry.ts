@@ -91,6 +91,11 @@ export interface FileTransferIdentity {
   method: "GET" | "PUT";
 }
 
+export interface FileInstanceIdentity {
+  appId: string;
+  windowInstanceId: string;
+}
+
 interface FileCapabilityRegistryOptions {
   now?: () => number;
   randomToken?: () => string;
@@ -184,6 +189,14 @@ export class FileCapabilityRegistry {
         this.#transfers.delete(transferId);
       }
     }
+  }
+
+  authorizeInstance(instanceToken: string): FileInstanceIdentity {
+    const instance = this.#requireInstance(instanceToken);
+    return {
+      appId: instance.appId,
+      windowInstanceId: instance.windowInstanceId,
+    };
   }
 
   issueHandle(

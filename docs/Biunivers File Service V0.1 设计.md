@@ -763,12 +763,12 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 
 - 每应用独立 origin；（已完成）
 - 安全消息桥；（v1 信封、大小/方法白名单、精确 origin 与 iframe source 校验已完成；
-  文件能力 dispatcher 待接入）
+  已有文件 dispatcher 已完成，saveAs 待接入）
 - 文件句柄；（内存注册表、实例绑定、读写权限、过期、级联撤销与容量上限已完成；
-  文件选择器签发流程待接入）
+  文件选择器签发流程已接入）
 - 传输 URL；（一次性 transfer 状态机、实例/句柄/方法绑定、大小上限、过期、撤销和
-  URL 生成所需后端已完成；Host API dispatcher 待返回 URL）
-- 文件选择器；
+  URL 生成、Host API dispatcher 已完成）
+- 文件选择器；（目录导航、取消、只读/可写文件句柄签发已完成）
 - 保存对话框；
 - File HTTP API。（GET/PUT 流式路由、实例认证、精确 CORS、版本复核和原子写入已完成）
 

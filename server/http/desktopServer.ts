@@ -12,6 +12,7 @@ import {
   FileCapabilityError,
 } from "../files/fileCapabilityRegistry.js";
 import type { FileServiceStatus } from "../files/fileServiceRuntime.js";
+import type { FileHostService } from "../files/fileHostService.js";
 import {
   createFileTransferRouter,
   type FileTransferExecutor,
@@ -26,6 +27,7 @@ interface DesktopServerDependencies {
   fileServiceStatus?: FileServiceStatus;
   fileCapabilities?: FileCapabilityRegistry;
   fileTransfers?: FileTransferExecutor;
+  fileHost?: FileHostService;
 }
 
 export function createDesktopServer({
@@ -37,6 +39,7 @@ export function createDesktopServer({
   fileServiceStatus,
   fileCapabilities,
   fileTransfers,
+  fileHost,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -112,6 +115,118 @@ export function createDesktopServer({
       const instanceToken = readInstanceToken(request);
       fileCapabilities.closeInstance(instanceToken);
       response.set("Cache-Control", "no-store").status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/host/files", async (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      const parent = request.query.parent;
+      if (parent !== undefined && typeof parent !== "string") {
+        throw new AppError("REQUEST_INVALID", "parent 必须是字符串");
+      }
+      response
+        .set("Cache-Control", "no-store")
+        .json(await service.listDirectory(instanceToken, parent));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/host/handles", async (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      const { entryId, writable } = request.body as Record<string, unknown>;
+      if (typeof entryId !== "string" || typeof writable !== "boolean") {
+        throw new AppError(
+          "REQUEST_INVALID",
+          "entryId 必须是字符串且 writable 必须是布尔值",
+        );
+      }
+      response
+        .status(201)
+        .set("Cache-Control", "no-store")
+        .json(await service.issueHandle(instanceToken, entryId, writable));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/host/handles/:handleId", async (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json(
+          await service.getMetadata(
+            instanceToken,
+            request.params.handleId,
+          ),
+        );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/host/handles/:handleId", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      service.releaseHandle(instanceToken, request.params.handleId);
+      response.set("Cache-Control", "no-store").status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/host/transfers", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireFileHost(
+        request,
+        config,
+        fileHost,
+      );
+      const { handleId, method } = request.body as Record<string, unknown>;
+      if (
+        typeof handleId !== "string" ||
+        (method !== "GET" && method !== "PUT")
+      ) {
+        throw new AppError(
+          "REQUEST_INVALID",
+          "handleId 和 GET/PUT method 必填",
+        );
+      }
+      const transfer = service.issueTransfer(
+        instanceToken,
+        handleId,
+        method,
+      );
+      response
+        .status(201)
+        .set("Cache-Control", "no-store")
+        .json({
+          ...transfer,
+          url: `${config.desktopOrigin}/api/v1/files/transfers/${transfer.transferId}`,
+          authorization: "Biunivers-Instance",
+          instanceToken,
+        });
     } catch (error) {
       next(error);
     }
@@ -329,11 +444,18 @@ function requireDesktopOrigin(
   request: express.Request,
   desktopOrigin: string,
 ): void {
+  const origin = request.get("origin");
+  const fetchSite = request.get("sec-fetch-site");
+  const sameOriginGet =
+    request.method === "GET" &&
+    origin === undefined &&
+    fetchSite === "same-origin";
   if (
-    request.get("origin") !== desktopOrigin ||
+    !sameOriginGet &&
+    (origin !== desktopOrigin ||
     !["same-origin", "none", undefined].includes(
-      request.get("sec-fetch-site"),
-    )
+      fetchSite,
+    ))
   ) {
     throw new AppError(
       "ORIGIN_FORBIDDEN",
@@ -354,4 +476,23 @@ function readInstanceToken(request: express.Request): string {
     );
   }
   return match[1];
+}
+
+function requireFileHost(
+  request: express.Request,
+  config: ServerConfig,
+  fileHost: FileHostService | undefined,
+): { service: FileHostService; instanceToken: string } {
+  requireDesktopOrigin(request, config.desktopOrigin);
+  if (!fileHost) {
+    throw new AppError(
+      "HOST_API_UNSUPPORTED",
+      "当前宿主尚未启用文件能力",
+      503,
+    );
+  }
+  return {
+    service: fileHost,
+    instanceToken: readInstanceToken(request),
+  };
 }

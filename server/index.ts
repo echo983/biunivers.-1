@@ -12,6 +12,7 @@ import { ManifestValidator } from "./manifests/manifestValidator.js";
 import { startFileService } from "./files/fileServiceRuntime.js";
 import { FileCapabilityRegistry } from "./files/fileCapabilityRegistry.js";
 import { FileTransferService } from "./files/fileTransferService.js";
+import { FileHostService } from "./files/fileHostService.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -70,6 +71,14 @@ async function main() {
           capabilities: fileCapabilities,
         })
       : undefined;
+  const fileHost =
+    fileCapabilities && fileService.repository && fileService.refStore
+      ? new FileHostService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          capabilities: fileCapabilities,
+        })
+      : undefined;
   if (fileService.status.mode === "ready") {
     console.log(
       `Biunivers File Service ready at revision ${fileService.status.revision}`,
@@ -90,6 +99,7 @@ async function main() {
     fileServiceStatus: fileService.status,
     fileCapabilities,
     fileTransfers,
+    fileHost,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,

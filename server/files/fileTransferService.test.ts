@@ -7,6 +7,7 @@ import { FileContentStore } from "./fileContentStore.js";
 import { loadCurrentEntryIndex } from "./entryIndex.js";
 import { FileSystemTransactions } from "./fileSystemTransactions.js";
 import { FileTransferService } from "./fileTransferService.js";
+import { FileHostService } from "./fileHostService.js";
 import { initializeGenesisFileSystem } from "./genesisFileSystem.js";
 import { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import type {
@@ -100,6 +101,12 @@ async function setup() {
       writerId: "test",
       capabilities,
     }),
+    host: new FileHostService({
+      repository,
+      refStore: genesis.store,
+      capabilities,
+      maxWriteBytes: 1_024,
+    }),
   };
 }
 
@@ -108,6 +115,44 @@ afterEach(async () => {
 });
 
 describe("FileTransferService", () => {
+  it("lists safe metadata and issues handles and transfers for an instance", async () => {
+    const fixture = await setup();
+    const listing = await fixture.host.listDirectory(fixture.instanceToken);
+    expect(listing.entries).toEqual([
+      {
+        entryId: fixture.entry.entryIdHex,
+        name: "notes.md",
+        kind: "file",
+        size: 8,
+        mtimeMs: fixture.entry.mtimeMs,
+      },
+    ]);
+    expect(JSON.stringify(listing)).not.toContain(
+      fixture.entry.content?.fidHex,
+    );
+    const handle = await fixture.host.issueHandle(
+      fixture.instanceToken,
+      fixture.entry.entryIdHex,
+      true,
+    );
+    await expect(
+      fixture.host.getMetadata(fixture.instanceToken, handle.handleId),
+    ).resolves.toMatchObject({
+      entryId: fixture.entry.entryIdHex,
+      writable: true,
+      changed: false,
+    });
+    expect(
+      fixture.host.issueTransfer(
+        fixture.instanceToken,
+        handle.handleId,
+        "PUT",
+      ),
+    ).toMatchObject({ method: "PUT", maxBytes: 1_024 });
+    fixture.host.releaseHandle(fixture.instanceToken, handle.handleId);
+    fixture.refStore.close();
+  });
+
   it("streams the exact content bound to a read handle once", async () => {
     const fixture = await setup();
     const handle = fixture.capabilities.issueHandle(
