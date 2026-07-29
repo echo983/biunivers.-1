@@ -9,6 +9,7 @@ import {
   type OpenResourceLaunchRegistry,
 } from "./openResourceLaunchRegistry.js";
 import type { ResourceHandler } from "./types.js";
+import type { ResourceSessionService } from "../resources/resourceSessionService.js";
 
 interface AppStoreReader {
   read(): Promise<{ apps: InstalledAppRecord[] }>;
@@ -19,6 +20,7 @@ interface OpenResourceLaunchServiceOptions {
   launches: OpenResourceLaunchRegistry;
   appStore: AppStoreReader;
   loadIndex: () => Promise<EntryIndex>;
+  resourceSessionService?: ResourceSessionService;
 }
 
 export class OpenResourceLaunchService {
@@ -85,6 +87,39 @@ export class OpenResourceLaunchService {
         name: handle.metadata.name,
         permissions: writable ? ["read", "write"] : ["read"],
       },
+    };
+  }
+
+  async claimResourceSession(instanceToken: string, launchId: string) {
+    if (!this.options.resourceSessionService) {
+      throw denied("Resource sessions are not available.");
+    }
+    const identity =
+      this.options.capabilities.authorizeInstance(instanceToken);
+    const launch = this.options.launches.consume(
+      launchId,
+      identity.appId,
+    );
+    const { entry, handler } = await this.#validateTarget({
+      entryId: launch.entryId,
+      expectedRevision: launch.expectedRevision,
+      targetAppId: launch.targetAppId,
+      handlerId: launch.handlerId,
+      action: launch.action,
+    });
+    const access =
+      launch.writable &&
+      launch.action === "edit" &&
+      handler.access === "read-write"
+        ? "edit"
+        : "read";
+    return {
+      action: launch.action,
+      resource: await this.options.resourceSessionService.issueFile(
+        instanceToken,
+        entry.entryIdHex,
+        access,
+      ),
     };
   }
 

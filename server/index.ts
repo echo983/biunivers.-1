@@ -23,6 +23,9 @@ import { OpenResourceLaunchService } from "./openResource/openResourceLaunchServ
 import { loadCurrentEntryIndex } from "./files/entryIndex.js";
 import { DesktopSurfaceStore } from "./desktopSurface/desktopSurfaceStore.js";
 import { DesktopSurfaceService } from "./desktopSurface/desktopSurfaceService.js";
+import { ResourceSessionRegistry } from "./resources/resourceSessionRegistry.js";
+import { ResourceContentService } from "./resources/resourceContentService.js";
+import { ResourceSessionService } from "./resources/resourceSessionService.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -88,6 +91,10 @@ async function main() {
     fileService.status.mode === "ready"
       ? new FileCapabilityRegistry()
       : undefined;
+  const resourceSessions =
+    fileService.status.mode === "ready"
+      ? new ResourceSessionRegistry()
+      : undefined;
   const fileTransfers =
     fileCapabilities &&
     fileService.repository &&
@@ -106,6 +113,31 @@ async function main() {
           repository: fileService.repository,
           refStore: fileService.refStore,
           capabilities: fileCapabilities,
+        })
+      : undefined;
+  const resourceContent =
+    resourceSessions &&
+    fileService.repository &&
+    fileService.refStore &&
+    config.fileService
+      ? new ResourceContentService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          writerId: config.fileService.writerId,
+          sessions: resourceSessions,
+        })
+      : undefined;
+  const resourceSessionService =
+    resourceSessions &&
+    fileCapabilities &&
+    fileService.repository &&
+    fileService.refStore
+      ? new ResourceSessionService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          capabilities: fileCapabilities,
+          sessions: resourceSessions,
+          appStore,
         })
       : undefined;
   const fileServiceBackup =
@@ -158,6 +190,7 @@ async function main() {
           capabilities: fileCapabilities,
           launches: new OpenResourceLaunchRegistry(),
           appStore,
+          resourceSessionService,
           loadIndex: () =>
             loadCurrentEntryIndex(
               fileService.repository!,
@@ -224,6 +257,9 @@ async function main() {
     getFileServiceStatus: () => fileService.currentStatus(),
     fileCapabilities,
     fileTransfers,
+    resourceContent,
+    resourceSessionService,
+    resourceSessions,
     fileHost,
     fileServiceBackup,
     fileServiceGcScanner,

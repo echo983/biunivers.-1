@@ -30,6 +30,16 @@ import {
   parseOpenResourceRequest,
 } from "../openResource/protocol";
 import { useDesktopStore } from "../store/desktopStore";
+import { dispatchResourceSessionRequest } from "../resourceSession/dispatcher";
+import {
+  RESOURCE_SESSION_PROTOCOL,
+  parseResourceSessionRequest,
+  unsupportedResourceSessionResponse,
+} from "../resourceSession/protocol";
+import {
+  claimResourceSessionLaunch,
+  ResourceSessionClientError,
+} from "../resourceSession/resourceSessionClient";
 
 interface IframeAppProps {
   app: AppDefinition;
@@ -74,6 +84,13 @@ export function IframeApp({ app }: IframeAppProps) {
         iframeWindow.postMessage(
           {
             protocol: OPEN_RESOURCE_PROTOCOL,
+            event: "launch.contextAvailable",
+          },
+          appOrigin,
+        );
+        iframeWindow.postMessage(
+          {
+            protocol: RESOURCE_SESSION_PROTOCOL,
             event: "launch.contextAvailable",
           },
           appOrigin,
@@ -237,6 +254,48 @@ export function IframeApp({ app }: IframeAppProps) {
             }
             postResponse(errorResponse(openResourceRequest.requestId, error));
           }
+        });
+        return;
+      }
+
+      const resourceSessionRequest = parseResourceSessionRequest(event.data);
+      if (resourceSessionRequest) {
+        void instanceReadyRef.current.then(async (instanceToken) => {
+          const launchId = pendingResourceLaunch(app.id);
+          const response = instanceToken
+            ? await dispatchResourceSessionRequest(
+                resourceSessionRequest,
+                instanceToken,
+                {
+                  selectFile,
+                  selectSaveTarget,
+                  ...(launchId
+                    ? {
+                        claimLaunch: async (token: string) => {
+                          try {
+                            const result =
+                              await claimResourceSessionLaunch(
+                                token,
+                                launchId,
+                              );
+                            consumeResourceLaunch(app.id, launchId);
+                            return result;
+                          } catch (error) {
+                            if (
+                              error instanceof ResourceSessionClientError &&
+                              error.terminal
+                            ) {
+                              consumeResourceLaunch(app.id, launchId);
+                            }
+                            throw error;
+                          }
+                        },
+                      }
+                    : {}),
+                },
+              )
+            : unsupportedResourceSessionResponse(resourceSessionRequest);
+          postResponse(response);
         });
         return;
       }
