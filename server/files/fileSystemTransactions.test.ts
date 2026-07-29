@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FileContentStore } from "./fileContentStore.js";
+import { loadCurrentEntryIndex } from "./entryIndex.js";
 import { FileSystemTransactions } from "./fileSystemTransactions.js";
 import { initializeGenesisFileSystem } from "./genesisFileSystem.js";
 import { ImmutableObjectRepository } from "./immutableObjectRepository.js";
@@ -187,6 +188,79 @@ describe("FileSystemTransactions", () => {
       winner.ref.headFidHex,
     );
     secondConnection.close();
+    setupResult.refStore.close();
+  });
+
+  it("preserves Entry IDs through directory CRUD, move, rename, and recursive delete", async () => {
+    const setupResult = await setup();
+    const contentStore = new FileContentStore(setupResult.repository);
+    const content = await contentStore.putBytes(Buffer.from("notes"));
+    const ids = [
+      id(0x31),
+      id(0x41),
+      id(0x32),
+      id(0x42),
+      id(0x43),
+      id(0x33),
+      id(0x44),
+      id(0x45),
+      id(0x46),
+    ];
+    const transactions = new FileSystemTransactions({
+      repository: setupResult.repository,
+      refStore: setupResult.refStore,
+      writerId: "crud-test",
+      now: () => 200,
+      randomId: () => ids.shift()!,
+    });
+
+    const directory = await transactions.createDirectory({
+      parentEntryIdHex: setupResult.rootEntryIdHex,
+      name: "docs",
+    });
+    const file = await transactions.createFile({
+      parentEntryIdHex: directory.entryIdHex,
+      name: "notes.md",
+      content,
+    });
+    await transactions.moveEntry({
+      entryIdHex: file.entryIdHex,
+      newParentEntryIdHex: setupResult.rootEntryIdHex,
+      newName: "renamed.md",
+    });
+    const nested = await transactions.createDirectory({
+      parentEntryIdHex: directory.entryIdHex,
+      name: "nested",
+    });
+
+    await expect(
+      transactions.removeEntry({
+        entryIdHex: directory.entryIdHex,
+        recursive: false,
+      }),
+    ).rejects.toThrow("recursive=true");
+    const removed = await transactions.removeEntry({
+      entryIdHex: directory.entryIdHex,
+      recursive: true,
+    });
+    expect(removed.ref.revision).toBe(5);
+
+    const index = await loadCurrentEntryIndex(
+      setupResult.repository,
+      setupResult.refStore,
+    );
+    expect(index.revision).toBe(5);
+    expect(index.has(directory.entryIdHex)).toBe(false);
+    expect(index.has(nested.entryIdHex)).toBe(false);
+    expect(index.get(file.entryIdHex)).toMatchObject({
+      entryIdHex: file.entryIdHex,
+      parentEntryIdHex: setupResult.rootEntryIdHex,
+      name: "renamed.md",
+      kind: "file",
+      content,
+    });
+    expect(index.listChildren(setupResult.rootEntryIdHex).map((entry) => entry.name))
+      .toEqual(["renamed.md"]);
     setupResult.refStore.close();
   });
 });

@@ -1636,6 +1636,108 @@ mod wasm {
             .map_err(|error| JsError::new(&error))
     }
 
+    #[wasm_bindgen(js_name = encodeCreateDirectorySegment)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_create_directory_segment_wasm(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+        entry_id: &[u8],
+        parent_id: &[u8],
+        name: String,
+        mtime_ms: u64,
+    ) -> Result<Vec<u8>, JsError> {
+        let segment = segment_base(
+            lineage_id,
+            base_head_fid,
+            previous_segment_fid,
+            revision,
+            transaction_id,
+            created_at_ms,
+            writer_id,
+        )?;
+        let segment = Segment {
+            operations: vec![Operation::CreateDirectory {
+                entry_id: EntryId(array_16(entry_id, "Entry ID")?),
+                parent_id: EntryId(array_16(parent_id, "parent Entry ID")?),
+                name,
+                mtime_ms,
+            }],
+            ..segment
+        };
+        validated_segment_bytes(segment)
+    }
+
+    #[wasm_bindgen(js_name = encodeMoveEntrySegment)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_move_entry_segment_wasm(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+        entry_id: &[u8],
+        new_parent_id: &[u8],
+        new_name: String,
+    ) -> Result<Vec<u8>, JsError> {
+        let segment = segment_base(
+            lineage_id,
+            base_head_fid,
+            previous_segment_fid,
+            revision,
+            transaction_id,
+            created_at_ms,
+            writer_id,
+        )?;
+        let segment = Segment {
+            operations: vec![Operation::MoveEntry {
+                entry_id: EntryId(array_16(entry_id, "Entry ID")?),
+                new_parent_id: EntryId(array_16(new_parent_id, "new parent Entry ID")?),
+                new_name,
+            }],
+            ..segment
+        };
+        validated_segment_bytes(segment)
+    }
+
+    #[wasm_bindgen(js_name = encodeRemoveEntrySegment)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn encode_remove_entry_segment_wasm(
+        lineage_id: &[u8],
+        base_head_fid: &[u8],
+        previous_segment_fid: &[u8],
+        revision: u64,
+        transaction_id: &[u8],
+        created_at_ms: u64,
+        writer_id: String,
+        entry_id: &[u8],
+        recursive: bool,
+    ) -> Result<Vec<u8>, JsError> {
+        let segment = segment_base(
+            lineage_id,
+            base_head_fid,
+            previous_segment_fid,
+            revision,
+            transaction_id,
+            created_at_ms,
+            writer_id,
+        )?;
+        let segment = Segment {
+            operations: vec![Operation::RemoveEntry {
+                entry_id: EntryId(array_16(entry_id, "Entry ID")?),
+                recursive,
+            }],
+            ..segment
+        };
+        validated_segment_bytes(segment)
+    }
+
     #[wasm_bindgen(js_name = applySegment)]
     pub fn apply_segment_wasm(
         checkpoint_bytes: &[u8],
@@ -1648,6 +1750,60 @@ mod wasm {
             apply_segment(&checkpoint, &segment).map_err(|error| JsError::new(&error))?;
         applied.covered_segment = Some(fid_bytes(segment_bytes));
         Ok(encode_checkpoint(&applied))
+    }
+
+    #[wasm_bindgen(js_name = checkpointEntriesPacked)]
+    pub fn checkpoint_entries_packed_wasm(bytes: &[u8]) -> Result<Vec<u8>, JsError> {
+        let checkpoint = decode_checkpoint(bytes).map_err(|error| JsError::new(&error))?;
+        let count = u32::try_from(checkpoint.entries.len())
+            .map_err(|_| JsError::new("Checkpoint contains too many Entries"))?;
+        let mut packed = Vec::new();
+        packed.extend(count.to_be_bytes());
+        for entry in checkpoint.entries {
+            packed.extend(entry.entry_id.0);
+            match entry.parent_id {
+                Some(parent_id) => {
+                    packed.push(1);
+                    packed.extend(parent_id.0);
+                }
+                None => {
+                    packed.push(0);
+                    packed.extend([0_u8; 16]);
+                }
+            }
+            match entry.kind {
+                EntryKind::Directory => {
+                    packed.push(1);
+                    packed.extend(entry.created_at_ms.to_be_bytes());
+                    packed.extend(entry.mtime_ms.to_be_bytes());
+                    packed.extend(0_u64.to_be_bytes());
+                    packed.push(0);
+                    packed.extend([0_u8; 16]);
+                }
+                EntryKind::File { content, size } => {
+                    packed.push(2);
+                    packed.extend(entry.created_at_ms.to_be_bytes());
+                    packed.extend(entry.mtime_ms.to_be_bytes());
+                    packed.extend(size.to_be_bytes());
+                    match content {
+                        super::ContentRef::Chunk(fid) => {
+                            packed.push(1);
+                            packed.extend(fid.0);
+                        }
+                        super::ContentRef::Manifest(fid) => {
+                            packed.push(2);
+                            packed.extend(fid.0);
+                        }
+                    }
+                }
+            }
+            let name = entry.name.as_bytes();
+            let name_length =
+                u32::try_from(name.len()).map_err(|_| JsError::new("Entry name is too large"))?;
+            packed.extend(name_length.to_be_bytes());
+            packed.extend(name);
+        }
+        Ok(packed)
     }
 
     #[wasm_bindgen(js_name = encodeAdvancedHead)]
@@ -1713,6 +1869,13 @@ mod wasm {
             writer_id,
             operations: Vec::new(),
         })
+    }
+
+    fn validated_segment_bytes(segment: Segment) -> Result<Vec<u8>, JsError> {
+        let bytes = encode_segment(&segment);
+        decode_segment(&bytes)
+            .map(|_| bytes)
+            .map_err(|error| JsError::new(&error))
     }
 
     fn content_ref(kind: u32, fid: &[u8]) -> Result<super::ContentRef, JsError> {

@@ -52,6 +52,42 @@ export interface PvlogCore {
     size: bigint,
     mtimeMs: bigint,
   ): Uint8Array;
+  encodeCreateDirectorySegment(
+    lineageId: Uint8Array,
+    baseHeadFid: Uint8Array,
+    previousSegmentFid: Uint8Array,
+    revision: bigint,
+    transactionId: Uint8Array,
+    createdAtMs: bigint,
+    writerId: string,
+    entryId: Uint8Array,
+    parentId: Uint8Array,
+    name: string,
+    mtimeMs: bigint,
+  ): Uint8Array;
+  encodeMoveEntrySegment(
+    lineageId: Uint8Array,
+    baseHeadFid: Uint8Array,
+    previousSegmentFid: Uint8Array,
+    revision: bigint,
+    transactionId: Uint8Array,
+    createdAtMs: bigint,
+    writerId: string,
+    entryId: Uint8Array,
+    newParentId: Uint8Array,
+    newName: string,
+  ): Uint8Array;
+  encodeRemoveEntrySegment(
+    lineageId: Uint8Array,
+    baseHeadFid: Uint8Array,
+    previousSegmentFid: Uint8Array,
+    revision: bigint,
+    transactionId: Uint8Array,
+    createdAtMs: bigint,
+    writerId: string,
+    entryId: Uint8Array,
+    recursive: boolean,
+  ): Uint8Array;
   applySegment(
     checkpointBytes: Uint8Array,
     segmentBytes: Uint8Array,
@@ -75,6 +111,7 @@ export interface PvlogCore {
   headRevision(bytes: Uint8Array): bigint;
   headLastSegmentFid(bytes: Uint8Array): Uint8Array;
   headCheckpointFid(bytes: Uint8Array): Uint8Array;
+  checkpointEntriesPacked(bytes: Uint8Array): Uint8Array;
 }
 
 let cached: PvlogCore | undefined;

@@ -143,3 +143,6 @@ File 额外包含 `6 content` 和 `7 size`；Directory map 不包含这两个字
 服务端加载仓库内由该 Rust crate 生成的 ABI v1 WASM 产物；产物只包含纯计算能力，并随
 Docker 镜像复制，不在运行时下载。`npm run build:pvlog-wasm` 是唯一再生成入口，生成后必须
 运行 Rust 测试、黄金向量检查和服务端 packaged-WASM 测试。
+
+Checkpoint Entry 投影是实现内部的 WASM ABI，不属于持久 CBOR 格式，也不参与 FID。它可以
+随 ABI major version 演进，但不能改变相同 Checkpoint 字节的协议解释。

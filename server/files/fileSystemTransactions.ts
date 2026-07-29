@@ -18,18 +18,37 @@ interface TransactionServiceOptions {
   beforePublish?: () => Promise<void>;
 }
 
-interface CreateFileInput {
+export interface CreateFileInput {
   parentEntryIdHex: string;
   name: string;
   content: FileContentRef;
   mtimeMs?: number;
 }
 
-interface SetFileContentInput {
+export interface SetFileContentInput {
   entryIdHex: string;
   expectedContentFidHex: string;
   content: FileContentRef;
   mtimeMs?: number;
+}
+
+export interface CreateDirectoryInput {
+  parentEntryIdHex: string;
+  name: string;
+  mtimeMs?: number;
+}
+
+export interface MoveEntryInput {
+  entryIdHex: string;
+  newParentEntryIdHex: string;
+  newName: string;
+  timestampMs?: number;
+}
+
+export interface RemoveEntryInput {
+  entryIdHex: string;
+  recursive: boolean;
+  timestampMs?: number;
 }
 
 export interface PublishedFileSystemTransaction {
@@ -120,6 +139,88 @@ export class FileSystemTransactions {
       Buffer.from(input.content.fidHex, "hex"),
       BigInt(input.content.size),
       BigInt(timestamp),
+    );
+    return await this.#publish(
+      state,
+      segmentBytes,
+      input.entryIdHex,
+      timestamp,
+    );
+  }
+
+  async createDirectory(
+    input: CreateDirectoryInput,
+  ): Promise<PublishedFileSystemTransaction> {
+    const state = await this.#loadCurrentState();
+    const entryId = requireId(this.#randomId(), "Entry ID");
+    const transactionId = requireId(this.#randomId(), "transaction ID");
+    const timestamp = input.mtimeMs ?? this.#now();
+    validateTimestamp(timestamp);
+    const segmentBytes = this.#core.encodeCreateDirectorySegment(
+      state.lineageId,
+      Buffer.from(state.ref.headFidHex, "hex"),
+      state.lastSegmentFid,
+      BigInt(state.ref.revision + 1),
+      transactionId,
+      BigInt(timestamp),
+      this.#writerId,
+      entryId,
+      hexId(input.parentEntryIdHex, "parent Entry ID"),
+      input.name,
+      BigInt(timestamp),
+    );
+    return await this.#publish(
+      state,
+      segmentBytes,
+      Buffer.from(entryId).toString("hex"),
+      timestamp,
+    );
+  }
+
+  async moveEntry(
+    input: MoveEntryInput,
+  ): Promise<PublishedFileSystemTransaction> {
+    const state = await this.#loadCurrentState();
+    const transactionId = requireId(this.#randomId(), "transaction ID");
+    const timestamp = input.timestampMs ?? this.#now();
+    validateTimestamp(timestamp);
+    const segmentBytes = this.#core.encodeMoveEntrySegment(
+      state.lineageId,
+      Buffer.from(state.ref.headFidHex, "hex"),
+      state.lastSegmentFid,
+      BigInt(state.ref.revision + 1),
+      transactionId,
+      BigInt(timestamp),
+      this.#writerId,
+      hexId(input.entryIdHex, "Entry ID"),
+      hexId(input.newParentEntryIdHex, "new parent Entry ID"),
+      input.newName,
+    );
+    return await this.#publish(
+      state,
+      segmentBytes,
+      input.entryIdHex,
+      timestamp,
+    );
+  }
+
+  async removeEntry(
+    input: RemoveEntryInput,
+  ): Promise<PublishedFileSystemTransaction> {
+    const state = await this.#loadCurrentState();
+    const transactionId = requireId(this.#randomId(), "transaction ID");
+    const timestamp = input.timestampMs ?? this.#now();
+    validateTimestamp(timestamp);
+    const segmentBytes = this.#core.encodeRemoveEntrySegment(
+      state.lineageId,
+      Buffer.from(state.ref.headFidHex, "hex"),
+      state.lastSegmentFid,
+      BigInt(state.ref.revision + 1),
+      transactionId,
+      BigInt(timestamp),
+      this.#writerId,
+      hexId(input.entryIdHex, "Entry ID"),
+      input.recursive,
     );
     return await this.#publish(
       state,

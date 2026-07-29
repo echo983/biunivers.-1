@@ -292,6 +292,13 @@ CAS 在 SQLite 事务中同时匹配 ref ID、旧 Head 和旧 revision，且 V1 
 CAS 失败只留下不可达对象。2026-07-29 已在真实 R2 验证创世、新建文件、更新内容、发布到
 revision 2、关闭 RefStore、重开并重新验证 Head/Checkpoint 的完整链路。
 
+Checkpoint 的 Entry 状态通过 WASM ABI v1 一次性投影为定长字段加 UTF-8 名称的紧凑二进制，
+Node 端单次线性解析为 `EntryIndex`，不为每个 Entry 重复调用 WASM。索引按稳定 Entry ID
+查询，并按 parent ID 列举子项；它是可从 Checkpoint 重建的内存投影，不是新的权威状态。
+CreateDirectory、CreateFile、SetFileContent、MoveEntry 和 RemoveEntry 均通过相同发布链。
+2026-07-29 已在真实 R2 验证目录/文件创建、跨目录移动与重命名、非递归删除保护、递归删除、
+稳定 Entry ID 和 revision 5 索引结果。
+
 ## 8. Head
 
 Head 是不可变、内容寻址的文件系统版本根。
