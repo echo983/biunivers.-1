@@ -237,9 +237,15 @@ describe("inspect and install flow", () => {
         )
       ).status,
     ).toBe(404);
+    const appResponse = await fetchApp(
+      origin,
+      installed.appId,
+      `${base}/index.html`,
+    );
+    expect(appResponse.status).toBe(200);
     expect(
-      (await fetchApp(origin, installed.appId, `${base}/index.html`)).status,
-    ).toBe(200);
+      appResponse.headers.get("cross-origin-resource-policy"),
+    ).toBe("cross-origin");
     await expect(
       fetchApp(
         origin,

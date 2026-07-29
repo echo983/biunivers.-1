@@ -59,7 +59,7 @@ export function createAppServer(dependencies?: AppServerDependencies) {
         }
 
         response.set("X-Content-Type-Options", "nosniff");
-        response.set("Cross-Origin-Resource-Policy", "same-origin");
+        response.set("Cross-Origin-Resource-Policy", "cross-origin");
         response.set("Referrer-Policy", "no-referrer");
 
         if (

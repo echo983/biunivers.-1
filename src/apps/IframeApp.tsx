@@ -21,6 +21,9 @@ interface IframeAppProps {
 export function IframeApp({ app }: IframeAppProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const instanceTokenRef = useRef<string | null>(null);
+  const instanceReadyRef = useRef<Promise<string | null>>(
+    Promise.resolve(null),
+  );
   const windowInstanceIdRef = useRef(crypto.randomUUID());
   const pickerResolverRef = useRef<((entryId: string | null) => void) | null>(
     null,
@@ -105,13 +108,14 @@ export function IframeApp({ app }: IframeAppProps) {
 
   useEffect(() => {
     const abortController = new AbortController();
-    void createHostInstance(
+    const instanceReady = createHostInstance(
       app.id,
       windowInstanceIdRef.current,
       abortController.signal,
     )
       .then((instance) => {
         instanceTokenRef.current = instance?.instanceToken ?? null;
+        return instanceTokenRef.current;
       })
       .catch((error: unknown) => {
         if (
@@ -119,7 +123,9 @@ export function IframeApp({ app }: IframeAppProps) {
         ) {
           instanceTokenRef.current = null;
         }
+        return null;
       });
+    instanceReadyRef.current = instanceReady;
     return () => {
       abortController.abort();
       const instanceToken = instanceTokenRef.current;
@@ -146,15 +152,13 @@ export function IframeApp({ app }: IframeAppProps) {
         return;
       }
 
-      const instanceToken = instanceTokenRef.current;
-      if (!instanceToken) {
-        iframeWindow?.postMessage(unsupportedResponse(request), appOrigin);
-        return;
-      }
-      void dispatchHostRequest(request, instanceToken, {
-        selectFile,
-        selectSaveTarget,
-      }).then((response) => {
+      void instanceReadyRef.current.then(async (instanceToken) => {
+        const response = instanceToken
+          ? await dispatchHostRequest(request, instanceToken, {
+              selectFile,
+              selectSaveTarget,
+            })
+          : unsupportedResponse(request);
         if (iframeRef.current?.contentWindow === iframeWindow) {
           iframeWindow?.postMessage(response, appOrigin);
         }
