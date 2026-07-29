@@ -105,6 +105,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Biunivers App Manifest v1](<protocols/Biunivers App Manifest v1.md>) | 草案 | `biunivers.app.json` 的最小身份、窗口默认值和配置 schema |
 | [Biunivers App Management Protocol v1](<protocols/Biunivers App Management Protocol v1.md>) | 草案 | GitHub 安装、固定 commit、可靠注册、更新、停用、卸载和基本恢复 |
 | [Biunivers Open Resource Protocol v1](developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md) | V1 冻结候选 | 可选 Handler 声明、单实例 Launch Context 和窗口级文件 capability 交付 |
+| [Biunivers Resource Session Protocol v1 设计](<Biunivers Resource Session Protocol v1 设计.md>) | 设计草案 | 启用应用的对象资格、60/300 秒资源租约、通用 Range 读取和持续编辑 |
 | [Static App Protocol v1 发布候选摘要](<protocols/Biunivers Static App Protocol v1 发布候选摘要.md>) | 发布候选 | 第三方最小交付、宿主承诺、边界和冻结判断 |
 | [Nassau App Manifest v1](<Nassau App Manifest v1.txt>) | 参考材料 | 内容寻址应用清单参考；不是 Biunivers V1 的直接运行协议 |
 
