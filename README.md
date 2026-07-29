@@ -1,6 +1,7 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持内建应用、iframe 自托管服务和新标签页外部应用；V0.2 已实现第三方静态应用安装与管理闭环。
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面入口。V0.1 支持基础桌面，V0.2
+实现第三方静态应用安装与管理，V0.3 增加基于不可变 S3 对象和本地 RefStore 的文件服务。
 
 ## 项目状态
 
@@ -12,9 +13,13 @@ V0.1 已完成并归档，对应 `main` 历史基线提交：
 
 V0.2 已完成施工和人工验收，并作为 `v0.2.0` 里程碑交付。需求、技术设计、施工计划和验收记录统一收录在 [`docs/`](docs/) 中。V0.1 文档作为已交付版本的历史基线冻结。
 
+V0.3 File Service 已完成实现、真实 R2 验收、备份恢复演练和只读 GC 扫描，并以
+`v0.3.0` 归档。归档入口见
+[`V0.3 施工与验收归档`](<docs/浏览器云端个人桌面 V0.3 施工与验收归档.md>)。
+
 ## 环境要求
 
-- Node.js 20.19 或更新的兼容版本；
+- Node.js 24.x；
 - npm 9 或更新版本；
 - 当前稳定版 Chrome、Chromium 或 Edge；
 - Docker 部署可选。
@@ -103,10 +108,11 @@ https://desktop.example.com/services/transmission/
 
 ## Docker
 
-V0.2 使用 Node.js 单容器提供桌面、管理 API 和第三方应用静态文件。构建并运行：
+V0.3 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件和可选 File Service。
+构建并运行：
 
 ```bash
-docker build -t biunivers:v0.2-dev .
+docker build -t biunivers:v0.3.0 .
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
@@ -115,12 +121,12 @@ docker run --rm \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.2-dev
+  biunivers:v0.3.0
 ```
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
 
-### File Service 施工期启动
+### V0.3 File Service
 
 File Service 默认关闭，不影响现有桌面和应用管理。启用时额外传入：
 
@@ -146,6 +152,22 @@ RefStore 缺失/损坏、对象存储不可用或 Head 校验失败时，File Se
 `offline` 状态，桌面和应用管理继续启动。管理员可通过
 `GET /api/v1/admin/file-service` 查看不含凭据的状态。Access Key 和 Secret 只能通过 secret
 管理或环境变量提供，不能写入应用配置、日志或 Git。
+
+管理员可以创建在线一致性 RefStore 备份和只读 GC 报告：
+
+```bash
+curl -X POST \
+  -H 'Authorization: Bearer <admin-token>' \
+  http://localhost:8080/api/v1/admin/file-service/backups
+
+curl -X POST \
+  -H 'Authorization: Bearer <admin-token>' \
+  http://localhost:8080/api/v1/admin/file-service/gc-reports
+```
+
+备份固定写入 `/data/file-service/backups/latest.sqlite`。V0.3 GC 只报告，不删除对象；
+详细恢复步骤与内容校验命令见
+[`File Service RefStore 备份与恢复`](<docs/runbooks/File Service RefStore 备份恢复.md>)。
 
 公网部署必须为两个 origin 分配不同的主机名。例如 Nginx：
 
@@ -193,7 +215,7 @@ docker run --rm \
   -v "$PWD/apps.json:/app/dist/client/config/apps.json:ro" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.2-dev
+  biunivers:v0.3.0
 ```
 
 也可复制 `compose.example.yml`，在同目录准备 `apps.json` 并设置管理员 token：
@@ -219,7 +241,9 @@ biunivers.desktop.v1
 - 安装期间不执行依赖安装或构建脚本；
 - 配置是公开浏览器配置，不是 secret 存储；
 - 单进程 JSON 状态适合个人部署，不支持多副本并发写入；
-- 第三方应用使用独立 App Origin，但 V0.2 不提供细粒度 capability 系统；
-- 不提供账号、多用户、文件系统、应用商店、多桌面、Host API 或应用间资源交换。
+- 第三方应用使用独立 App Origin；文件能力采用短期实例、句柄和一次性传输 capability；
+- File Service 为可选的单用户、单写者能力，不支持多副本并发写入；
+- V0.3 GC 只生成报告，不删除不可变对象；
+- 不提供账号、多用户、应用商店、多桌面或应用间资源交换。
 
 当前范围和验收记录参见 [`docs/`](docs/)。

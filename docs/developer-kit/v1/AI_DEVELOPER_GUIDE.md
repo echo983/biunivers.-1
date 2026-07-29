@@ -25,7 +25,8 @@
 - 协议原文固定为仓库根目录 `BIUNIVERS_APP_PROTOCOL_V1.md`；
 - 开源许可证固定放在仓库根目录 `LICENSE`；
 - Biunivers 不执行第三方构建命令；
-- Biunivers V1 不提供 Host API；
+- Static App Protocol v1 不定义 Host API；需要文件能力时只能按独立的
+  `biunivers.host-api/1` 接入，并处理宿主不支持的情况；
 - 配置会暴露给浏览器，不能包含 secret。
 
 不要向用户重复询问这些已经由协议确定的事项。
@@ -123,7 +124,7 @@ body,
 除非用户明确要求设计未来协议，否则不要实现或假定：
 
 - `window.parent` 私有调用；
-- 未定义的 `postMessage` Host API；
+- 未在 `biunivers.host-api/1` 中定义的私有 `postMessage` Host API；
 - `internal` 应用注册；
 - 动态窗口控制；
 - 应用间资源句柄；
