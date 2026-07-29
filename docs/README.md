@@ -17,6 +17,8 @@
 | 决策 | 状态 | 内容 |
 |---|---|---|
 | [ADR-0001：应用接入与特权边界](decisions/0001-应用接入与特权边界.md) | 已接受 | internal 编译期白名单、第三方静态应用/iframe/external、GitHub 安装边界及未来资源交换原则 |
+| [PVLogS3Lite](PVLogS3Lite.md) | 修订设计 | S3 不可变对象、XXH3-128 FID、稳定 Entry ID、64 MiB 分片和本地 RefStore |
+| [Biunivers File Service V0.1](<Biunivers File Service V0.1 设计.md>) | 初始设计 | 文件句柄、Host API、流式传输、文件选择器和记事本验证闭环 |
 
 ## 第三方应用生态 V1：发布候选
 
