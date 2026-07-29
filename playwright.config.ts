@@ -13,7 +13,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "npm run build && BIUNIVERS_ADMIN_TOKEN=playwright-admin-token BIUNIVERS_DESKTOP_ORIGIN=http://127.0.0.1:4173 BIUNIVERS_APP_ORIGIN=http://127.0.0.1:4174 BIUNIVERS_DESKTOP_PORT=4173 BIUNIVERS_APP_PORT=4174 BIUNIVERS_DATA_DIR=/tmp/biunivers-playwright npm start",
+      "npm run build && BIUNIVERS_ADMIN_TOKEN=playwright-admin-token BIUNIVERS_DESKTOP_ORIGIN=http://127.0.0.1:4173 BIUNIVERS_APP_ORIGIN=http://localhost:4174 BIUNIVERS_DESKTOP_PORT=4173 BIUNIVERS_APP_PORT=4174 BIUNIVERS_DATA_DIR=/tmp/biunivers-playwright npm start",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,
   },

@@ -28,6 +28,15 @@ describe("loadServerConfig", () => {
     ).toThrow("必须不同");
   });
 
+  it("rejects an IP App Origin because it cannot isolate app subdomains", () => {
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        BIUNIVERS_APP_ORIGIN: "http://127.0.0.1:8081",
+      }),
+    ).toThrow("不能使用 IP");
+  });
+
   it("rejects weak admin tokens and origins with paths", () => {
     expect(() =>
       loadServerConfig({

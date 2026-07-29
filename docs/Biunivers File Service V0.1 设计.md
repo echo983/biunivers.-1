@@ -18,7 +18,7 @@ S3 兼容后端。
 - [x] 冻结 Deterministic CBOR 字段编号和黄金向量；
 - [x] 实现并验证严格 WORM ObjectStore 适配器合约（本地原子适配器、S3 条件创建适配器、
   模拟测试和真实 S3 兼容桶合约测试均已通过）；
-- 完成每应用独立 origin 设计与本地开发方案；
+- [x] 完成每应用独立 origin 设计、Host 路由和本地开发方案；
 - [x] 确定 SQLite RefStore 备份和恢复操作；
 - [ ] 冻结 PVLog Core WASM ABI、内存上限和基准测试方法（ABI v1 候选与
   128 MiB 线性内存上限已经落地，待解码/回放接口和基准结果）。
@@ -109,9 +109,7 @@ S3 Immutable Object Store
 
 ### 4.1 应用 origin 前置条件
 
-V0.2 使用一个共享 App Origin 托管所有第三方应用。该模型不能作为文件能力的安全边界：
-同源应用可能访问彼此的 Web 状态或浏览上下文。File Host API 启用前必须为每个已安装应用
-分配独立 origin，例如：
+宿主为每个已安装应用分配独立 origin，例如：
 
 ```text
 https://<app-origin-key>.apps.desktop.example.com
@@ -126,8 +124,9 @@ https://<app-origin-key>.apps.desktop.example.com
 - 在本地开发环境提供等价的 origin 隔离；
 - File HTTP API 的 CORS 精确允许发起授权的应用 origin。
 
-在每应用 origin 完成前，File Host API 必须保持关闭。Sandbox opaque origin 可以继续研究，
-但 V0.1 不以尚未验证的 sandbox/CORS 组合替代独立 origin。
+应用静态服务已经完成上述前置条件；File Host API 仍须在 origin、窗口实例和授权句柄三层
+校验实现完成后才可启用。Sandbox opaque origin 可以继续研究，但 V0.1 不以尚未验证的
+sandbox/CORS 组合替代独立 origin。
 
 ## 5. 文件系统与资源模型
 
@@ -585,7 +584,6 @@ REF_CONFLICT
 - 文本预览必须转义；
 - 上传内容不能在 File Service 进程中执行；
 - App Origin 不能直接访问 SQLite 或 `/data`。
-- V0.2 共享 App Origin 不是应用间安全边界，不能为其启用文件能力；
 - V0.1 文件能力要求每应用独立 origin；
 - 文件能力不得依赖共享 Cookie、localStorage 或仅凭 origin 授权；
 - 文件实例 token 和 transfer ID 只保存在应用当前内存，不能持久化；
@@ -746,7 +744,7 @@ WASM 对 XXH3、规范编码和大规模 Segment 回放预计有收益，也能�
 
 ### 阶段 3：Host API 与宿主 UI
 
-- 每应用独立 origin；
+- 每应用独立 origin；（已完成）
 - 安全消息桥；
 - 文件句柄；
 - 传输 URL；

@@ -163,7 +163,8 @@ server {
 
 server {
   listen 443 ssl;
-  server_name apps.desktop.example.com;
+  # 需要覆盖 app-<hash>.apps.desktop.example.com 的 wildcard DNS 和 TLS 证书。
+  server_name *.apps.desktop.example.com apps.desktop.example.com;
 
   location / {
     proxy_pass http://127.0.0.1:8081;

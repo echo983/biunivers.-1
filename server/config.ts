@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { isIP } from "node:net";
 
 export interface ServerConfig {
   adminToken: string;
@@ -71,6 +72,17 @@ function parseOrigin(value: string, key: string) {
   return url.origin;
 }
 
+function parseAppBaseOrigin(value: string) {
+  const origin = parseOrigin(value, "BIUNIVERS_APP_ORIGIN");
+  const hostname = new URL(origin).hostname;
+  if (hostname !== "localhost" && isIP(hostname) !== 0) {
+    throw new Error(
+      "BIUNIVERS_APP_ORIGIN 必须使用支持子域名的 DNS 名称或 localhost，不能使用 IP",
+    );
+  }
+  return origin;
+}
+
 function parsePositiveInteger(
   value: string | undefined,
   fallback: number,
@@ -117,9 +129,8 @@ export function loadServerConfig(
     required(environment, "BIUNIVERS_DESKTOP_ORIGIN"),
     "BIUNIVERS_DESKTOP_ORIGIN",
   );
-  const appOrigin = parseOrigin(
+  const appOrigin = parseAppBaseOrigin(
     required(environment, "BIUNIVERS_APP_ORIGIN"),
-    "BIUNIVERS_APP_ORIGIN",
   );
 
   if (desktopOrigin === appOrigin) {

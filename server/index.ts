@@ -79,6 +79,7 @@ async function main() {
   const appServer = createAppServer({
     appStore,
     dataDir: config.dataDir,
+    appOrigin: config.appOrigin,
   }).listen(config.appPort, () => {
     console.log(
       `Biunivers apps listening on ${config.appOrigin} (port ${config.appPort})`,
