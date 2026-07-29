@@ -15,6 +15,7 @@ export interface DesktopItem {
   target: DesktopTarget;
   position: DesktopPosition;
   createdAtMs: number;
+  lastKnownName?: string;
   resolved: {
     available: boolean;
     name: string;

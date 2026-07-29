@@ -75,6 +75,7 @@ describe("DesktopSurfaceService lifecycle projection", () => {
         {
           resolved: {
             available: false,
+            name: "Final.txt",
             reason: "文件或目录不存在",
           },
         },
@@ -120,6 +121,7 @@ describe("DesktopSurfaceService lifecycle projection", () => {
       { x: 0, y: 0 },
       service.read().revision,
     );
+    await service.resolve();
     const state = await appStore.read();
     state.apps[0].status = "disabled";
     await appStore.write(state);
@@ -133,6 +135,7 @@ describe("DesktopSurfaceService lifecycle projection", () => {
           },
           resolved: {
             available: false,
+            name: "Editor",
             reason: "应用不存在或未启用",
           },
         },

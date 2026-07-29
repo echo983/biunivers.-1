@@ -45,6 +45,7 @@ interface ItemRow {
   x_position: number;
   y_position: number;
   created_at_ms: number;
+  last_known_name: string | null;
 }
 
 export class DesktopSurfaceStore {
@@ -74,6 +75,7 @@ export class DesktopSurfaceStore {
       VALUES (1, 1, 0, 0);
     `);
     migrateLegacyGrid(database);
+    ensureLastKnownNameColumn(database);
     database.exec(`
       CREATE TABLE IF NOT EXISTS desktop_items (
         id TEXT PRIMARY KEY,
@@ -83,6 +85,7 @@ export class DesktopSurfaceStore {
         x_position INTEGER NOT NULL CHECK (x_position >= 0),
         y_position INTEGER NOT NULL CHECK (y_position >= 0),
         created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        last_known_name TEXT,
         UNIQUE (target_type, target_handle),
         UNIQUE (x_position, y_position)
       );
@@ -99,7 +102,7 @@ export class DesktopSurfaceStore {
     const rows = this.#database
       .prepare(
         `SELECT id, target_type, target_handle, x_position, y_position,
-                created_at_ms
+                created_at_ms, last_known_name
          FROM desktop_items
          ORDER BY created_at_ms, id`,
       )
@@ -316,6 +319,28 @@ export class DesktopSurfaceStore {
     });
   }
 
+  cacheResolvedNames(
+    names: Array<{ itemId: string; name: string }>,
+  ): void {
+    const update = this.#database.prepare(
+      "UPDATE desktop_items SET last_known_name = ? WHERE id = ?",
+    );
+    const transaction = this.#database.transaction(() => {
+      for (const { itemId, name } of names) {
+        validateItemId(itemId);
+        if (
+          typeof name !== "string" ||
+          name.length === 0 ||
+          name.length > 255
+        ) {
+          throw invalid("桌面项目名称缓存无效");
+        }
+        update.run(name, itemId);
+      }
+    });
+    transaction();
+  }
+
   #mutate(expectedRevision: number, mutation: () => void) {
     validateRevision(expectedRevision);
     const transaction = this.#database.transaction(() => {
@@ -353,6 +378,9 @@ function mapItem(row: ItemRow): DesktopItem {
     target: { type: row.target_type, handle: row.target_handle },
     position: { x: row.x_position, y: row.y_position },
     createdAtMs: row.created_at_ms,
+    ...(row.last_known_name
+      ? { lastKnownName: row.last_known_name }
+      : {}),
   };
 }
 
@@ -434,19 +462,40 @@ function migrateLegacyGrid(database: Database.Database) {
         x_position INTEGER NOT NULL CHECK (x_position >= 0),
         y_position INTEGER NOT NULL CHECK (y_position >= 0),
         created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0),
+        last_known_name TEXT,
         UNIQUE (target_type, target_handle),
         UNIQUE (x_position, y_position)
       );
       INSERT INTO desktop_items
-        (id, target_type, target_handle, x_position, y_position, created_at_ms)
+        (id, target_type, target_handle, x_position, y_position,
+         created_at_ms, last_known_name)
       SELECT id, target_type, target_handle,
              column_index * ${LEGACY_CELL_WIDTH},
              row_index * ${LEGACY_CELL_HEIGHT},
-             created_at_ms
+             created_at_ms,
+             NULL
       FROM desktop_items_grid_v1;
       DROP TABLE desktop_items_grid_v1;
     `);
   })();
+}
+
+function ensureLastKnownNameColumn(database: Database.Database) {
+  const table = database
+    .prepare(
+      `SELECT name FROM sqlite_master
+       WHERE type = 'table' AND name = 'desktop_items'`,
+    )
+    .get();
+  if (!table) return;
+  const columns = database
+    .prepare("PRAGMA table_info(desktop_items)")
+    .all() as Array<{ name: string }>;
+  if (!columns.some((column) => column.name === "last_known_name")) {
+    database.exec(
+      "ALTER TABLE desktop_items ADD COLUMN last_known_name TEXT",
+    );
+  }
 }
 
 function isConstraint(error: unknown, detail?: string) {

@@ -15,6 +15,7 @@ export interface DesktopItem {
   target: DesktopTarget;
   position: DesktopPosition;
   createdAtMs: number;
+  lastKnownName?: string;
 }
 
 export interface DesktopSurface {

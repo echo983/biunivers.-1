@@ -93,7 +93,7 @@ export class DesktopSurfaceService {
       installed.apps.map((app) => [app.appId, app]),
     );
 
-    return {
+    const resolved = {
       ...surface,
       items: surface.items.map((item): ResolvedDesktopItem => {
         if (item.target.type === "app") {
@@ -146,6 +146,15 @@ export class DesktopSurfaceService {
         };
       }),
     };
+    this.options.store.cacheResolvedNames(
+      resolved.items
+        .filter((item) => item.resolved.available)
+        .map((item) => ({
+          itemId: item.id,
+          name: item.resolved.name,
+        })),
+    );
+    return resolved;
   }
 
   async #requireTarget(target: DesktopTarget) {
@@ -192,7 +201,7 @@ function unavailable(
     resolved: {
       available: false,
       kind: item.target.type,
-      name: item.target.handle,
+      name: item.lastKnownName ?? item.target.handle,
       reason,
     },
   };
