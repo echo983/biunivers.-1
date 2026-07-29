@@ -48,6 +48,10 @@ type InternalFileManagerExecutor = Pick<
   | "copyEntries"
   | "removeEntries"
 >;
+type InternalZipExporter = Pick<
+  InternalFileManagerService,
+  "createZipExport"
+>;
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 type OpenResourceLaunchExecutor = Pick<
   OpenResourceLaunchService,
@@ -76,6 +80,7 @@ interface DesktopServerDependencies {
   };
   internalFileAppIds?: ReadonlySet<string>;
   internalFileManager?: InternalFileManagerExecutor;
+  internalZipExporter?: InternalZipExporter;
   openResourceResolver?: OpenResourceResolverExecutor;
   openResourceLaunchService?: OpenResourceLaunchExecutor;
   desktopSurface?: DesktopSurfaceService;
@@ -99,6 +104,7 @@ export function createDesktopServer({
   fileServiceGcScanner,
   internalFileAppIds = new Set(),
   internalFileManager,
+  internalZipExporter,
   openResourceResolver,
   openResourceLaunchService,
   desktopSurface,
@@ -703,6 +709,56 @@ export function createDesktopServer({
       }),
     );
   }
+
+  app.post(
+    "/api/v1/internal/files/exports/zip",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireInternalZipExporter(
+          request,
+          config,
+          internalZipExporter,
+        );
+        const { entryIds, expectedRevision } =
+          request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(entryIds) ||
+          entryIds.some((entryId) => typeof entryId !== "string") ||
+          !isRevision(expectedRevision)
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds 和 expectedRevision 必填",
+          );
+        }
+        const exported = await service.createZipExport(instanceToken, {
+          entryIds: entryIds as string[],
+          expectedRevision,
+        });
+        response.status(200).set({
+          "Cache-Control": "no-store",
+          "Content-Type": "application/zip",
+          "Content-Disposition": contentDisposition(exported.fileName),
+          "Content-Length": String(exported.archive.size),
+          "X-Biunivers-Export-Entries": String(exported.entryCount),
+          "X-Biunivers-Export-Revision": String(exported.revision),
+        });
+        for await (const chunk of exported.archive.stream) {
+          if (request.aborted || response.destroyed) return;
+          if (!response.write(chunk)) {
+            await waitForDrain(response);
+          }
+        }
+        response.end();
+      } catch (error) {
+        if (response.headersSent) {
+          response.destroy(error instanceof Error ? error : undefined);
+          return;
+        }
+        next(error);
+      }
+    },
+  );
 
   app.post(
     "/api/v1/internal/files/files",
@@ -1508,6 +1564,56 @@ function requireInternalFileManager(
     );
   }
   return { service, instanceToken: readInstanceToken(request) };
+}
+
+function requireInternalZipExporter(
+  request: express.Request,
+  config: ServerConfig,
+  service: InternalZipExporter | undefined,
+): { service: InternalZipExporter; instanceToken: string } {
+  requireDesktopOrigin(request, config.desktopOrigin);
+  if (!service) {
+    throw new AppError(
+      "HOST_API_UNSUPPORTED",
+      "当前宿主尚未启用目录导出能力",
+      503,
+    );
+  }
+  return { service, instanceToken: readInstanceToken(request) };
+}
+
+function contentDisposition(fileName: string): string {
+  const encoded = encodeURIComponent(fileName).replace(
+    /[!'()*]/g,
+    (character) =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `attachment; filename="biunivers-download.zip"; filename*=UTF-8''${encoded}`;
+}
+
+function waitForDrain(response: express.Response): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      response.off("drain", drained);
+      response.off("close", closed);
+      response.off("error", failed);
+    };
+    const drained = () => {
+      cleanup();
+      resolve();
+    };
+    const closed = () => {
+      cleanup();
+      reject(new Error("ZIP export response closed."));
+    };
+    const failed = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+    response.once("drain", drained);
+    response.once("close", closed);
+    response.once("error", failed);
+  });
 }
 
 function isRevision(value: unknown): value is number {

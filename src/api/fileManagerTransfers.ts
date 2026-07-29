@@ -79,21 +79,46 @@ export async function downloadFile(
       await requireTransferSuccess(response);
     }
     const blob = await readDownload(response, entry.size ?? 0, options);
-    const url = URL.createObjectURL(blob);
-    try {
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = entry.name;
-      link.hidden = true;
-      document.body.append(link);
-      link.click();
-      link.remove();
-    } finally {
-      URL.revokeObjectURL(url);
-    }
+    saveBlob(blob, entry.name);
   } finally {
     await releaseFileHandle(instanceToken, handle.handleId).catch(() => {});
   }
+}
+
+export async function downloadZip(
+  instanceToken: string,
+  entries: readonly FileEntry[],
+  expectedRevision: number,
+  options: FileTransferOptions = {},
+): Promise<string> {
+  if (entries.length === 0) {
+    throw new FileHostClientError(
+      "REQUEST_INVALID",
+      "请先选择要下载的项目",
+    );
+  }
+  const fileName =
+    entries.length === 1 && entries[0].kind === "directory"
+      ? `${entries[0].name}.zip`
+      : "biunivers-download.zip";
+  const response = await fetch("/api/v1/internal/files/exports/zip", {
+    method: "POST",
+    headers: {
+      Authorization: `Biunivers-Instance ${instanceToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      entryIds: entries.map((entry) => entry.entryId),
+      expectedRevision,
+    }),
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    await requireTransferSuccess(response);
+  }
+  const blob = await readDownload(response, 0, options);
+  saveBlob(blob, fileName);
+  return fileName;
 }
 
 function uploadFileWithProgress(
@@ -176,6 +201,21 @@ async function readDownload(
     reader.releaseLock();
   }
   return new Blob(chunks.map((chunk) => Uint8Array.from(chunk).buffer));
+}
+
+function saveBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    link.hidden = true;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 
 function transferRequestError(request: XMLHttpRequest): FileHostClientError {

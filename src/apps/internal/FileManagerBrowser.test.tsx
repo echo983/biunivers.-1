@@ -26,6 +26,7 @@ type UploadLocalFile = (
 const transferMocks = vi.hoisted(() => ({
   uploadLocalFile: vi.fn<UploadLocalFile>(async () => {}),
   downloadFile: vi.fn(async () => {}),
+  downloadZip: vi.fn(async () => "biunivers-download.zip"),
 }));
 const windowMocks = vi.hoisted(() => ({
   openApp: vi.fn(),
@@ -131,6 +132,9 @@ describe("FileManagerBrowser", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("已选择 2 项");
     expect(screen.getByRole("button", { name: "重命名" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "将 2 个项目导出为 ZIP" }),
+    ).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "移动" }));
     const dialog = screen.getByRole("dialog", { name: "移动 2 项" });
     await user.click(
@@ -609,7 +613,7 @@ describe("FileManagerBrowser", () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByText("note.txt"));
-    await user.click(screen.getByRole("button", { name: "下载" }));
+    await user.click(screen.getByRole("button", { name: "下载文件" }));
     await waitFor(() =>
       expect(transferMocks.downloadFile).toHaveBeenCalledWith(
         "a".repeat(43),
@@ -630,6 +634,55 @@ describe("FileManagerBrowser", () => {
     expect(
       screen.queryByText("已下载“note.txt”。"),
     ).not.toBeInTheDocument();
+  });
+
+  it("exports a selected directory through the existing download button", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          revision: 8,
+          rootEntryId: rootId,
+          parent: {
+            entryId: rootId,
+            name: "",
+            kind: "directory",
+            mtimeMs: 0,
+          },
+          entries: [{
+            entryId: directoryId,
+            name: "资料",
+            kind: "directory",
+            mtimeMs: 100,
+          }],
+        }),
+      ),
+    );
+    transferMocks.downloadZip.mockResolvedValueOnce("资料.zip");
+
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    await user.click(await screen.findByText("资料"));
+    await user.click(
+      screen.getByRole("button", { name: "将目录导出为 ZIP" }),
+    );
+
+    await waitFor(() =>
+      expect(transferMocks.downloadZip).toHaveBeenCalledWith(
+        "a".repeat(43),
+        [expect.objectContaining({
+          entryId: directoryId,
+          name: "资料",
+          kind: "directory",
+        })],
+        8,
+        expect.objectContaining({
+          signal: expect.any(AbortSignal),
+          onProgress: expect.any(Function),
+        }),
+      ),
+    );
+    expect(await screen.findByText("已下载“资料.zip”。")).toBeInTheDocument();
   });
 
   it("shows transfer progress and cancels the active upload", async () => {

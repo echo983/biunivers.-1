@@ -274,6 +274,7 @@ async function main() {
     fileServiceGcScanner,
     internalFileAppIds: new Set(["system.files"]),
     internalFileManager,
+    internalZipExporter: internalFileManager,
     openResourceResolver,
     openResourceLaunchService,
     desktopSurface,

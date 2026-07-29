@@ -11,6 +11,12 @@ import {
   RefStoreError,
   type SqliteRefStore,
 } from "./sqliteRefStore.js";
+import {
+  createZipStore,
+  ZipStoreError,
+  type ZipStoreArchive,
+  type ZipStoreEntry,
+} from "./zipStore.js";
 import { randomBytes } from "node:crypto";
 
 const INTERNAL_FILE_APP_ID = "system.files";
@@ -32,6 +38,13 @@ export interface InternalFileMutationResult {
 export interface InternalBatchMutationResult {
   entryIds: string[];
   revision: number;
+}
+
+export interface InternalZipExport {
+  fileName: string;
+  revision: number;
+  entryCount: number;
+  archive: ZipStoreArchive;
 }
 
 export class InternalFileManagerService {
@@ -333,6 +346,73 @@ export class InternalFileManagerService {
       input.expectedRevision,
       entries.map((entry) => entry.entryIdHex),
     );
+  }
+
+  async createZipExport(
+    instanceToken: string,
+    input: {
+      entryIds: string[];
+      expectedRevision: number;
+    },
+  ): Promise<InternalZipExport> {
+    this.#authorize(instanceToken);
+    const index = await this.#loadExpected(input.expectedRevision);
+    const selected = normalizeTopLevelEntries(index, input.entryIds);
+    const entries: ZipStoreEntry[] = [];
+    const append = (entry: (typeof selected)[number], path: string): void => {
+      if (entries.length >= 10_000) {
+        throw new FileCapabilityError(
+          "TRANSFER_TOO_LARGE",
+          "ZIP export exceeds the 10000-entry limit.",
+        );
+      }
+      if (entry.kind === "directory") {
+        entries.push({
+          path,
+          kind: "directory",
+          size: 0,
+          mtimeMs: entry.mtimeMs,
+        });
+        for (const child of index.listChildren(entry.entryIdHex)) {
+          append(child, `${path}/${child.name}`);
+        }
+        return;
+      }
+      if (!entry.content) {
+        throw invalid(`File “${entry.name}” has no content reference.`);
+      }
+      const content = entry.content;
+      entries.push({
+        path,
+        kind: "file",
+        size: content.size,
+        mtimeMs: entry.mtimeMs,
+        open: () => this.#contentStore.readChunks(content),
+      });
+    };
+    for (const entry of selected) append(entry, entry.name);
+    try {
+      return {
+        fileName:
+          selected.length === 1 && selected[0].kind === "directory"
+            ? `${selected[0].name}.zip`
+            : "biunivers-download.zip",
+        revision: index.revision,
+        entryCount: entries.length,
+        archive: createZipStore(entries),
+      };
+    } catch (error) {
+      if (error instanceof ZipStoreError) {
+        throw new FileCapabilityError(
+          error.code === "ZIP_SIZE_LIMIT" ||
+            error.code === "ZIP_ENTRY_LIMIT"
+            ? "TRANSFER_TOO_LARGE"
+            : "REQUEST_INVALID",
+          error.message,
+        );
+      }
+      throw error;
+    }
   }
 
   #authorize(instanceToken: string): void {

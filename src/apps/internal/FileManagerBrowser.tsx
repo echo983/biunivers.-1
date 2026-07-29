@@ -21,6 +21,7 @@ import {
 } from "../../api/internalFileManagerClient";
 import {
   downloadFile,
+  downloadZip,
   uploadLocalFile,
 } from "../../api/fileManagerTransfers";
 import {
@@ -298,7 +299,16 @@ export function FileManagerBrowser({
   };
 
   const downloadSelected = async () => {
-    if (!selected || selected.kind !== "file") return;
+    if (!listing || selectedEntries.length === 0) return;
+    const directFile =
+      selectedEntries.length === 1 && selectedEntries[0].kind === "file"
+        ? selectedEntries[0]
+        : undefined;
+    const downloadName = directFile
+      ? directFile.name
+      : selectedEntries.length === 1
+        ? `${selectedEntries[0].name}.zip`
+        : "biunivers-download.zip";
     const controller = new AbortController();
     transferAbortRef.current = controller;
     setWorking(true);
@@ -306,22 +316,32 @@ export function FileManagerBrowser({
     setNotice(undefined);
     setTransfer({
       kind: "download",
-      name: selected.name,
+      name: downloadName,
       loaded: 0,
-      total: selected.size ?? 0,
+      total: directFile?.size ?? 0,
     });
     try {
-      await downloadFile(instanceToken, selected, {
+      const options = {
         signal: controller.signal,
-        onProgress: ({ loaded, total }) =>
+        onProgress: ({ loaded, total }: { loaded: number; total: number }) =>
           setTransfer({
-            kind: "download",
-            name: selected.name,
+            kind: "download" as const,
+            name: downloadName,
             loaded,
             total,
           }),
-      });
-      setNotice(`已下载“${selected.name}”。`);
+      };
+      if (directFile) {
+        await downloadFile(instanceToken, directFile, options);
+      } else {
+        await downloadZip(
+          instanceToken,
+          selectedEntries,
+          listing.revision,
+          options,
+        );
+      }
+      setNotice(`已下载“${downloadName}”。`);
     } catch (reason) {
       setNotice(undefined);
       if (isAbortError(reason)) {
@@ -641,9 +661,9 @@ export function FileManagerBrowser({
             />
             <button
               type="button"
-              aria-label="下载"
-              title="下载"
-              disabled={!selected || selected.kind !== "file" || working}
+              aria-label={downloadActionLabel(selectedEntries)}
+              title={downloadActionLabel(selectedEntries)}
+              disabled={selectedEntries.length === 0 || working}
               onClick={() => void downloadSelected()}
             >
               <ToolbarIcon kind="download" />
@@ -1252,6 +1272,16 @@ function DestinationDialog({
 
 function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : "文件操作失败";
+}
+
+function downloadActionLabel(entries: readonly FileEntry[]): string {
+  if (entries.length === 0) return "下载";
+  if (entries.length === 1) {
+    return entries[0].kind === "file"
+      ? "下载文件"
+      : "将目录导出为 ZIP";
+  }
+  return `将 ${entries.length} 个项目导出为 ZIP`;
 }
 
 function formatSize(bytes: number): string {

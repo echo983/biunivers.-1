@@ -44,6 +44,58 @@ afterEach(async () => {
 });
 
 describe("InternalFileManagerService", () => {
+  it("exports a directory tree from one immutable revision snapshot", async () => {
+    const { repository, genesis, service, instanceToken } = await setup();
+    const directory = await service.createDirectory(instanceToken, {
+      parentEntryId: genesis.rootEntryIdHex,
+      name: "资料",
+      expectedRevision: 0,
+    });
+    await service.createDirectory(instanceToken, {
+      parentEntryId: directory.entryId,
+      name: "空目录",
+      expectedRevision: 1,
+    });
+    const contentStore = new FileContentStore(repository);
+    const before = await contentStore.putBytes(Buffer.from("before"));
+    const transactions = new FileSystemTransactions({
+      repository,
+      refStore: genesis.store,
+      writerId: "test",
+    });
+    const file = await transactions.createFile({
+      parentEntryIdHex: directory.entryId,
+      name: "note.txt",
+      content: before,
+      expectedRevision: 2,
+    });
+
+    const exported = await service.createZipExport(instanceToken, {
+      entryIds: [directory.entryId],
+      expectedRevision: 3,
+    });
+    const after = await contentStore.putBytes(Buffer.from("after"));
+    await transactions.setFileContent({
+      entryIdHex: file.entryIdHex,
+      expectedContentFidHex: before.fidHex,
+      content: after,
+    });
+    const bytes = await collectBytes(exported.archive.stream);
+
+    expect(exported).toMatchObject({
+      fileName: "资料.zip",
+      revision: 3,
+      entryCount: 3,
+    });
+    expect(bytes.byteLength).toBe(exported.archive.size);
+    expect(readStoredZip(bytes)).toEqual({
+      "资料/": "",
+      "资料/note.txt": "before",
+      "资料/空目录/": "",
+    });
+    genesis.store.close();
+  });
+
   it("creates an empty file and copies content without changing its FID", async () => {
     const { repository, genesis, service, instanceToken } = await setup();
     const empty = await service.createFile(instanceToken, {
@@ -269,3 +321,48 @@ describe("InternalFileManagerService", () => {
     genesis.store.close();
   });
 });
+
+async function collectBytes(
+  source: AsyncIterable<Uint8Array>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of source) {
+    chunks.push(chunk);
+    size += chunk.byteLength;
+  }
+  const output = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
+}
+
+function readStoredZip(bytes: Uint8Array): Record<string, string> {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const decoder = new TextDecoder();
+  const eocd = bytes.byteLength - 22;
+  const count = view.getUint16(eocd + 10, true);
+  let central = view.getUint32(eocd + 16, true);
+  const files: Record<string, string> = {};
+  for (let index = 0; index < count; index += 1) {
+    const size = view.getUint32(central + 24, true);
+    const nameLength = view.getUint16(central + 28, true);
+    const extraLength = view.getUint16(central + 30, true);
+    const commentLength = view.getUint16(central + 32, true);
+    const local = view.getUint32(central + 42, true);
+    const name = decoder.decode(
+      bytes.subarray(central + 46, central + 46 + nameLength),
+    );
+    const localNameLength = view.getUint16(local + 26, true);
+    const localExtraLength = view.getUint16(local + 28, true);
+    const contentStart = local + 30 + localNameLength + localExtraLength;
+    files[name] = decoder.decode(
+      bytes.subarray(contentStart, contentStart + size),
+    );
+    central += 46 + nameLength + extraLength + commentLength;
+  }
+  return files;
+}
