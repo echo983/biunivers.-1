@@ -12,6 +12,9 @@ describe("Desktop", () => {
       apps: Object.fromEntries(defaultApps.map((app) => [app.id, app])),
       appMenuOpen: false,
       selectedDesktopAppId: null,
+      pinnedAppIds: defaultApps
+        .filter((app) => app.pinned)
+        .map((app) => app.id),
     });
     useDesktopSurfaceStore.setState({
       status: "ready",
@@ -70,6 +73,37 @@ describe("Desktop", () => {
 
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: "App 菜单" })).toBeNull();
+  });
+
+  it("manages desktop and taskbar state from an app context menu", async () => {
+    const user = userEvent.setup();
+    render(<Desktop />);
+
+    await user.click(screen.getByRole("button", { name: "打开 App 菜单" }));
+    const menu = screen.getByRole("dialog", { name: "App 菜单" });
+    const settings = within(menu).getByRole("button", { name: "设置" });
+    expect(
+      within(menu).queryByRole("button", {
+        name: /添加到桌面/,
+      }),
+    ).toBeNull();
+
+    await user.pointer({ target: settings, keys: "[MouseRight]" });
+    expect(
+      screen.getByRole("menuitem", { name: "添加到桌面" }),
+    ).toBeVisible();
+    await user.click(
+      screen.getByRole("menuitem", { name: "添加到任务栏" }),
+    );
+    expect(useDesktopStore.getState().pinnedAppIds).toContain(
+      "system.settings",
+    );
+
+    settings.focus();
+    await user.keyboard("{Shift>}{F10}{/Shift}");
+    expect(
+      screen.getByRole("menuitem", { name: "从任务栏移除" }),
+    ).toBeVisible();
   });
 
   it("selects and clears a desktop icon", async () => {

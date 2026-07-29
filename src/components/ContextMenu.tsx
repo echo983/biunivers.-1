@@ -1,4 +1,10 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 
 interface ContextMenuProps {
   x: number;
@@ -9,6 +15,23 @@ interface ContextMenuProps {
 
 export function ContextMenu({ x, y, onClose, children }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState({ left: x, top: y });
+
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    if (!menu) return;
+    setPosition({
+      left: Math.max(
+        8,
+        Math.min(x, window.innerWidth - menu.offsetWidth - 8),
+      ),
+      top: Math.max(
+        8,
+        Math.min(y, window.innerHeight - menu.offsetHeight - 8),
+      ),
+    });
+    menu.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [x, y]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -33,15 +56,12 @@ export function ContextMenu({ x, y, onClose, children }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  const left = Math.min(x, Math.max(8, window.innerWidth - 210));
-  const top = Math.min(y, Math.max(8, window.innerHeight - 110));
-
   return (
     <div
       ref={menuRef}
       className="context-menu"
       role="menu"
-      style={{ left, top }}
+      style={position}
     >
       {children}
     </div>

@@ -234,34 +234,6 @@
   text-align: left;
 }
 
-.app-menu__row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 38px;
-  align-items: center;
-  gap: 3px;
-}
-
-.app-menu__desktop-action {
-  width: 36px;
-  height: 36px;
-  color: inherit;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  cursor: pointer;
-  font-size: 18px;
-}
-
-.app-menu__desktop-action:hover:not(:disabled),
-.app-menu__desktop-action:focus-visible {
-  background: rgb(255 255 255 / 9%);
-}
-
-.app-menu__desktop-action:disabled {
-  cursor: default;
-  opacity: 0.35;
-}
-
 .app-menu__item:hover,
 .app-menu__item:focus-visible {
   background: rgb(255 255 255 / 9%);
@@ -1140,6 +1112,16 @@
   height: 1px;
   margin: 3px 5px;
   background: var(--surface-border);
+}
+
+.context-menu__error {
+  max-width: 260px;
+  margin: 3px 5px;
+  padding: 7px 8px;
+  color: #ffd2d2;
+  border-radius: 5px;
+  background: rgb(121 34 34 / 58%);
+  font-size: 12px;
 }
 
 @media (width < 1024px) {
