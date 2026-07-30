@@ -436,6 +436,22 @@ export class SqliteRefStore {
     })();
   }
 
+  listAllProtectedHeadFids(): string[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT head_fid FROM filesystem_refs
+         UNION
+         SELECT head_fid FROM filesystem_snapshots
+         UNION
+         SELECT input_head_fid AS head_fid FROM workspace_runs
+         UNION
+         SELECT output_head_fid AS head_fid FROM workspace_runs
+         WHERE output_head_fid IS NOT NULL`,
+      )
+      .all() as Array<{ head_fid: Buffer }>;
+    return rows.map((row) => toHex(row.head_fid)).sort();
+  }
+
   createWorkspace(input: CreateWorkspaceInput): WorkspaceRecord {
     validateWorkspace(input);
     validateRef(input.ref);

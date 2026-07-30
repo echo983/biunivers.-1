@@ -469,6 +469,14 @@ describe("SqliteRefStore", () => {
       ref: { headFidHex: winnerHead, revision: 1 },
     });
     expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    expect(store.listAllProtectedHeadFids()).toEqual(
+      [
+        initial.headFidHex,
+        workspace.baselineHeadFidHex,
+        winnerHead,
+        "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      ].sort(),
+    );
     store.close();
   });
 
