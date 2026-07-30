@@ -959,11 +959,22 @@ export function FileManagerBrowser({
               ) {
                 drag.moved = true;
               }
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const endClientX = clamp(
+                event.clientX,
+                bounds.left,
+                bounds.right,
+              );
+              const endClientY = clamp(
+                event.clientY,
+                bounds.top,
+                bounds.bottom,
+              );
               const clientRectangle = normalizedRectangle(
                 drag.startClientX,
                 drag.startClientY,
-                event.clientX,
-                event.clientY,
+                endClientX,
+                endClientY,
               );
               const selectedEntryIds = new Set(drag.additiveEntryIds);
               for (const item of event.currentTarget.querySelectorAll<HTMLElement>(
@@ -979,8 +990,8 @@ export function FileManagerBrowser({
                   event.currentTarget,
                   drag.startClientX,
                   drag.startClientY,
-                  event.clientX,
-                  event.clientY,
+                  endClientX,
+                  endClientY,
                 ),
               );
             }}
@@ -1572,6 +1583,10 @@ function normalizedRectangle(
     right: Math.max(startX, endX),
     bottom: Math.max(startY, endY),
   };
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
 function iconSelectionRectangle(

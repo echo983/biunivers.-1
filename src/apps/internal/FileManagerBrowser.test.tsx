@@ -118,17 +118,25 @@ describe("FileManagerBrowser", () => {
     });
     fireEvent.pointerMove(grid, {
       pointerId: 7,
-      clientX: 120,
-      clientY: 120,
+      clientX: 500,
+      clientY: 600,
     });
     expect(icon).toHaveClass("is-selected");
     expect(
       document.querySelector(".file-manager-app__selection-box"),
     ).not.toBeNull();
+    expect(
+      document.querySelector<HTMLElement>(
+        ".file-manager-app__selection-box",
+      )?.style,
+    ).toMatchObject({
+      width: "395px",
+      height: "295px",
+    });
     fireEvent.pointerUp(grid, {
       pointerId: 7,
-      clientX: 120,
-      clientY: 120,
+      clientX: 500,
+      clientY: 600,
     });
     expect(
       document.querySelector(".file-manager-app__selection-box"),
