@@ -15,8 +15,9 @@ if (!config.fileService) throw new Error("File Service is disabled.");
 config.fileService.initialize = false;
 const runtime = await startFileService(config.fileService);
 if (runtime.status.mode !== "ready" || !runtime.refStore) {
+  const status = JSON.stringify(runtime.status);
   runtime.close();
-  throw new Error("File Service is not ready.");
+  throw new Error(`File Service is not ready: ${status}`);
 }
 
 try {

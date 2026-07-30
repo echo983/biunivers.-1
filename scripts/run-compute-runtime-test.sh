@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 
 IMAGE_ID="${1:-sha256:f3b19461c76eff06f2134be84e0d975895b115cc0025ba86f040cbfaf79aa234}"
 ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
+HOST_CONTAINER="${BIUNIVERS_TEST_CONTAINER:-biunivers-v02-test}"
 TEST_ROOT="$(mktemp -d /tmp/biunivers-compute-runtime.XXXXXX)"
 PVLOGFS_BINARY="$TEST_ROOT/cargo-target/release/biunivers-pvlogfs"
 RUN_ROOT="$TEST_ROOT/runs"
@@ -53,6 +54,17 @@ fi
 CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
   "$CARGO_BIN" build --release \
   --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
+
+curl --fail --silent --show-error \
+  --request POST \
+  --header "Authorization: Bearer $BIUNIVERS_ADMIN_TOKEN" \
+  "$BIUNIVERS_DESKTOP_ORIGIN/api/v1/admin/file-service/backups" >/dev/null
+mkdir -p "$TEST_ROOT/data/file-service"
+docker cp \
+  "$HOST_CONTAINER:/data/file-service/backups/latest.sqlite" \
+  "$TEST_ROOT/data/file-service/file-service.sqlite" >/dev/null
+export BIUNIVERS_DATA_DIR="$TEST_ROOT/data"
+
 "$NODE_BIN" scripts/compute-runtime-fixture.mjs prepare "$FIXTURE_PATH" >/dev/null
 
 export BIUNIVERS_RUNTIME_ROOT="$RUN_ROOT"
