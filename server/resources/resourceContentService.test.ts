@@ -68,6 +68,7 @@ async function setup() {
     Buffer.from("0123456789"),
   );
   const created = await new FileSystemTransactions({
+    refId: "main",
     repository,
     refStore: genesis.store,
     writerId: "test",
@@ -76,7 +77,7 @@ async function setup() {
     name: "movie.bin",
     content,
   });
-  const index = await loadCurrentEntryIndex(repository, genesis.store);
+  const index = await loadCurrentEntryIndex(repository, genesis.store, "main");
   const entry = index.get(created.entryIdHex)!;
   const sessions = new ResourceSessionRegistry();
   const service = new ResourceContentService({
@@ -183,6 +184,7 @@ describe("ResourceContentService", () => {
     const before = await loadCurrentEntryIndex(
       fixture.repository,
       fixture.refStore,
+      "main",
     );
     expect(before.listChildren(fixture.rootEntryIdHex)).toHaveLength(1);
 
@@ -195,6 +197,7 @@ describe("ResourceContentService", () => {
     const after = await loadCurrentEntryIndex(
       fixture.repository,
       fixture.refStore,
+      "main",
     );
     expect(
       after.listChildren(fixture.rootEntryIdHex).map((entry) => entry.name),
@@ -211,6 +214,7 @@ describe("ResourceContentService", () => {
       "edit",
     );
     await new FileSystemTransactions({
+      refId: "main",
       repository: fixture.repository,
       refStore: fixture.refStore,
       writerId: "other",
@@ -228,6 +232,7 @@ describe("ResourceContentService", () => {
     const current = await loadCurrentEntryIndex(
       fixture.repository,
       fixture.refStore,
+      "main",
     );
     const entry = current.get(fixture.entry.entryIdHex)!;
     const parts = new FileContentStore(fixture.repository).readChunks(

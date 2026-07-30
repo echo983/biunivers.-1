@@ -53,7 +53,7 @@ export class FileServiceGcScanner {
 
   async #scan(): Promise<FileServiceGcReport> {
     const reachable = createFidSets();
-    const roots = new Set(this.#refStore.listProtectedHeadFids("main"));
+    const roots = new Set(this.#refStore.listAllProtectedHeadFids());
     for (const headFid of roots) {
       await this.#markHeadHistory(headFid, reachable);
     }

@@ -139,6 +139,7 @@ export class ResourceContentService {
         const before = await loadCurrentEntryIndex(
           this.#repository,
           this.#refStore,
+          "main",
         );
         const entry = before.get(use.entryIdHex);
         if (
@@ -156,6 +157,7 @@ export class ResourceContentService {
       );
       assertNotRevoked(use.signal);
       const transactions = new FileSystemTransactions({
+        refId: "main",
         repository: this.#repository,
         refStore: this.#refStore,
         writerId: this.#writerId,
@@ -176,6 +178,7 @@ export class ResourceContentService {
       const after = await loadCurrentEntryIndex(
         this.#repository,
         this.#refStore,
+        "main",
       );
       const updated = after.get(published.entryIdHex);
       if (!updated || updated.kind !== "file" || !updated.content) {

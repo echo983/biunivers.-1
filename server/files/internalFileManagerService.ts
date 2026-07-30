@@ -19,9 +19,9 @@ import {
 } from "./zipStore.js";
 import { randomBytes } from "node:crypto";
 
-const INTERNAL_FILE_APP_ID = "system.files";
-
 interface InternalFileManagerServiceOptions {
+  appId: string;
+  refId: string;
   repository: ImmutableObjectRepository;
   refStore: SqliteRefStore;
   capabilities: FileCapabilityRegistry;
@@ -50,12 +50,16 @@ export interface InternalZipExport {
 export class InternalFileManagerService {
   readonly #repository: ImmutableObjectRepository;
   readonly #refStore: SqliteRefStore;
+  readonly #appId: string;
+  readonly #refId: string;
   readonly #capabilities: FileCapabilityRegistry;
   readonly #contentStore: FileContentStore;
   readonly #transactions: FileSystemTransactions;
   readonly #randomId: () => Uint8Array;
 
   constructor(options: InternalFileManagerServiceOptions) {
+    this.#appId = options.appId;
+    this.#refId = options.refId;
     this.#repository = options.repository;
     this.#refStore = options.refStore;
     this.#capabilities = options.capabilities;
@@ -63,6 +67,7 @@ export class InternalFileManagerService {
     this.#transactions =
       options.transactions ??
       new FileSystemTransactions({
+        refId: options.refId,
         repository: options.repository,
         refStore: options.refStore,
         writerId: options.writerId,
@@ -417,7 +422,7 @@ export class InternalFileManagerService {
 
   #authorize(instanceToken: string): void {
     const identity = this.#capabilities.authorizeInstance(instanceToken);
-    if (identity.appId !== INTERNAL_FILE_APP_ID) {
+    if (identity.appId !== this.#appId) {
       throw denied("This file operation is restricted to the file manager.");
     }
   }
@@ -429,6 +434,7 @@ export class InternalFileManagerService {
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
+      this.#refId,
     );
     if (index.revision !== expectedRevision) {
       throw conflict();

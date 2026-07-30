@@ -190,6 +190,8 @@ async function main() {
     fileService.refStore &&
     config.fileService
       ? new InternalFileManagerService({
+          appId: "system.files",
+          refId: "main",
           repository: fileService.repository,
           refStore: fileService.refStore,
           capabilities: fileCapabilities,
@@ -224,6 +226,7 @@ async function main() {
             loadCurrentEntryIndex(
               fileService.repository!,
               fileService.refStore!,
+              "main",
             ),
         })
       : undefined;
@@ -238,6 +241,7 @@ async function main() {
             loadCurrentEntryIndex(
               fileService.repository!,
               fileService.refStore!,
+              "main",
             ),
         })
       : undefined;
@@ -280,6 +284,7 @@ async function main() {
             loadCurrentEntryIndex(
               fileService.repository!,
               fileService.refStore!,
+              "main",
             ),
         }
       : {}),

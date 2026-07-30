@@ -52,6 +52,7 @@ export class FileHostService {
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
+      "main",
     );
     const parentId = parentEntryId ?? index.rootEntryIdHex;
     const parent = index.get(parentId);
@@ -79,6 +80,7 @@ export class FileHostService {
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
+      "main",
     );
     const entry = index.get(entryId);
     if (!entry || entry.kind !== "file") {
@@ -118,6 +120,7 @@ export class FileHostService {
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
+      "main",
     );
     const entry = index.get(handle.entryIdHex);
     if (!entry || entry.kind !== "file") {
@@ -145,6 +148,7 @@ export class FileHostService {
     const index = await loadCurrentEntryIndex(
       this.#repository,
       this.#refStore,
+      "main",
     );
     const parent = index.get(parentEntryId);
     if (!parent || parent.kind !== "directory") {

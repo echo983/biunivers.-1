@@ -47,7 +47,7 @@ export class FileServiceBackup {
 
     const backup = await SqliteRefStore.openExisting(this.#backupPath);
     try {
-      const index = await loadCurrentEntryIndex(this.#repository, backup);
+      const index = await loadCurrentEntryIndex(this.#repository, backup, "main");
       const metadata = await stat(this.#backupPath);
       return {
         createdAt: this.#now().toISOString(),

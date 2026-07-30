@@ -92,6 +92,7 @@ describe("startFileService", () => {
       runtime.repository!,
     ).putBytes(Buffer.from("live"));
     await new FileSystemTransactions({
+      refId: "main",
       repository: runtime.repository!,
       refStore: runtime.refStore!,
       writerId: "test",

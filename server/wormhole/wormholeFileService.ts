@@ -55,6 +55,7 @@ export class WormholeFileService {
     this.#refStore = options.refStore;
     this.#contentStore = new FileContentStore(options.repository);
     this.#transactions = new FileSystemTransactions({
+      refId: "main",
       repository: options.repository,
       refStore: options.refStore,
       writerId: options.writerId,
@@ -66,7 +67,11 @@ export class WormholeFileService {
     segments: readonly string[],
     includeChildren: boolean,
   ): Promise<WebDavListing> {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const entry = resolveEntry(index, segments);
     return {
       revision: index.revision,
@@ -85,7 +90,11 @@ export class WormholeFileService {
   }
 
   async read(segments: readonly string[]): Promise<WebDavRead> {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const entry = requireFile(resolveEntry(index, segments));
     return {
       resource: publicResource(entry, segments, index.revision),
@@ -98,7 +107,11 @@ export class WormholeFileService {
     start: number,
     endInclusive: number,
   ): Promise<WebDavRead> {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const entry = requireFile(resolveEntry(index, segments));
     return {
       resource: publicResource(entry, segments, index.revision),
@@ -157,7 +170,11 @@ export class WormholeFileService {
   }
 
   async setMtime(segments: readonly string[], mtimeMs: number) {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const entry = requireFile(resolveEntry(index, segments));
     await this.#transactions.setFileContent({
       entryIdHex: entry.entryIdHex,
@@ -168,7 +185,11 @@ export class WormholeFileService {
   }
 
   async remove(segments: readonly string[]) {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const entry = resolveEntry(index, segments);
     if (entry.parentEntryIdHex === null) {
       throw new WormholeFileError("ROOT_FORBIDDEN", "Root cannot be removed.");
@@ -185,7 +206,11 @@ export class WormholeFileService {
     destinationSegments: readonly string[],
     overwrite: boolean,
   ) {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const source = resolveEntry(index, sourceSegments);
     if (source.parentEntryIdHex === null) {
       throw new WormholeFileError("ROOT_FORBIDDEN", "Root cannot be moved.");
@@ -220,7 +245,11 @@ export class WormholeFileService {
     destinationSegments: readonly string[],
     overwrite: boolean,
   ) {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     const source = resolveEntry(index, sourceSegments);
     const { parent, name, existing } = destination(index, destinationSegments);
     ensureNotDescendant(index, source, parent);
@@ -242,7 +271,11 @@ export class WormholeFileService {
   }
 
   async #destination(segments: readonly string[]) {
-    const index = await loadCurrentEntryIndex(this.#repository, this.#refStore);
+    const index = await loadCurrentEntryIndex(
+      this.#repository,
+      this.#refStore,
+      "main",
+    );
     return { index, ...destination(index, segments) };
   }
 }

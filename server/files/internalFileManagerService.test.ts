@@ -27,6 +27,8 @@ async function setup() {
   });
   const capabilities = new FileCapabilityRegistry();
   const service = new InternalFileManagerService({
+    appId: "system.files",
+    refId: "main",
     repository,
     refStore: genesis.store,
     capabilities,
@@ -59,6 +61,7 @@ describe("InternalFileManagerService", () => {
     const contentStore = new FileContentStore(repository);
     const before = await contentStore.putBytes(Buffer.from("before"));
     const transactions = new FileSystemTransactions({
+      refId: "main",
       repository,
       refStore: genesis.store,
       writerId: "test",
@@ -107,6 +110,7 @@ describe("InternalFileManagerService", () => {
       new TextEncoder().encode("shared content"),
     );
     const source = await new FileSystemTransactions({
+      refId: "main",
       repository,
       refStore: genesis.store,
       writerId: "test",
@@ -126,7 +130,7 @@ describe("InternalFileManagerService", () => {
       },
     );
 
-    const index = await loadCurrentEntryIndex(repository, genesis.store);
+    const index = await loadCurrentEntryIndex(repository, genesis.store, "main");
     expect(index.get(empty.entryId)).toMatchObject({
       name: "empty.txt",
       content: { kind: "chunk", size: 0 },
@@ -163,7 +167,7 @@ describe("InternalFileManagerService", () => {
     );
     expect(removed).toEqual({ entryId: documents.entryId, revision: 4 });
 
-    const index = await loadCurrentEntryIndex(repository, genesis.store);
+    const index = await loadCurrentEntryIndex(repository, genesis.store, "main");
     expect(index.get(nested.entryId)).toMatchObject({
       entryIdHex: nested.entryId,
       parentEntryIdHex: genesis.rootEntryIdHex,
@@ -276,7 +280,7 @@ describe("InternalFileManagerService", () => {
     });
     expect(copied.revision).toBe(6);
     expect(copied.entryIds).toHaveLength(1);
-    let index = await loadCurrentEntryIndex(repository, genesis.store);
+    let index = await loadCurrentEntryIndex(repository, genesis.store, "main");
     const copiedRoot = index.get(copied.entryIds[0]);
     expect(copiedRoot).toMatchObject({
       name: "Source",
@@ -302,7 +306,7 @@ describe("InternalFileManagerService", () => {
       expectedRevision: 6,
     });
     expect(moved.revision).toBe(7);
-    index = await loadCurrentEntryIndex(repository, genesis.store);
+    index = await loadCurrentEntryIndex(repository, genesis.store, "main");
     expect(index.get(file.entryId)?.parentEntryIdHex).toBe(destination.entryId);
     expect(index.get(nested.entryId)?.parentEntryIdHex).toBe(
       destination.entryId,
@@ -316,7 +320,7 @@ describe("InternalFileManagerService", () => {
       entryIds: [copiedRoot!.entryIdHex],
       revision: 8,
     });
-    index = await loadCurrentEntryIndex(repository, genesis.store);
+    index = await loadCurrentEntryIndex(repository, genesis.store, "main");
     expect(index.has(copiedRoot!.entryIdHex)).toBe(false);
     genesis.store.close();
   });
