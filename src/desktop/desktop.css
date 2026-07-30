@@ -604,7 +604,32 @@
 
 .workspace-app > main > header > div:last-child {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.workspace-app__view-switch {
+  display: inline-flex;
+}
+
+.workspace-app__view-switch button {
+  border-radius: 0;
+}
+
+.workspace-app__view-switch button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+
+.workspace-app__view-switch button:last-child {
+  margin-left: -1px;
+  border-radius: 0 7px 7px 0;
+}
+
+.workspace-app__view-switch button.is-active {
+  z-index: 1;
+  border-color: #7eb8ff;
+  background: rgb(126 184 255 / 18%);
 }
 
 .workspace-app > main button {
@@ -659,6 +684,59 @@
 
 .workspace-app__empty {
   color: var(--text-secondary);
+}
+
+.workspace-app__changes > p {
+  color: var(--text-secondary);
+}
+
+.workspace-app__changes ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-app__changes li {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.workspace-app__changes li strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-app__changes li small {
+  color: var(--text-secondary);
+}
+
+.workspace-app__change-kind {
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.workspace-app__change-kind.is-added {
+  color: #a9e7bd;
+  background: rgb(77 181 107 / 18%);
+}
+
+.workspace-app__change-kind.is-modified {
+  color: #b9d8ff;
+  background: rgb(77 142 222 / 18%);
+}
+
+.workspace-app__change-kind.is-deleted {
+  color: #ffb8b8;
+  background: rgb(218 77 77 / 18%);
 }
 
 .iframe-app {

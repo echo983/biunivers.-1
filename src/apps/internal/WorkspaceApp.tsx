@@ -6,9 +6,11 @@ import {
 import type { DirectoryListing, FileEntry } from "../../hostApi/fileHostClient";
 import {
   deleteWorkspace,
+  getWorkspaceDiff,
   listWorkspaceFiles,
   listWorkspaces,
   setWorkspaceRetention,
+  type WorkspaceDiff,
   type WorkspaceSummary,
 } from "../../api/workspaceClient";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
@@ -25,6 +27,8 @@ export function WorkspaceApp() {
   const [selectedId, setSelectedId] = useState<string>();
   const [listing, setListing] = useState<DirectoryListing>();
   const [directoryId, setDirectoryId] = useState<string>();
+  const [viewMode, setViewMode] = useState<"files" | "changes">("files");
+  const [diff, setDiff] = useState<WorkspaceDiff>();
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -94,6 +98,34 @@ export function WorkspaceApp() {
     };
   }, [directoryId, selectedId, state]);
 
+  const selectedRevision = workspaces.find(
+    (workspace) => workspace.workspaceIdHex === selectedId,
+  )?.revision;
+  useEffect(() => {
+    if (
+      state.mode !== "ready" ||
+      !selectedId ||
+      viewMode !== "changes"
+    ) {
+      return;
+    }
+    let active = true;
+    void getWorkspaceDiff(state.token, selectedId)
+      .then((value) => {
+        if (active) setDiff(value);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setNotice(
+            error instanceof Error ? error.message : "读取变更失败",
+          );
+        }
+      })
+    return () => {
+      active = false;
+    };
+  }, [selectedId, selectedRevision, state, viewMode]);
+
   if (state.mode === "loading") {
     return <div className="window-loading">正在连接工作空间服务…</div>;
   }
@@ -137,6 +169,7 @@ export function WorkspaceApp() {
       await deleteWorkspace(state.token, selected.workspaceIdHex);
       setDirectoryId(undefined);
       setListing(undefined);
+      setDiff(undefined);
       await refresh(state.token);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "删除失败");
@@ -174,6 +207,8 @@ export function WorkspaceApp() {
                   onClick={() => {
                     setDirectoryId(undefined);
                     setListing(undefined);
+                    setDiff(undefined);
+                    setViewMode("files");
                     setSelectedId(workspace.workspaceIdHex);
                   }}
                 >
@@ -197,6 +232,22 @@ export function WorkspaceApp() {
                 <p>来源 main · 创建于 {formatDate(selected.createdAtMs)}</p>
               </div>
               <div>
+                <div className="workspace-app__view-switch" role="group">
+                  <button
+                    type="button"
+                    className={viewMode === "files" ? "is-active" : ""}
+                    onClick={() => setViewMode("files")}
+                  >
+                    文件
+                  </button>
+                  <button
+                    type="button"
+                    className={viewMode === "changes" ? "is-active" : ""}
+                    onClick={() => setViewMode("changes")}
+                  >
+                    变更
+                  </button>
+                </div>
                 <button
                   type="button"
                   disabled={working}
@@ -214,46 +265,91 @@ export function WorkspaceApp() {
               </div>
             </header>
             {notice && <p className="workspace-app__notice">{notice}</p>}
-            <nav aria-label="工作空间路径">
-              <button type="button" onClick={() => setDirectoryId(undefined)}>
-                /
-              </button>
-              {listing?.breadcrumbs?.map((entry, index) => (
-                <span key={entry.entryId}>
-                  {index === 0 ? "" : " / "}
-                  <button
-                    type="button"
-                    onClick={() => setDirectoryId(entry.entryId)}
-                  >
-                    {entry.name}
+            {viewMode === "files" ? (
+              <>
+                <nav aria-label="工作空间路径">
+                  <button type="button" onClick={() => setDirectoryId(undefined)}>
+                    /
                   </button>
-                </span>
-              ))}
-            </nav>
-            <div className="workspace-app__files">
-              {listing?.entries.length === 0 && <p>此目录为空。</p>}
-              {listing?.entries.map((entry) => (
-                <WorkspaceEntry
-                  key={entry.entryId}
-                  entry={entry}
-                  onActivate={() => {
-                    if (entry.kind === "directory") {
-                      setDirectoryId(entry.entryId);
-                      return;
-                    }
-                    setNotice(
-                      `“${entry.name}”属于隔离 Workspace；当前阶段仅支持只读目录浏览。`,
-                    );
-                  }}
-                />
-              ))}
-            </div>
+                  {listing?.breadcrumbs?.map((entry, index) => (
+                    <span key={entry.entryId}>
+                      {index === 0 ? "" : " / "}
+                      <button
+                        type="button"
+                        onClick={() => setDirectoryId(entry.entryId)}
+                      >
+                        {entry.name}
+                      </button>
+                    </span>
+                  ))}
+                </nav>
+                <div className="workspace-app__files">
+                  {listing?.entries.length === 0 && <p>此目录为空。</p>}
+                  {listing?.entries.map((entry) => (
+                    <WorkspaceEntry
+                      key={entry.entryId}
+                      entry={entry}
+                      onActivate={() => {
+                        if (entry.kind === "directory") {
+                          setDirectoryId(entry.entryId);
+                          return;
+                        }
+                        setNotice(
+                          `“${entry.name}”属于隔离 Workspace；当前阶段仅支持只读目录浏览。`,
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <WorkspaceChanges
+                diff={diff}
+                expectedRevision={selected.revision}
+              />
+            )}
           </>
         ) : (
           <p className="workspace-app__empty">选择一个工作空间查看内容。</p>
         )}
       </main>
     </article>
+  );
+}
+
+function WorkspaceChanges({
+  diff,
+  expectedRevision,
+}: {
+  diff?: WorkspaceDiff;
+  expectedRevision: number;
+}) {
+  if (!diff || diff.currentRevision !== expectedRevision) {
+    return <p>正在比较固定 Head…</p>;
+  }
+  return (
+    <section className="workspace-app__changes">
+      <p>
+        revision {diff.baselineRevision} → {diff.currentRevision} · 新增{" "}
+        {diff.summary.added} · 修改 {diff.summary.modified} · 删除{" "}
+        {diff.summary.deleted}
+      </p>
+      {diff.changes.length === 0 ? (
+        <p className="workspace-app__empty">相对初始版本没有变化。</p>
+      ) : (
+        <ul>
+          {diff.changes.map((entry) => (
+            <li key={entry.path}>
+              <span className={`workspace-app__change-kind is-${entry.change}`}>
+                {changeLabel(entry.change)}
+              </span>
+              <strong>{entry.path}</strong>
+              <small>{changeDetails(entry)}</small>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -296,4 +392,31 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function changeLabel(change: "added" | "modified" | "deleted"): string {
+  if (change === "added") return "新增";
+  if (change === "modified") return "修改";
+  return "删除";
+}
+
+function changeDetails(
+  entry: WorkspaceDiff["changes"][number],
+): string {
+  const before = entry.before;
+  const after = entry.after;
+  if (!before && after) {
+    return after.kind === "directory" ? "目录" : formatSize(after.size);
+  }
+  if (before && !after) {
+    return before.kind === "directory" ? "目录" : formatSize(before.size);
+  }
+  if (!before || !after) return "";
+  if (before.kind !== after.kind) {
+    return `${before.kind === "directory" ? "目录" : "文件"} → ${
+      after.kind === "directory" ? "目录" : "文件"
+    }`;
+  }
+  if (after.kind === "directory") return "目录元数据变化";
+  return `${formatSize(before.size)} → ${formatSize(after.size)}`;
 }
