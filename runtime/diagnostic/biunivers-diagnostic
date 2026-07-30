@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  echo "BIUNIVERS_DIAGNOSTIC_FAILED:$1" >&2
+  exit 1
+}
+
+test "$(id -u)" = "65532" || fail "uid"
+test "$(id -g)" = "65532" || fail "gid"
+test -d /workspace || fail "workspace-missing"
+test -w /workspace || fail "workspace-not-writable"
+test "$(awk '/^CapEff:/ { print $2 }' /proc/self/status)" = "0000000000000000" ||
+  fail "capabilities"
+test ! -e /var/run/docker.sock || fail "docker-socket-visible"
+test ! -e /dev/fuse || fail "fuse-device-visible"
+
+interfaces="$(ls -1 /sys/class/net)"
+test "$interfaces" = "lo" || fail "network-interfaces:$interfaces"
+
+temporary="/workspace/.biunivers-runtime-diagnostic.tmp"
+result="/workspace/.biunivers-runtime-diagnostic.json"
+printf '%s\n' \
+  '{"schemaVersion":1,"uid":65532,"gid":65532,"network":"none","capabilities":"none","workspaceWritable":true}' \
+  > "$temporary" || fail "workspace-write"
+mv "$temporary" "$result" || fail "workspace-rename"
+
+while :; do
+  sleep 3600
+done

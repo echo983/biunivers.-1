@@ -64,7 +64,14 @@ type WormholeControlExecutor = Pick<
 >;
 type WorkspaceControlExecutor = Pick<
   WorkspaceControlService,
-  "create" | "list" | "setRetention" | "delete" | "listDirectory"
+  | "create"
+  | "list"
+  | "setRetention"
+  | "delete"
+  | "listDirectory"
+  | "diff"
+  | "textDiff"
+  | "importToMain"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -341,6 +348,94 @@ export function createDesktopServer({
               instanceToken,
               request.params.workspaceId,
               parent,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/workspaces/:workspaceId/import",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        const body = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(body.selectedEntryIds) ||
+          body.selectedEntryIds.some((value) => typeof value !== "string") ||
+          typeof body.destinationEntryId !== "string" ||
+          !Number.isSafeInteger(body.workspaceRevision) ||
+          !Number.isSafeInteger(body.mainRevision) ||
+          (body.conflictPolicy !== "cancel" &&
+            body.conflictPolicy !== "rename")
+        ) {
+          throw new AppError("REQUEST_INVALID", "Workspace 导回参数无效");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .status(201)
+          .json(
+            await service.importToMain(instanceToken, {
+              workspaceIdHex: request.params.workspaceId,
+              selectedEntryIdsHex: body.selectedEntryIds as string[],
+              destinationEntryIdHex: body.destinationEntryId,
+              workspaceRevision: body.workspaceRevision as number,
+              mainRevision: body.mainRevision as number,
+              conflictPolicy: body.conflictPolicy,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/internal/workspaces/:workspaceId/diff",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.diff(instanceToken, request.params.workspaceId),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/internal/workspaces/:workspaceId/diff/text",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        const path = request.query.path;
+        if (typeof path !== "string") {
+          throw new AppError("REQUEST_INVALID", "path 必须是字符串");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.textDiff(
+              instanceToken,
+              request.params.workspaceId,
+              path,
             ),
           );
       } catch (error) {

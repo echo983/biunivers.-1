@@ -1,4 +1,8 @@
 import { randomBytes } from "node:crypto";
+import {
+  encodeBatchFileSystemSegment,
+  type BatchFileSystemOperation,
+} from "./batchFileSystemSegment.js";
 import type { FileContentRef } from "./fileContentStore.js";
 import type { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import { ObjectStoreError } from "./objectStore.js";
@@ -57,33 +61,7 @@ export interface RemoveEntryInput {
   expectedRevision?: number;
 }
 
-export type BatchFileSystemOperation =
-  | {
-      kind: "create-directory";
-      entryIdHex: string;
-      parentEntryIdHex: string;
-      name: string;
-      mtimeMs: number;
-    }
-  | {
-      kind: "create-file";
-      entryIdHex: string;
-      parentEntryIdHex: string;
-      name: string;
-      content: FileContentRef;
-      mtimeMs: number;
-    }
-  | {
-      kind: "move";
-      entryIdHex: string;
-      newParentEntryIdHex: string;
-      newName: string;
-    }
-  | {
-      kind: "remove";
-      entryIdHex: string;
-      recursive: boolean;
-    };
+export type { BatchFileSystemOperation } from "./batchFileSystemSegment.js";
 
 export interface PublishedFileSystemTransaction {
   ref: FilesystemRef;
@@ -278,54 +256,17 @@ export class FileSystemTransactions {
     const transactionId = requireId(this.#randomId(), "transaction ID");
     const timestamp = input.timestampMs ?? this.#now();
     validateTimestamp(timestamp);
-    const segmentBytes = input.operations.map((operation) => {
-      const common = [
-        state.lineageId,
-        Buffer.from(state.ref.headFidHex, "hex"),
-        state.lastSegmentFid,
-        BigInt(state.ref.revision + 1),
-        transactionId,
-        BigInt(timestamp),
-        this.#writerId,
-      ] as const;
-      if (operation.kind === "create-directory") {
-        return this.#core.encodeCreateDirectorySegment(
-          ...common,
-          hexId(operation.entryIdHex, "Entry ID"),
-          hexId(operation.parentEntryIdHex, "parent Entry ID"),
-          operation.name,
-          BigInt(operation.mtimeMs),
-        );
-      }
-      if (operation.kind === "create-file") {
-        return this.#core.encodeCreateFileSegment(
-          ...common,
-          hexId(operation.entryIdHex, "Entry ID"),
-          hexId(operation.parentEntryIdHex, "parent Entry ID"),
-          operation.name,
-          contentKind(operation.content),
-          Buffer.from(operation.content.fidHex, "hex"),
-          BigInt(operation.content.size),
-          BigInt(operation.mtimeMs),
-        );
-      }
-      if (operation.kind === "move") {
-        return this.#core.encodeMoveEntrySegment(
-          ...common,
-          hexId(operation.entryIdHex, "Entry ID"),
-          hexId(operation.newParentEntryIdHex, "new parent Entry ID"),
-          operation.newName,
-        );
-      }
-      return this.#core.encodeRemoveEntrySegment(
-        ...common,
-        hexId(operation.entryIdHex, "Entry ID"),
-        operation.recursive,
-      );
+    const combined = encodeBatchFileSystemSegment({
+      core: this.#core,
+      operations: input.operations,
+      lineageId: state.lineageId,
+      baseHeadFid: Buffer.from(state.ref.headFidHex, "hex"),
+      previousSegmentFid: state.lastSegmentFid,
+      revision: state.ref.revision + 1,
+      transactionId,
+      timestampMs: timestamp,
+      writerId: this.#writerId,
     });
-    const combined = this.#core.combineSegmentsPacked(
-      packSegments(segmentBytes),
-    );
     return await this.#publish(
       state,
       combined,
@@ -421,22 +362,6 @@ export class FileSystemTransactions {
       checkpointFidHex: checkpoint.key.fidHex,
     };
   }
-}
-
-function packSegments(segments: Uint8Array[]): Uint8Array {
-  const size =
-    4 + segments.reduce((total, segment) => total + 4 + segment.length, 0);
-  const packed = new Uint8Array(size);
-  const view = new DataView(packed.buffer);
-  view.setUint32(0, segments.length);
-  let offset = 4;
-  for (const segment of segments) {
-    view.setUint32(offset, segment.length);
-    offset += 4;
-    packed.set(segment, offset);
-    offset += segment.length;
-  }
-  return packed;
 }
 
 function contentKind(content: FileContentRef): number {

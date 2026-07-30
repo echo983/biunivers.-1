@@ -17,6 +17,18 @@ import type {
   WorkspaceRetention,
 } from "../files/sqliteRefStore.js";
 import { WorkspaceDeriver } from "./workspaceDeriver.js";
+import {
+  WorkspaceDiffService,
+  type WorkspaceDiff,
+} from "./workspaceDiffService.js";
+import {
+  WorkspaceTextDiffService,
+  type WorkspaceTextDiff,
+} from "./workspaceTextDiffService.js";
+import {
+  WorkspaceImportService,
+  type WorkspaceImportResult,
+} from "./workspaceImportService.js";
 
 const FILES_APP_ID = "system.files";
 const WORKSPACES_APP_ID = "system.workspaces";
@@ -31,6 +43,9 @@ interface WorkspaceControlServiceOptions {
   capabilities: FileCapabilityRegistry;
   writerId: string;
   deriver?: WorkspaceDeriver;
+  diff?: Pick<WorkspaceDiffService, "compare">;
+  textDiff?: Pick<WorkspaceTextDiffService, "compare">;
+  importer?: Pick<WorkspaceImportService, "execute">;
   now?: () => number;
 }
 
@@ -39,6 +54,9 @@ export class WorkspaceControlService {
   readonly #refStore: SqliteRefStore;
   readonly #capabilities: FileCapabilityRegistry;
   readonly #deriver: WorkspaceDeriver;
+  readonly #diff: Pick<WorkspaceDiffService, "compare">;
+  readonly #textDiff: Pick<WorkspaceTextDiffService, "compare">;
+  readonly #importer: Pick<WorkspaceImportService, "execute">;
   readonly #now: () => number;
 
   constructor(options: WorkspaceControlServiceOptions) {
@@ -48,6 +66,25 @@ export class WorkspaceControlService {
     this.#deriver =
       options.deriver ??
       new WorkspaceDeriver({
+        repository: options.repository,
+        refStore: options.refStore,
+        writerId: options.writerId,
+      });
+    this.#diff =
+      options.diff ??
+      new WorkspaceDiffService({
+        repository: options.repository,
+        refStore: options.refStore,
+      });
+    this.#textDiff =
+      options.textDiff ??
+      new WorkspaceTextDiffService({
+        repository: options.repository,
+        refStore: options.refStore,
+      });
+    this.#importer =
+      options.importer ??
+      new WorkspaceImportService({
         repository: options.repository,
         refStore: options.refStore,
         writerId: options.writerId,
@@ -143,6 +180,31 @@ export class WorkspaceControlService {
       breadcrumbs: buildDirectoryBreadcrumbs(index, parent),
       entries: index.listChildren(parentId).map(publicEntry),
     };
+  }
+
+  async diff(
+    instanceToken: string,
+    workspaceIdHex: string,
+  ): Promise<WorkspaceDiff> {
+    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    return await this.#diff.compare(workspaceIdHex);
+  }
+
+  async textDiff(
+    instanceToken: string,
+    workspaceIdHex: string,
+    path: string,
+  ): Promise<WorkspaceTextDiff> {
+    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    return await this.#textDiff.compare(workspaceIdHex, path);
+  }
+
+  async importToMain(
+    instanceToken: string,
+    input: Parameters<WorkspaceImportService["execute"]>[0],
+  ): Promise<WorkspaceImportResult> {
+    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    return await this.#importer.execute(input);
   }
 
   #authorize(instanceToken: string, requiredAppId: string): void {

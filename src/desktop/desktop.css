@@ -604,7 +604,32 @@
 
 .workspace-app > main > header > div:last-child {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 8px;
+}
+
+.workspace-app__view-switch {
+  display: inline-flex;
+}
+
+.workspace-app__view-switch button {
+  border-radius: 0;
+}
+
+.workspace-app__view-switch button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+
+.workspace-app__view-switch button:last-child {
+  margin-left: -1px;
+  border-radius: 0 7px 7px 0;
+}
+
+.workspace-app__view-switch button.is-active {
+  z-index: 1;
+  border-color: #7eb8ff;
+  background: rgb(126 184 255 / 18%);
 }
 
 .workspace-app > main button {
@@ -659,6 +684,98 @@
 
 .workspace-app__empty {
   color: var(--text-secondary);
+}
+
+.workspace-app__changes > p {
+  color: var(--text-secondary);
+}
+
+.workspace-app__changes ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-app__changes li {
+  padding: 9px 10px;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.workspace-app__change-row {
+  display: grid;
+  grid-template-columns: 22px 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-app__change-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.workspace-app__import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.workspace-app__import-actions span {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.workspace-app__change-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.workspace-app__change-row small {
+  color: var(--text-secondary);
+}
+
+.workspace-app__text-diff {
+  max-height: 360px;
+  margin: 10px 0 0;
+  padding: 10px;
+  overflow: auto;
+  color: #d9e2f2;
+  border-radius: 6px;
+  background: #111722;
+  font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre;
+}
+
+.workspace-app__text-unavailable {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+}
+
+.workspace-app__change-kind {
+  padding: 2px 5px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.workspace-app__change-kind.is-added {
+  color: #a9e7bd;
+  background: rgb(77 181 107 / 18%);
+}
+
+.workspace-app__change-kind.is-modified {
+  color: #b9d8ff;
+  background: rgb(77 142 222 / 18%);
+}
+
+.workspace-app__change-kind.is-deleted {
+  color: #ffb8b8;
+  background: rgb(218 77 77 / 18%);
 }
 
 .iframe-app {
@@ -1388,6 +1505,7 @@
   padding: 18px;
   overflow: auto;
   gap: 14px;
+  color: #1f2937;
   border: 1px solid #c9d1dd;
   border-radius: 10px;
   background: #fff;
@@ -1409,6 +1527,19 @@
   padding: 8px 9px;
   border: 1px solid #aeb9c9;
   border-radius: 6px;
+}
+
+.file-manager-dialog select {
+  padding: 7px 9px;
+  color: #1f2937;
+  border: 1px solid #aeb9c9;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.file-manager-dialog select option {
+  color: #1f2937;
+  background: #fff;
 }
 
 .file-manager-dialog form > div,

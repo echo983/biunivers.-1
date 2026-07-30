@@ -64,11 +64,31 @@ export async function loadCurrentEntryIndex(
   core: PvlogCore = loadPvlogCore(),
 ): Promise<EntryIndex> {
   const ref = refStore.getRef(refId);
-  const head = await repository.get("heads", ref.headFidHex);
+  return await loadEntryIndexAtHead(
+    repository,
+    ref.headFidHex,
+    ref.revision,
+    ref.lineageIdHex,
+    core,
+  );
+}
+
+export async function loadEntryIndexAtHead(
+  repository: ImmutableObjectRepository,
+  headFidHex: string,
+  expectedRevision: number,
+  expectedLineageIdHex?: string,
+  core: PvlogCore = loadPvlogCore(),
+): Promise<EntryIndex> {
+  const head = await repository.get("heads", headFidHex);
   core.validateHead(head);
   const revision = Number(core.headRevision(head));
   const lineageIdHex = Buffer.from(core.headLineageId(head)).toString("hex");
-  if (revision !== ref.revision || lineageIdHex !== ref.lineageIdHex) {
+  if (
+    revision !== expectedRevision ||
+    (expectedLineageIdHex !== undefined &&
+      lineageIdHex !== expectedLineageIdHex)
+  ) {
     throw integrityFailure("Ref metadata does not match its Head.");
   }
   const checkpointFidHex = Buffer.from(core.headCheckpointFid(head)).toString(

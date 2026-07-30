@@ -450,6 +450,36 @@ describe("SqliteRefStore", () => {
     store.close();
   });
 
+  it("atomically completes an unchanged Run without advancing its Workspace Ref", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const workspace = store.createWorkspace(workspaceInput());
+    const runIdHex = "a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2";
+    prepareCommittingRun(store, workspace, runIdHex);
+    const before = store.getRef(workspace.refId);
+
+    const result = store.completeUnchangedWorkspaceRun({
+      runIdHex,
+      expectedHeadFidHex: before.headFidHex,
+      expectedRevision: before.revision,
+      timestampMs: workspace.createdAtMs + 10,
+    });
+
+    expect(result).toMatchObject({
+      outcome: "committed",
+      run: {
+        state: "COMMITTED",
+        outputHeadFidHex: before.headFidHex,
+        errorCode: null,
+      },
+      ref: before,
+    });
+    expect(store.getRef(workspace.refId)).toEqual(before);
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    store.close();
+  });
+
   it("records a lost Ref CAS as CONFLICT without overwriting the winner", async () => {
     const path = await databasePath();
     const store = await SqliteRefStore.initialize(path);

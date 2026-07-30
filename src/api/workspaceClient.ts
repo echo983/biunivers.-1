@@ -15,6 +15,43 @@ export interface WorkspaceSummary {
   revision: number;
 }
 
+export interface WorkspaceDiffEntryMetadata {
+  entryIdHex: string;
+  kind: "directory" | "file";
+  size: number;
+  mtimeMs: number;
+  contentFidHex: string | null;
+}
+
+export interface WorkspaceDiff {
+  workspaceIdHex: string;
+  baselineHeadFidHex: string;
+  currentHeadFidHex: string;
+  baselineRevision: number;
+  currentRevision: number;
+  changes: Array<{
+    path: string;
+    change: "added" | "modified" | "deleted";
+    before: WorkspaceDiffEntryMetadata | null;
+    after: WorkspaceDiffEntryMetadata | null;
+  }>;
+  summary: { added: number; modified: number; deleted: number };
+}
+
+export type WorkspaceTextDiff =
+  | {
+      available: true;
+      path: string;
+      baselineHeadFidHex: string;
+      currentHeadFidHex: string;
+      unifiedDiff: string;
+    }
+  | {
+      available: false;
+      path: string;
+      reason: "NOT_MODIFIED" | "NOT_TEXT" | "TOO_LARGE";
+    };
+
 export function createWorkspace(
   instanceToken: string,
   input: {
@@ -76,6 +113,52 @@ export function listWorkspaceFiles(
   return request(
     `/api/v1/internal/workspaces/${workspaceIdHex}/files${query}`,
     instanceToken,
+  );
+}
+
+export function getWorkspaceDiff(
+  instanceToken: string,
+  workspaceIdHex: string,
+): Promise<WorkspaceDiff> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/diff`,
+    instanceToken,
+  );
+}
+
+export function getWorkspaceTextDiff(
+  instanceToken: string,
+  workspaceIdHex: string,
+  path: string,
+): Promise<WorkspaceTextDiff> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/diff/text?path=${encodeURIComponent(path)}`,
+    instanceToken,
+  );
+}
+
+export function importWorkspaceEntries(
+  instanceToken: string,
+  workspaceIdHex: string,
+  input: {
+    selectedEntryIds: string[];
+    destinationEntryId: string;
+    workspaceRevision: number;
+    mainRevision: number;
+    conflictPolicy: "cancel" | "rename";
+  },
+): Promise<{
+  revision: number;
+  roots: Array<{
+    sourceEntryIdHex: string;
+    newEntryIdHex: string;
+    name: string;
+  }>;
+}> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/import`,
+    instanceToken,
+    { method: "POST", body: JSON.stringify(input) },
   );
 }
 

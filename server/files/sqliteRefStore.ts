@@ -111,6 +111,13 @@ export interface CommitWorkspaceRunInput {
   timestampMs: number;
 }
 
+export interface CompleteUnchangedWorkspaceRunInput {
+  runIdHex: string;
+  expectedHeadFidHex: string;
+  expectedRevision: number;
+  timestampMs: number;
+}
+
 export interface CommitWorkspaceRunResult {
   outcome: "committed" | "conflict";
   run: WorkspaceRunRecord;
@@ -878,6 +885,82 @@ export class SqliteRefStore {
         outcome,
         run: this.getWorkspaceRun(run.runIdHex),
         ref: this.getRef(workspace.refId),
+      };
+    })();
+  }
+
+  completeUnchangedWorkspaceRun(
+    input: CompleteUnchangedWorkspaceRunInput,
+  ): CommitWorkspaceRunResult {
+    validateId(input.runIdHex, "Run ID");
+    validateFid(input.expectedHeadFidHex);
+    validateSafeInteger(input.expectedRevision, "expected revision");
+    validateTimestamp(input.timestampMs);
+    return this.#database.transaction(() => {
+      const run = this.getWorkspaceRun(input.runIdHex);
+      if (run.state !== "COMMITTING") {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          `Run is ${run.state}, not COMMITTING.`,
+        );
+      }
+      if (
+        run.inputHeadFidHex !== input.expectedHeadFidHex ||
+        input.timestampMs < run.createdAtMs ||
+        (run.startedAtMs !== null && input.timestampMs < run.startedAtMs)
+      ) {
+        throw invalid("Run completion does not match its fixed input Head.");
+      }
+      const workspace = this.getWorkspace(run.workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== run.runIdHex) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Run no longer owns the Workspace write lease.",
+        );
+      }
+      const currentRef = this.getRef(workspace.refId);
+      const committed =
+        currentRef.headFidHex === input.expectedHeadFidHex &&
+        currentRef.revision === input.expectedRevision;
+      const state: WorkspaceRunState = committed ? "COMMITTED" : "CONFLICT";
+      this.#database
+        .prepare(
+          `UPDATE workspace_runs
+           SET state = ?, output_head_fid = ?, error_code = ?,
+               finished_at_ms = ?
+           WHERE run_id = ? AND state = 'COMMITTING'`,
+        )
+        .run(
+          state,
+          fromHex(input.expectedHeadFidHex),
+          committed ? null : "REF_CONFLICT",
+          input.timestampMs,
+          fromHex(input.runIdHex),
+        );
+      const released = this.#database
+        .prepare(
+          `UPDATE workspace_records
+           SET active_write_run_id = NULL, updated_at_ms = ?
+           WHERE workspace_id = ? AND active_write_run_id = ?`,
+        )
+        .run(
+          input.timestampMs,
+          fromHex(run.workspaceIdHex),
+          fromHex(run.runIdHex),
+        );
+      if (released.changes !== 1) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Workspace write lease could not be released.",
+        );
+      }
+      const outcome: CommitWorkspaceRunResult["outcome"] = committed
+        ? "committed"
+        : "conflict";
+      return {
+        outcome,
+        run: this.getWorkspaceRun(run.runIdHex),
+        ref: currentRef,
       };
     })();
   }

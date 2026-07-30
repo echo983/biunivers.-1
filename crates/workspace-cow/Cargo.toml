@@ -1,0 +1,16 @@
+[package]
+name = "biunivers-workspace-cow"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Fail-closed Upper scanner for Biunivers Workspace COW commits"
+publish = false
+
+[dependencies]
+libc = "=0.2.189"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
+
+[[bin]]
+name = "biunivers-workspace-cow-scan"
+path = "src/main.rs"

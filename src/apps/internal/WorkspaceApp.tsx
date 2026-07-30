@@ -6,12 +6,18 @@ import {
 import type { DirectoryListing, FileEntry } from "../../hostApi/fileHostClient";
 import {
   deleteWorkspace,
+  getWorkspaceDiff,
+  getWorkspaceTextDiff,
+  importWorkspaceEntries,
   listWorkspaceFiles,
   listWorkspaces,
   setWorkspaceRetention,
+  type WorkspaceDiff,
   type WorkspaceSummary,
+  type WorkspaceTextDiff,
 } from "../../api/workspaceClient";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
+import { listFiles } from "../../hostApi/fileHostClient";
 
 type ViewState =
   | { mode: "loading" }
@@ -25,6 +31,16 @@ export function WorkspaceApp() {
   const [selectedId, setSelectedId] = useState<string>();
   const [listing, setListing] = useState<DirectoryListing>();
   const [directoryId, setDirectoryId] = useState<string>();
+  const [viewMode, setViewMode] = useState<"files" | "changes">("files");
+  const [diff, setDiff] = useState<WorkspaceDiff>();
+  const [textDiffs, setTextDiffs] = useState<
+    Record<string, WorkspaceTextDiff>
+  >({});
+  const [loadingTextPath, setLoadingTextPath] = useState<string>();
+  const [selectedChanges, setSelectedChanges] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -94,6 +110,34 @@ export function WorkspaceApp() {
     };
   }, [directoryId, selectedId, state]);
 
+  const selectedRevision = workspaces.find(
+    (workspace) => workspace.workspaceIdHex === selectedId,
+  )?.revision;
+  useEffect(() => {
+    if (
+      state.mode !== "ready" ||
+      !selectedId ||
+      viewMode !== "changes"
+    ) {
+      return;
+    }
+    let active = true;
+    void getWorkspaceDiff(state.token, selectedId)
+      .then((value) => {
+        if (active) setDiff(value);
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setNotice(
+            error instanceof Error ? error.message : "读取变更失败",
+          );
+        }
+      })
+    return () => {
+      active = false;
+    };
+  }, [selectedId, selectedRevision, state, viewMode]);
+
   if (state.mode === "loading") {
     return <div className="window-loading">正在连接工作空间服务…</div>;
   }
@@ -137,6 +181,9 @@ export function WorkspaceApp() {
       await deleteWorkspace(state.token, selected.workspaceIdHex);
       setDirectoryId(undefined);
       setListing(undefined);
+      setDiff(undefined);
+      setTextDiffs({});
+      setSelectedChanges(new Set());
       await refresh(state.token);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "删除失败");
@@ -174,6 +221,10 @@ export function WorkspaceApp() {
                   onClick={() => {
                     setDirectoryId(undefined);
                     setListing(undefined);
+                    setDiff(undefined);
+                    setTextDiffs({});
+                    setSelectedChanges(new Set());
+                    setViewMode("files");
                     setSelectedId(workspace.workspaceIdHex);
                   }}
                 >
@@ -197,6 +248,22 @@ export function WorkspaceApp() {
                 <p>来源 main · 创建于 {formatDate(selected.createdAtMs)}</p>
               </div>
               <div>
+                <div className="workspace-app__view-switch" role="group">
+                  <button
+                    type="button"
+                    className={viewMode === "files" ? "is-active" : ""}
+                    onClick={() => setViewMode("files")}
+                  >
+                    文件
+                  </button>
+                  <button
+                    type="button"
+                    className={viewMode === "changes" ? "is-active" : ""}
+                    onClick={() => setViewMode("changes")}
+                  >
+                    变更
+                  </button>
+                </div>
                 <button
                   type="button"
                   disabled={working}
@@ -214,46 +281,356 @@ export function WorkspaceApp() {
               </div>
             </header>
             {notice && <p className="workspace-app__notice">{notice}</p>}
-            <nav aria-label="工作空间路径">
-              <button type="button" onClick={() => setDirectoryId(undefined)}>
-                /
-              </button>
-              {listing?.breadcrumbs?.map((entry, index) => (
-                <span key={entry.entryId}>
-                  {index === 0 ? "" : " / "}
-                  <button
-                    type="button"
-                    onClick={() => setDirectoryId(entry.entryId)}
-                  >
-                    {entry.name}
+            {viewMode === "files" ? (
+              <>
+                <nav aria-label="工作空间路径">
+                  <button type="button" onClick={() => setDirectoryId(undefined)}>
+                    /
                   </button>
-                </span>
-              ))}
-            </nav>
-            <div className="workspace-app__files">
-              {listing?.entries.length === 0 && <p>此目录为空。</p>}
-              {listing?.entries.map((entry) => (
-                <WorkspaceEntry
-                  key={entry.entryId}
-                  entry={entry}
-                  onActivate={() => {
-                    if (entry.kind === "directory") {
-                      setDirectoryId(entry.entryId);
-                      return;
-                    }
-                    setNotice(
-                      `“${entry.name}”属于隔离 Workspace；当前阶段仅支持只读目录浏览。`,
-                    );
-                  }}
-                />
-              ))}
-            </div>
+                  {listing?.breadcrumbs?.map((entry, index) => (
+                    <span key={entry.entryId}>
+                      {index === 0 ? "" : " / "}
+                      <button
+                        type="button"
+                        onClick={() => setDirectoryId(entry.entryId)}
+                      >
+                        {entry.name}
+                      </button>
+                    </span>
+                  ))}
+                </nav>
+                <div className="workspace-app__files">
+                  {listing?.entries.length === 0 && <p>此目录为空。</p>}
+                  {listing?.entries.map((entry) => (
+                    <WorkspaceEntry
+                      key={entry.entryId}
+                      entry={entry}
+                      onActivate={() => {
+                        if (entry.kind === "directory") {
+                          setDirectoryId(entry.entryId);
+                          return;
+                        }
+                        setNotice(
+                          `“${entry.name}”属于隔离 Workspace；当前阶段仅支持只读目录浏览。`,
+                        );
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <WorkspaceChanges
+                diff={diff}
+                expectedRevision={selected.revision}
+                textDiffs={textDiffs}
+                loadingTextPath={loadingTextPath}
+                onLoadTextDiff={(path) => {
+                  setLoadingTextPath(path);
+                  void getWorkspaceTextDiff(
+                    state.token,
+                    selected.workspaceIdHex,
+                    path,
+                  )
+                    .then((value) => {
+                      setTextDiffs((current) => ({
+                        ...current,
+                        [path]: value,
+                      }));
+                    })
+                    .catch((error: unknown) => {
+                      setNotice(
+                        error instanceof Error
+                          ? error.message
+                          : "读取文本差异失败",
+                      );
+                    })
+                    .finally(() => setLoadingTextPath(undefined));
+                }}
+                selectedEntryIds={selectedChanges}
+                onToggleEntry={(entryId) => {
+                  setSelectedChanges((current) => {
+                    const next = new Set(current);
+                    if (next.has(entryId)) next.delete(entryId);
+                    else next.add(entryId);
+                    return next;
+                  });
+                }}
+                onImport={() => setShowImportDialog(true)}
+              />
+            )}
+            {showImportDialog && (
+              <WorkspaceImportDialog
+                token={state.token}
+                workspaceIdHex={selected.workspaceIdHex}
+                workspaceRevision={selected.revision}
+                selectedEntryIds={[...selectedChanges]}
+                onCancel={() => setShowImportDialog(false)}
+                onImported={(result) => {
+                  setShowImportDialog(false);
+                  setSelectedChanges(new Set());
+                  setNotice(
+                    `已将 ${result.roots.length} 个项目导回 main（revision ${result.revision}）。`,
+                  );
+                }}
+              />
+            )}
           </>
         ) : (
           <p className="workspace-app__empty">选择一个工作空间查看内容。</p>
         )}
       </main>
     </article>
+  );
+}
+
+function WorkspaceChanges({
+  diff,
+  expectedRevision,
+  textDiffs,
+  loadingTextPath,
+  onLoadTextDiff,
+  selectedEntryIds,
+  onToggleEntry,
+  onImport,
+}: {
+  diff?: WorkspaceDiff;
+  expectedRevision: number;
+  textDiffs: Record<string, WorkspaceTextDiff>;
+  loadingTextPath?: string;
+  onLoadTextDiff: (path: string) => void;
+  selectedEntryIds: ReadonlySet<string>;
+  onToggleEntry: (entryId: string) => void;
+  onImport: () => void;
+}) {
+  if (!diff || diff.currentRevision !== expectedRevision) {
+    return <p>正在比较固定 Head…</p>;
+  }
+  return (
+    <section className="workspace-app__changes">
+      <p>
+        revision {diff.baselineRevision} → {diff.currentRevision} · 新增{" "}
+        {diff.summary.added} · 修改 {diff.summary.modified} · 删除{" "}
+        {diff.summary.deleted}
+      </p>
+      <div className="workspace-app__import-actions">
+        <span>已选择 {selectedEntryIds.size} 项</span>
+        <button
+          type="button"
+          disabled={selectedEntryIds.size === 0}
+          onClick={onImport}
+        >
+          导回 main…
+        </button>
+      </div>
+      {diff.changes.length === 0 ? (
+        <p className="workspace-app__empty">相对初始版本没有变化。</p>
+      ) : (
+        <ul>
+          {diff.changes.map((entry) => (
+            <li key={entry.path}>
+              <div className="workspace-app__change-row">
+                {entry.after && entry.change !== "deleted" ? (
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${entry.path}`}
+                    checked={selectedEntryIds.has(entry.after.entryIdHex)}
+                    onChange={() => onToggleEntry(entry.after!.entryIdHex)}
+                  />
+                ) : (
+                  <span aria-hidden="true" />
+                )}
+                <span className={`workspace-app__change-kind is-${entry.change}`}>
+                  {changeLabel(entry.change)}
+                </span>
+                <strong>{entry.path}</strong>
+                <small>{changeDetails(entry)}</small>
+                {canShowTextDiff(entry) && (
+                  <button
+                    type="button"
+                    disabled={loadingTextPath === entry.path}
+                    onClick={() => onLoadTextDiff(entry.path)}
+                  >
+                    {loadingTextPath === entry.path
+                      ? "读取中…"
+                      : textDiffs[entry.path]
+                        ? "重新读取"
+                        : "文本差异"}
+                  </button>
+                )}
+              </div>
+              {textDiffs[entry.path] && (
+                <TextDiffResult result={textDiffs[entry.path]} />
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function TextDiffResult({ result }: { result: WorkspaceTextDiff }) {
+  if (result.available) {
+    return <pre className="workspace-app__text-diff">{result.unifiedDiff}</pre>;
+  }
+  return (
+    <p className="workspace-app__text-unavailable">
+      {result.reason === "TOO_LARGE"
+        ? "文件超过文本差异限制。"
+        : result.reason === "NOT_TEXT"
+          ? "文件不是有效的纯文本。"
+          : "该路径没有可比较的文本修改。"}
+    </p>
+  );
+}
+
+function WorkspaceImportDialog({
+  token,
+  workspaceIdHex,
+  workspaceRevision,
+  selectedEntryIds,
+  onCancel,
+  onImported,
+}: {
+  token: string;
+  workspaceIdHex: string;
+  workspaceRevision: number;
+  selectedEntryIds: string[];
+  onCancel: () => void;
+  onImported: (result: {
+    revision: number;
+    roots: Array<{ newEntryIdHex: string; name: string }>;
+  }) => void;
+}) {
+  const [directoryId, setDirectoryId] = useState<string>();
+  const [listing, setListing] = useState<DirectoryListing>();
+  const [policy, setPolicy] = useState<"cancel" | "rename">("rename");
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void listFiles(token, directoryId)
+      .then((value) => {
+        if (active) setListing(value);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setError(cause instanceof Error ? cause.message : "读取 main 目录失败");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [directoryId, token]);
+
+  const submit = async () => {
+    if (!listing) return;
+    setWorking(true);
+    setError("");
+    try {
+      onImported(
+        await importWorkspaceEntries(token, workspaceIdHex, {
+          selectedEntryIds,
+          destinationEntryId: listing.parent.entryId,
+          workspaceRevision,
+          mainRevision: listing.revision,
+          conflictPolicy: policy,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "导回失败");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div
+      className="file-manager-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`导回 ${selectedEntryIds.length} 项`}
+    >
+      <section>
+        <h2>导回 main</h2>
+        <p>选择 main 中的目标目录。文件内容将复用，不会覆盖已有对象。</p>
+        <nav aria-label="目标文件夹">
+          <button
+            type="button"
+            onClick={() => {
+              setListing(undefined);
+              setDirectoryId(undefined);
+            }}
+          >
+            文件
+          </button>
+          {listing?.breadcrumbs?.slice(1).map((entry) => (
+            <span key={entry.entryId}>
+              {" / "}
+              <button
+                type="button"
+                onClick={() => {
+                  setListing(undefined);
+                  setDirectoryId(entry.entryId);
+                }}
+              >
+                {entry.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+        {error && <p role="alert">{error}</p>}
+        {!listing && !error && <p role="status">正在读取目标文件夹…</p>}
+        <ul className="file-manager-dialog__directories">
+          {listing?.entries
+            .filter((entry) => entry.kind === "directory")
+            .map((entry) => (
+              <li key={entry.entryId}>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => {
+                    setListing(undefined);
+                    setDirectoryId(entry.entryId);
+                  }}
+                >
+                  📁 {entry.name}
+                </button>
+              </li>
+            ))}
+        </ul>
+        <label>
+          同名项目
+          <select
+            value={policy}
+            disabled={working}
+            onChange={(event) =>
+              setPolicy(event.target.value as "cancel" | "rename")
+            }
+          >
+            <option value="rename">自动改名（推荐）</option>
+            <option value="cancel">取消整批导回</option>
+          </select>
+        </label>
+        <p>
+          目标 revision：{listing?.revision ?? "…"} · 共{" "}
+          {selectedEntryIds.length} 个选择
+        </p>
+        <div>
+          <button type="button" disabled={working} onClick={onCancel}>
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={working || !listing}
+            onClick={() => void submit()}
+          >
+            {working ? "正在导回…" : "导回这里"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -296,4 +673,41 @@ function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
+
+function changeLabel(change: "added" | "modified" | "deleted"): string {
+  if (change === "added") return "新增";
+  if (change === "modified") return "修改";
+  return "删除";
+}
+
+function changeDetails(
+  entry: WorkspaceDiff["changes"][number],
+): string {
+  const before = entry.before;
+  const after = entry.after;
+  if (!before && after) {
+    return after.kind === "directory" ? "目录" : formatSize(after.size);
+  }
+  if (before && !after) {
+    return before.kind === "directory" ? "目录" : formatSize(before.size);
+  }
+  if (!before || !after) return "";
+  if (before.kind !== after.kind) {
+    return `${before.kind === "directory" ? "目录" : "文件"} → ${
+      after.kind === "directory" ? "目录" : "文件"
+    }`;
+  }
+  if (after.kind === "directory") return "目录元数据变化";
+  return `${formatSize(before.size)} → ${formatSize(after.size)}`;
+}
+
+function canShowTextDiff(
+  entry: WorkspaceDiff["changes"][number],
+): boolean {
+  return (
+    entry.change === "modified" &&
+    entry.before?.kind === "file" &&
+    entry.after?.kind === "file"
+  );
 }

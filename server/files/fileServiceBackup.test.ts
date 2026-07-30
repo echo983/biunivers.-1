@@ -10,6 +10,7 @@ import { initializeGenesisFileSystem } from "./genesisFileSystem.js";
 import { ImmutableObjectRepository } from "./immutableObjectRepository.js";
 import { LocalWormObjectStore } from "./localWormObjectStore.js";
 import { SqliteRefStore } from "./sqliteRefStore.js";
+import { WorkspaceDeriver } from "../workspace/workspaceDeriver.js";
 
 const roots: string[] = [];
 
@@ -35,7 +36,7 @@ describe("FileServiceBackup", () => {
     const content = await new FileContentStore(repository).putBytes(
       Buffer.from("revision one"),
     );
-    await new FileSystemTransactions({
+    const note = await new FileSystemTransactions({
       refId: "main",
       repository,
       refStore: genesis.store,
@@ -44,6 +45,25 @@ describe("FileServiceBackup", () => {
       parentEntryIdHex: genesis.rootEntryIdHex,
       name: "note.txt",
       content,
+    });
+    const derived = await new WorkspaceDeriver({
+      repository,
+      refStore: genesis.store,
+      writerId: "test",
+      now: () => 1_785_320_000_000,
+    }).derive({
+      name: "Backup Workspace",
+      selectedEntryIdsHex: [note.entryIdHex],
+      retention: "KEPT",
+    });
+    const workspaceRef = genesis.store.getRef(derived.workspace.refId);
+    const runIdHex = "ab".repeat(16);
+    genesis.store.createWorkspaceRun({
+      runIdHex,
+      workspaceIdHex: derived.workspace.workspaceIdHex,
+      executorId: "system.backup-test",
+      inputHeadFidHex: workspaceRef.headFidHex,
+      createdAtMs: 1_785_320_000_001,
     });
 
     const service = new FileServiceBackup({
@@ -78,6 +98,20 @@ describe("FileServiceBackup", () => {
       revision: 1,
       rootEntryIdHex: genesis.rootEntryIdHex,
     });
+    expect(backup.getWorkspace(derived.workspace.workspaceIdHex)).toEqual({
+      ...derived.workspace,
+      activeWriteRunIdHex: runIdHex,
+      updatedAtMs: 1_785_320_000_001,
+    });
+    expect(backup.getRef(derived.workspace.refId)).toEqual(workspaceRef);
+    expect(backup.getWorkspaceRun(runIdHex)).toMatchObject({
+      runIdHex,
+      workspaceIdHex: derived.workspace.workspaceIdHex,
+      inputHeadFidHex: workspaceRef.headFidHex,
+      outputHeadFidHex: null,
+      state: "PREPARING",
+    });
+    expect(backup.listAllProtectedHeadFids()).toContain(workspaceRef.headFidHex);
     backup.close();
     genesis.store.close();
   });
