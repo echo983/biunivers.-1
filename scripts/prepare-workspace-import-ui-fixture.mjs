@@ -1,8 +1,8 @@
-import { loadServerConfig } from "../dist/server/config.js";
-import { FileContentStore } from "../dist/server/files/fileContentStore.js";
-import { loadCurrentEntryIndex } from "../dist/server/files/entryIndex.js";
-import { FileSystemTransactions } from "../dist/server/files/fileSystemTransactions.js";
-import { startFileService } from "../dist/server/files/fileServiceRuntime.js";
+import { loadServerConfig } from "./dist/server/config.js";
+import { FileContentStore } from "./dist/server/files/fileContentStore.js";
+import { loadCurrentEntryIndex } from "./dist/server/files/entryIndex.js";
+import { FileSystemTransactions } from "./dist/server/files/fileSystemTransactions.js";
+import { startFileService } from "./dist/server/files/fileServiceRuntime.js";
 
 const config = loadServerConfig();
 if (!config.fileService) throw new Error("File Service is disabled.");
