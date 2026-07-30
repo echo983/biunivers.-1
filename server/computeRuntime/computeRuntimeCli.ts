@@ -11,6 +11,9 @@ console.log(
   `Biunivers Compute Runtime listening on ${daemon.socketPath}` +
     (daemon.quarantinedPaths > 0
       ? `; quarantined ${daemon.quarantinedPaths} unknown path(s)`
+      : "") +
+    (daemon.recoveredRuns > 0
+      ? `; recovered ${daemon.recoveredRuns} interrupted Run(s)`
       : ""),
 );
 

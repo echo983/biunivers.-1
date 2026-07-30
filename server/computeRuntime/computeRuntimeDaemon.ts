@@ -8,6 +8,7 @@ import type { ComputeRuntimeConfig } from "./computeRuntimeConfig.js";
 import { ComputeRuntimeServer } from "./computeRuntimeServer.js";
 import { DockerOciAdapter } from "./dockerOciAdapter.js";
 import { ExecutorRegistry } from "./executorRegistry.js";
+import { InterruptedRunRecovery } from "./interruptedRunRecovery.js";
 import { MountSupervisor } from "./mountSupervisor.js";
 import { PvlogSnapshotProvisioner } from "./pvlogSnapshotProvisioner.js";
 import { RunDirectoryManager } from "./runDirectoryManager.js";
@@ -15,6 +16,7 @@ import { RunDirectoryManager } from "./runDirectoryManager.js";
 export interface ComputeRuntimeDaemon {
   readonly socketPath: string;
   readonly quarantinedPaths: number;
+  readonly recoveredRuns: number;
   close(): Promise<void>;
 }
 
@@ -48,6 +50,10 @@ export async function startComputeRuntimeDaemon(options: {
         .map((run) => run.runIdHex),
     );
     const reconciliation = await directories.reconcile(knownRunIds);
+    const recovery = await new InterruptedRunRecovery().recover(
+      directories,
+      reconciliation.known,
+    );
     await assertNoInterruptedLocalRuns(directories, reconciliation.known);
 
     const cache = new VerifiedChunkCache({
@@ -82,6 +88,7 @@ export async function startComputeRuntimeDaemon(options: {
     return new RunningComputeRuntimeDaemon({
       socketPath: options.runtimeConfig.socketPath,
       quarantinedPaths: reconciliation.quarantined.length,
+      recoveredRuns: recovery.recovered.length,
       server,
       coordinator,
       fileRuntime,
@@ -95,6 +102,7 @@ export async function startComputeRuntimeDaemon(options: {
 class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
   readonly socketPath: string;
   readonly quarantinedPaths: number;
+  readonly recoveredRuns: number;
   readonly #server: ComputeRuntimeServer;
   readonly #coordinator: ComputeRuntimeCoordinator;
   readonly #fileRuntime: FileServiceRuntime;
@@ -103,12 +111,14 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
   constructor(options: {
     socketPath: string;
     quarantinedPaths: number;
+    recoveredRuns: number;
     server: ComputeRuntimeServer;
     coordinator: ComputeRuntimeCoordinator;
     fileRuntime: FileServiceRuntime;
   }) {
     this.socketPath = options.socketPath;
     this.quarantinedPaths = options.quarantinedPaths;
+    this.recoveredRuns = options.recoveredRuns;
     this.#server = options.server;
     this.#coordinator = options.coordinator;
     this.#fileRuntime = options.fileRuntime;
