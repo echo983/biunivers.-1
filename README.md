@@ -1,13 +1,14 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.10.0` 已具备窗口与
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.11.0` 已具备窗口与
 自由布局桌面、第三方静态应用安装、不可变文件服务、文件管理器、资源关联打开、可续租
-Resource Session、桌面快捷入口和原子批量文件操作。
-文件管理器还可把目录或多选项目导出为不压缩 ZIP。
+Resource Session、桌面快捷入口、原子批量文件操作和按需 WebDAV 文件交换。
+文件管理器可把目录或多选项目导出为不压缩 ZIP；Wormhole 可供 rclone 和原生 WebDAV
+客户端挂载或主动同步，但不承担实时同步。
 
 ## 项目状态
 
-`v0.1.0` 至 `v0.10.0` 均已完成施工与验收并按里程碑归档。
+`v0.1.0` 至 `v0.10.0` 已按里程碑归档；`v0.11.0` Wormhole 正在进行合并前验收。
 各版本需求、技术设计、施工计划和真实验收证据统一收录在 [`docs/`](docs/)。
 
 当前定位是单用户、单实例的个人部署版本。公网使用时应在 Biunivers 前增加 VPN、
@@ -78,11 +79,13 @@ E2E 默认使用系统安装的 Google Chrome。
 - `iframe`：在桌面窗口中打开可信 Web 服务，必须设置 `trusted: true`；
 - `external`：通过用户点击在新标签页打开。
 
-`internal` 只允许由源码中的编译期白名单注册，目前包含“文件”、“设置”和“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
+`internal` 只允许由源码中的编译期白名单注册，目前包含“文件”、“设置”、“Wormhole”和
+“关于”；运行时 `apps.json` 不能创建或覆盖 internal 应用。
 
 ID 只允许小写字母、数字、点和短横线。iframe 和 external URL 支持 `/` 开头的同源路径以及 HTTP(S) 地址。
 
-无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面保留其他可用来源，内建“文件”、“设置”和“关于”始终存在。
+无效条目会被跳过；其他有效应用继续加载。传统配置或 managed APP API 请求失败时，桌面
+保留其他可用来源，内建“文件”、“设置”、“Wormhole”和“关于”始终存在。
 
 ## iframe 与反向代理
 
@@ -103,11 +106,12 @@ https://desktop.example.com/services/example/
 
 ## Docker
 
-V0.10 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件和可选 File Service。
+V0.11 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件、可选 File Service
+和按需开启的 Wormhole。
 构建并运行：
 
 ```bash
-docker build -t biunivers:zip-export-dev .
+docker build -t biunivers:wormhole-dev .
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
@@ -116,7 +120,7 @@ docker run --rm \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:zip-export-dev
+  biunivers:wormhole-dev
 ```
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
@@ -142,6 +146,10 @@ BIUNIVERS_FILE_WRITER_ID=your-host-id
 `BIUNIVERS_FILE_INITIALIZE=true` 只用于第一次显式创建文件系统。成功后必须改为 `false`；
 重复初始化会被拒绝，不会覆盖既有 RefStore。SQLite 位于持久卷
 `/data/file-service/file-service.sqlite`。
+
+File Service 启用后可从应用菜单打开 Wormhole。每次开启会生成临时 10 位密码，并提供
+Windows WebDAV 连接信息以及可复制的 rclone Mount/Sync 命令。关闭、换密或宿主重启会
+撤销旧凭据。公网使用必须通过 HTTPS；它是传输与主动同步通道，不是实时同步服务。
 
 RefStore 缺失/损坏、对象存储不可用或 Head 校验失败时，File Service 进入不可写的
 `offline` 状态，桌面和应用管理继续启动。管理员可通过

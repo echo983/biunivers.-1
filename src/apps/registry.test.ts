@@ -30,6 +30,7 @@ describe("mergeAppSources", () => {
     expect(apps.map((app) => app.id)).toEqual([
       "system.files",
       "system.settings",
+      "system.wormhole",
       "system.about",
       "legacy.files",
       "io.github.example.hello",

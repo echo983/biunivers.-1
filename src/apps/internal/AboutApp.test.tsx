@@ -9,10 +9,10 @@ describe("AboutApp", () => {
     expect(
       screen.getByRole("heading", { name: "Biunivers 桌面" }),
     ).toBeVisible();
-    expect(screen.getByText("版本 0.10.0")).toBeVisible();
+    expect(screen.getByText("版本 0.11.0")).toBeVisible();
     expect(
       screen.getByText(
-        "File Service · 批量操作 · ZIP 导出 · Resource Session v1",
+        "File Service · 批量操作 · ZIP 导出 · Wormhole · Resource Session v1",
       ),
     ).toBeVisible();
     expect(

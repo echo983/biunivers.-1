@@ -3,6 +3,7 @@ import { AboutApp } from "./internal/AboutApp";
 import { SettingsApp } from "./internal/SettingsApp";
 import { FileManagerApp } from "./internal/FileManagerApp";
 import { IframeApp } from "./IframeApp";
+import { WormholeApp } from "./internal/WormholeApp";
 
 interface AppRendererProps {
   app: AppDefinition;
@@ -19,6 +20,10 @@ export function AppRenderer({ app }: AppRendererProps) {
 
   if (app.kind === "internal" && app.id === "system.files") {
     return <FileManagerApp />;
+  }
+
+  if (app.kind === "internal" && app.id === "system.wormhole") {
+    return <WormholeApp />;
   }
 
   if (app.kind === "iframe") {

@@ -27,6 +27,10 @@ import { DesktopSurfaceService } from "./desktopSurface/desktopSurfaceService.js
 import { ResourceSessionRegistry } from "./resources/resourceSessionRegistry.js";
 import { ResourceContentService } from "./resources/resourceContentService.js";
 import { ResourceSessionService } from "./resources/resourceSessionService.js";
+import { WormholeRuntime } from "./wormhole/wormholeRuntime.js";
+import { WormholeControlService } from "./wormhole/wormholeControlService.js";
+import { WormholeFileService } from "./wormhole/wormholeFileService.js";
+import { createWormholeRouter } from "./wormhole/wormholeRouter.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -86,6 +90,7 @@ async function main() {
       "system.settings",
       "system.about",
       "system.files",
+      "system.wormhole",
     ]),
   });
   const appService = new AppService({
@@ -181,6 +186,25 @@ async function main() {
           writerId: config.fileService.writerId,
         })
       : undefined;
+  const wormholeRuntime =
+    fileCapabilities && fileService.status.mode === "ready"
+      ? new WormholeRuntime()
+      : undefined;
+  const wormholeControl =
+    fileCapabilities && wormholeRuntime
+      ? new WormholeControlService(fileCapabilities, wormholeRuntime)
+      : undefined;
+  const wormholeRouter =
+    wormholeRuntime && fileService.repository && fileService.refStore
+      ? createWormholeRouter({
+          runtime: wormholeRuntime,
+          files: new WormholeFileService({
+            repository: fileService.repository,
+            refStore: fileService.refStore,
+            writerId: config.fileService!.writerId,
+          }),
+        })
+      : undefined;
   const openResourceResolver =
     fileCapabilities && fileService.repository && fileService.refStore
       ? new OpenResourceResolver({
@@ -233,6 +257,12 @@ async function main() {
         icon: "/icons/about.svg",
         desktop: true,
       },
+      {
+        id: "system.wormhole",
+        name: "Wormhole",
+        icon: "/icons/wormhole.svg",
+        desktop: false,
+      },
     ],
     ...(fileService.repository && fileService.refStore
       ? {
@@ -272,9 +302,11 @@ async function main() {
     fileHost,
     fileServiceBackup,
     fileServiceGcScanner,
-    internalFileAppIds: new Set(["system.files"]),
+    internalFileAppIds: new Set(["system.files", "system.wormhole"]),
     internalFileManager,
     internalZipExporter: internalFileManager,
+    wormholeControl,
+    wormholeRouter,
     openResourceResolver,
     openResourceLaunchService,
     desktopSurface,
@@ -295,6 +327,7 @@ async function main() {
   });
 
   const shutdown = () => {
+    wormholeRuntime?.disable();
     desktopSurfaceStore.close();
     fileService.close();
     desktopServer.close();

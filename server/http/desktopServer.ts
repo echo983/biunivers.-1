@@ -36,6 +36,9 @@ import {
   type ResourceContentExecutor,
 } from "./resourceContentRouter.js";
 import { appSpecificOrigin } from "../apps/appOrigin.js";
+import type { WormholeControlService } from "../wormhole/wormholeControlService.js";
+import { WormholeRuntimeError } from "../wormhole/wormholeRuntime.js";
+import type { Router } from "express";
 
 type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
@@ -51,6 +54,10 @@ type InternalFileManagerExecutor = Pick<
 type InternalZipExporter = Pick<
   InternalFileManagerService,
   "createZipExport"
+>;
+type WormholeControlExecutor = Pick<
+  WormholeControlService,
+  "status" | "enable" | "rotate" | "disable"
 >;
 type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
 type OpenResourceLaunchExecutor = Pick<
@@ -81,6 +88,8 @@ interface DesktopServerDependencies {
   internalFileAppIds?: ReadonlySet<string>;
   internalFileManager?: InternalFileManagerExecutor;
   internalZipExporter?: InternalZipExporter;
+  wormholeControl?: WormholeControlExecutor;
+  wormholeRouter?: Router;
   openResourceResolver?: OpenResourceResolverExecutor;
   openResourceLaunchService?: OpenResourceLaunchExecutor;
   desktopSurface?: DesktopSurfaceService;
@@ -105,12 +114,17 @@ export function createDesktopServer({
   internalFileAppIds = new Set(),
   internalFileManager,
   internalZipExporter,
+  wormholeControl,
+  wormholeRouter,
   openResourceResolver,
   openResourceLaunchService,
   desktopSurface,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
+  if (wormholeRouter) {
+    app.use("/wormhole/webdav", wormholeRouter);
+  }
   app.use(express.json({ limit: "64kb" }));
 
   app.get("/health", (_request, response) => {
@@ -127,6 +141,66 @@ export function createDesktopServer({
             projectInstalledApp(installed, config.appOrigin),
           ),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/internal/wormhole", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWormholeControl(
+        request,
+        config,
+        wormholeControl,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json(service.status(instanceToken));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/internal/wormhole/enable", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWormholeControl(
+        request,
+        config,
+        wormholeControl,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json(service.enable(instanceToken));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/internal/wormhole/rotate", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWormholeControl(
+        request,
+        config,
+        wormholeControl,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json(service.rotate(instanceToken));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/internal/wormhole", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWormholeControl(
+        request,
+        config,
+        wormholeControl,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json(service.disable(instanceToken));
     } catch (error) {
       next(error);
     }
@@ -1406,6 +1480,15 @@ export function createDesktopServer({
           });
         return;
       }
+      if (error instanceof WormholeRuntimeError) {
+        response.status(409).json({
+          error: {
+            code: error.code,
+            message: error.message,
+          },
+        });
+        return;
+      }
       if (error instanceof ResourceSessionError) {
         const status = {
           REQUEST_INVALID: 400,
@@ -1576,6 +1659,22 @@ function requireInternalZipExporter(
     throw new AppError(
       "HOST_API_UNSUPPORTED",
       "当前宿主尚未启用目录导出能力",
+      503,
+    );
+  }
+  return { service, instanceToken: readInstanceToken(request) };
+}
+
+function requireWormholeControl(
+  request: express.Request,
+  config: ServerConfig,
+  service: WormholeControlExecutor | undefined,
+): { service: WormholeControlExecutor; instanceToken: string } {
+  requireDesktopOrigin(request, config.desktopOrigin);
+  if (!service) {
+    throw new AppError(
+      "WORMHOLE_UNSUPPORTED",
+      "当前宿主尚未启用 Wormhole",
       503,
     );
   }
