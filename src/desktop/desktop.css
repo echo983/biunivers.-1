@@ -930,9 +930,9 @@
 }
 
 .file-manager-app {
-  display: grid;
+  display: flex;
   height: 100%;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  flex-direction: column;
   color: #202938;
   background: #f7f9fc;
 }
@@ -960,11 +960,20 @@
 }
 
 .file-manager-app__selection-count {
-  margin-left: auto;
   padding: 2px 6px;
   color: #526174;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.file-manager-app__view-switch {
+  margin-left: auto;
+}
+
+.file-manager-app__view-switch button[aria-pressed="true"] {
+  color: #fff;
+  border-color: #3d6597;
+  background: #426fa7;
 }
 
 .file-manager-app__actions > [role="group"] + [role="group"] {
@@ -1089,6 +1098,8 @@
 }
 
 .file-manager-app__content {
+  min-height: 0;
+  flex: 1;
   overflow: auto;
   user-select: none;
 }
@@ -1097,6 +1108,67 @@
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
+}
+
+.file-manager-app__icon-grid {
+  position: relative;
+  display: grid;
+  box-sizing: border-box;
+  min-height: 100%;
+  padding: 14px;
+  align-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+
+.file-manager-app__selection-box {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid #4e83c4;
+  background: rgb(84 139 202 / 20%);
+  pointer-events: none;
+}
+
+.file-manager-app__icon-grid > button {
+  display: grid;
+  min-width: 0;
+  min-height: 104px;
+  padding: 10px 6px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  color: inherit;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: default;
+}
+
+.file-manager-app__icon-grid > button:hover,
+.file-manager-app__icon-grid > button:focus-visible {
+  border-color: #cbd7e7;
+  background: #edf3fb;
+}
+
+.file-manager-app__icon-grid > button.is-selected {
+  border-color: #8fb0d9;
+  background: #dceafb;
+}
+
+.file-manager-app__entry-icon {
+  font-size: 42px;
+  line-height: 1;
+}
+
+.file-manager-app__entry-name {
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .file-manager-app th,

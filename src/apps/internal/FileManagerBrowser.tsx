@@ -66,7 +66,13 @@ type ToolbarIconName =
   | "download"
   | "open-with"
   | "add-desktop"
-  | "refresh";
+  | "refresh"
+  | "list-view"
+  | "icon-view";
+
+type FileManagerViewMode = "list" | "icons";
+
+const VIEW_MODE_STORAGE_KEY = "biunivers.file-manager.view-mode";
 
 type EditDialog =
   | { mode: "create-directory" }
@@ -87,6 +93,21 @@ interface TransferState {
   total: number;
   fileIndex?: number;
   fileCount?: number;
+}
+
+interface IconSelectionBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface IconSelectionDrag {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  additiveEntryIds: Set<string>;
+  moved: boolean;
 }
 
 export function FileManagerBrowser({
@@ -110,10 +131,25 @@ export function FileManagerBrowser({
   const [notice, setNotice] = useState<string>();
   const [transfer, setTransfer] = useState<TransferState>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
+  const [viewMode, setViewMode] = useState<FileManagerViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "icons"
+        ? "icons"
+        : "list";
+    } catch {
+      return "list";
+    }
+  });
+  const [iconSelectionBox, setIconSelectionBox] =
+    useState<IconSelectionBox>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const directoryNavigationPendingRef = useRef(false);
   const mutationPendingRef = useRef(false);
   const transferAbortRef = useRef<AbortController | undefined>(undefined);
+  const iconSelectionDragRef = useRef<IconSelectionDrag | undefined>(
+    undefined,
+  );
+  const suppressIconGridClickRef = useRef(false);
   const appRegistry = useDesktopStore((state) => state.apps);
   const defaultResourceHandlers = useDesktopStore(
     (state) => state.defaultResourceHandlers,
@@ -125,6 +161,14 @@ export function FileManagerBrowser({
     (state) => state.surface.items,
   );
   const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
+  const changeViewMode = (next: FileManagerViewMode) => {
+    setViewMode(next);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
+    } catch {
+      // A blocked storage backend must not make the view switch unusable.
+    }
+  };
   const selectedEntries =
     listing?.entries.filter((entry) => selection.entryIds.has(entry.entryId)) ??
     [];
@@ -727,6 +771,30 @@ export function FileManagerBrowser({
               已选择 {selectedEntries.length} 项
             </span>
           )}
+          <div
+            className="file-manager-app__view-switch"
+            role="group"
+            aria-label="视图"
+          >
+            <button
+              type="button"
+              aria-label="列表视图"
+              title="列表视图"
+              aria-pressed={viewMode === "list"}
+              onClick={() => changeViewMode("list")}
+            >
+              <ToolbarIcon kind="list-view" />
+            </button>
+            <button
+              type="button"
+              aria-label="图标视图"
+              title="图标视图"
+              aria-pressed={viewMode === "icons"}
+              onClick={() => changeViewMode("icons")}
+            >
+              <ToolbarIcon kind="icon-view" />
+            </button>
+          </div>
         </div>
         <nav aria-label="当前位置" className="file-manager-app__breadcrumbs">
           <button type="button" onClick={() => navigateTo(-1)}>
@@ -778,7 +846,7 @@ export function FileManagerBrowser({
       >
         {loading ? (
           <p className="file-manager-app__empty">正在读取目录…</p>
-        ) : listing && listing.entries.length > 0 ? (
+        ) : listing && listing.entries.length > 0 && viewMode === "list" ? (
           <table>
             <thead>
               <tr>
@@ -836,6 +904,163 @@ export function FileManagerBrowser({
               ))}
             </tbody>
           </table>
+        ) : listing && listing.entries.length > 0 ? (
+          <div
+            className="file-manager-app__icon-grid"
+            role="grid"
+            aria-label="文件"
+            onClick={(event) => {
+              if (suppressIconGridClickRef.current) {
+                suppressIconGridClickRef.current = false;
+                return;
+              }
+              if (event.target === event.currentTarget) {
+                setSelection({ entryIds: new Set() });
+              }
+            }}
+            onPointerDown={(event) => {
+              if (
+                event.button !== 0 ||
+                event.target !== event.currentTarget
+              ) {
+                return;
+              }
+              event.preventDefault();
+              const additiveEntryIds =
+                event.ctrlKey || event.metaKey
+                  ? new Set(selection.entryIds)
+                  : new Set<string>();
+              iconSelectionDragRef.current = {
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                additiveEntryIds,
+                moved: false,
+              };
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+              setSelection({ entryIds: additiveEntryIds });
+              setIconSelectionBox(
+                iconSelectionRectangle(
+                  event.currentTarget,
+                  event.clientX,
+                  event.clientY,
+                  event.clientX,
+                  event.clientY,
+                ),
+              );
+            }}
+            onPointerMove={(event) => {
+              const drag = iconSelectionDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              event.preventDefault();
+              if (
+                Math.abs(event.clientX - drag.startClientX) > 3 ||
+                Math.abs(event.clientY - drag.startClientY) > 3
+              ) {
+                drag.moved = true;
+              }
+              const bounds = event.currentTarget.getBoundingClientRect();
+              const endClientX = clamp(
+                event.clientX,
+                bounds.left,
+                bounds.right,
+              );
+              const endClientY = clamp(
+                event.clientY,
+                bounds.top,
+                bounds.bottom,
+              );
+              const clientRectangle = normalizedRectangle(
+                drag.startClientX,
+                drag.startClientY,
+                endClientX,
+                endClientY,
+              );
+              const selectedEntryIds = new Set(drag.additiveEntryIds);
+              for (const item of event.currentTarget.querySelectorAll<HTMLElement>(
+                "[data-entry-id]",
+              )) {
+                if (rectanglesIntersect(clientRectangle, item.getBoundingClientRect())) {
+                  selectedEntryIds.add(item.dataset.entryId!);
+                }
+              }
+              setSelection({ entryIds: selectedEntryIds });
+              setIconSelectionBox(
+                iconSelectionRectangle(
+                  event.currentTarget,
+                  drag.startClientX,
+                  drag.startClientY,
+                  endClientX,
+                  endClientY,
+                ),
+              );
+            }}
+            onPointerUp={(event) => {
+              const drag = iconSelectionDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              suppressIconGridClickRef.current = drag.moved;
+              iconSelectionDragRef.current = undefined;
+              setIconSelectionBox(undefined);
+              event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              iconSelectionDragRef.current = undefined;
+              setIconSelectionBox(undefined);
+            }}
+          >
+            {listing.entries.map((entry) => (
+              <button
+                key={entry.entryId}
+                type="button"
+                role="gridcell"
+                data-entry-id={entry.entryId}
+                className={
+                  selection.entryIds.has(entry.entryId)
+                    ? "is-selected"
+                    : undefined
+                }
+                aria-selected={selection.entryIds.has(entry.entryId)}
+                onMouseDown={(event) => {
+                  if (event.shiftKey) event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelection((current) =>
+                    updateFileSelection(
+                      listing.entries.map((item) => item.entryId),
+                      current,
+                      entry.entryId,
+                      {
+                        toggle: event.ctrlKey || event.metaKey,
+                        range: event.shiftKey,
+                      },
+                    ),
+                  );
+                }}
+                onDoubleClick={() => activateEntry(entry)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") activateEntry(entry);
+                }}
+              >
+                <span
+                  className="file-manager-app__entry-icon"
+                  aria-hidden="true"
+                >
+                  {entry.kind === "directory" ? "📁" : "📄"}
+                </span>
+                <span className="file-manager-app__entry-name">
+                  {entry.name}
+                </span>
+              </button>
+            ))}
+            {iconSelectionBox && (
+              <div
+                className="file-manager-app__selection-box"
+                aria-hidden="true"
+                style={iconSelectionBox}
+              />
+            )}
+          </div>
         ) : (
           <p className="file-manager-app__empty">此文件夹为空。</p>
         )}
@@ -1346,6 +1571,58 @@ function copyName(name: string): string {
   return `${name.slice(0, dot)} - 副本${name.slice(dot)}`;
 }
 
+function normalizedRectangle(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+) {
+  return {
+    left: Math.min(startX, endX),
+    top: Math.min(startY, endY),
+    right: Math.max(startX, endX),
+    bottom: Math.max(startY, endY),
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function iconSelectionRectangle(
+  container: HTMLElement,
+  startClientX: number,
+  startClientY: number,
+  endClientX: number,
+  endClientY: number,
+): IconSelectionBox {
+  const bounds = container.getBoundingClientRect();
+  const rectangle = normalizedRectangle(
+    startClientX,
+    startClientY,
+    endClientX,
+    endClientY,
+  );
+  return {
+    left: rectangle.left - bounds.left + container.scrollLeft,
+    top: rectangle.top - bounds.top + container.scrollTop,
+    width: rectangle.right - rectangle.left,
+    height: rectangle.bottom - rectangle.top,
+  };
+}
+
+function rectanglesIntersect(
+  left: { left: number; top: number; right: number; bottom: number },
+  right: { left: number; top: number; right: number; bottom: number },
+) {
+  return (
+    left.left < right.right &&
+    left.right > right.left &&
+    left.top < right.bottom &&
+    left.bottom > right.top
+  );
+}
+
 function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
   const paths: Record<ToolbarIconName, string[]> = {
     "new-folder": [
@@ -1395,6 +1672,20 @@ function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
       "M4 17v-5h5",
       "M6.1 8a7 7 0 0 1 11.7-2L20 9",
       "M17.9 16a7 7 0 0 1-11.7 2L4 15",
+    ],
+    "list-view": [
+      "M4 6h2",
+      "M9 6h11",
+      "M4 12h2",
+      "M9 12h11",
+      "M4 18h2",
+      "M9 18h11",
+    ],
+    "icon-view": [
+      "M4 4h6v6H4z",
+      "M14 4h6v6h-6z",
+      "M4 14h6v6H4z",
+      "M14 14h6v6h-6z",
     ],
   };
   return (

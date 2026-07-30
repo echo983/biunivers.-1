@@ -1,5 +1,6 @@
 import {
   act,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -53,9 +54,107 @@ afterEach(() => {
     defaultResourceHandlers: {},
   });
   resetDirectoryLaunchBrokerForTests();
+  localStorage.clear();
 });
 
 describe("FileManagerBrowser", () => {
+  it("switches between list and icon views and persists the preference", async () => {
+    const user = userEvent.setup();
+    const fileId = "4".repeat(32);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          revision: 1,
+          rootEntryId: rootId,
+          parent: {
+            entryId: rootId,
+            name: "",
+            kind: "directory",
+            mtimeMs: 0,
+          },
+          entries: [
+            {
+              entryId: fileId,
+              name: "photo.png",
+              kind: "file",
+              size: 12,
+              mtimeMs: 0,
+            },
+          ],
+        }),
+      ),
+    );
+
+    const rendered = render(
+      <FileManagerBrowser instanceToken={"a".repeat(43)} />,
+    );
+    expect(await screen.findByRole("cell", { name: /photo\.png/ })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "列表视图" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(screen.getByRole("button", { name: "图标视图" }));
+    const icon = screen.getByRole("gridcell", { name: /photo\.png/ });
+    expect(icon).toBeVisible();
+    await user.click(icon);
+    expect(screen.getByRole("status")).toHaveTextContent("已选择 1 项");
+    expect(localStorage.getItem("biunivers.file-manager.view-mode")).toBe(
+      "icons",
+    );
+
+    const grid = screen.getByRole("grid", { name: "文件" });
+    vi.spyOn(grid, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 400, 300),
+    );
+    vi.spyOn(icon, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(20, 20, 80, 80),
+    );
+    fireEvent.pointerDown(grid, {
+      button: 0,
+      pointerId: 7,
+      clientX: 5,
+      clientY: 5,
+    });
+    fireEvent.pointerMove(grid, {
+      pointerId: 7,
+      clientX: 500,
+      clientY: 600,
+    });
+    expect(icon).toHaveClass("is-selected");
+    expect(
+      document.querySelector(".file-manager-app__selection-box"),
+    ).not.toBeNull();
+    expect(
+      document.querySelector<HTMLElement>(
+        ".file-manager-app__selection-box",
+      )?.style,
+    ).toMatchObject({
+      width: "395px",
+      height: "295px",
+    });
+    fireEvent.pointerUp(grid, {
+      pointerId: 7,
+      clientX: 500,
+      clientY: 600,
+    });
+    expect(
+      document.querySelector(".file-manager-app__selection-box"),
+    ).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "列表视图" }));
+    expect(screen.getByText("photo.png").closest("tr")).toHaveClass(
+      "is-selected",
+    );
+    await user.click(screen.getByRole("button", { name: "图标视图" }));
+
+    rendered.unmount();
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+    expect(
+      await screen.findByRole("button", { name: "图标视图" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("Shift-selects a range without browser text selection and submits one batch move", async () => {
     const user = userEvent.setup();
     const firstId = "4".repeat(32);
