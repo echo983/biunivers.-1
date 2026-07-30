@@ -117,6 +117,7 @@ export class MountSupervisor {
         input.paths.lower,
       ]);
       await this.#waitUntilMounted(input.paths.lower, pvlogfs);
+      await this.#mounts.makeWorkspaceWritable(input.paths.upper);
       overlay = this.#launcher.start(this.#overlayBinary, [
         "-f",
         "-o",

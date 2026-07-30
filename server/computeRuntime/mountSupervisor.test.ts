@@ -55,7 +55,9 @@ class FakeMounts implements MountController {
   }
 
   async makeWorkspaceWritable(path: string): Promise<void> {
-    this.log.push(`writable:${path.endsWith("/merged") ? "merged" : "other"}`);
+    this.log.push(
+      `writable:${path.endsWith("/merged") ? "merged" : path.endsWith("/upper") ? "upper" : "other"}`,
+    );
   }
 
   async unmount(path: string): Promise<void> {
@@ -132,6 +134,7 @@ describe("MountSupervisor", () => {
 
     await supervisor.cleanup(runIdHex);
     expect(mounts.log).toEqual([
+      "writable:upper",
       "writable:merged",
       "unmount:merged",
       "stop:overlay:SIGTERM",
@@ -159,6 +162,7 @@ describe("MountSupervisor", () => {
       }),
     ).rejects.toMatchObject({ code: "MOUNT_START_FAILED" });
     expect(mounts.log).toEqual([
+      "writable:upper",
       "stop:overlay:SIGTERM",
       "unmount:lower",
       "stop:pvlogfs:SIGTERM",
