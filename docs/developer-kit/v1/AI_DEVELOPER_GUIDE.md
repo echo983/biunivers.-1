@@ -28,8 +28,8 @@
 - Static App Protocol v1 不定义文件 API；新应用需要文件能力时优先按独立的
   `biunivers.resource-session/1` 接入，并处理不支持、会话过期和版本冲突；
 - 只有兼容旧应用时才使用冻结的 `biunivers.host-api/1`；
-- 需要从文件管理器接收文件时，只能按可选的 `biunivers.open-resource/1` 声明 Handler
-  并领取启动资源；
+- 需要从文件管理器接收文件时，只能按可选的 `biunivers.open-resource/1` 或
+  `biunivers.open-resource/1.1` 声明 Handler 并领取启动资源；
 - 配置会暴露给浏览器，不能包含 secret。
 
 不要向用户重复询问这些已经由协议确定的事项。
@@ -137,16 +137,18 @@ body,
 
 如果需求必须依赖这些能力，应明确说明它超出 Static App Protocol v1，而不是静默制造非标准实现。
 
-已经接入 Open Resource Protocol v1 的应用可以接收宿主明确交付的资源；这不允许应用遍历
-文件系统、把 session 传给另一个应用或扩展私有方法。
+已经接入 Open Resource Protocol v1 或 v1.1 的应用可以接收宿主明确交付的资源；这不允许
+应用遍历文件系统、把 session 传给另一个应用或扩展私有方法。
 
 ## 可选资源能力
 
 只有用户要求应用能从文件管理器打开文件时才接入：
 
-1. 完整复制 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`；
+1. 单资源应用完整复制 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`；需要多资源时改用
+   `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md`，两者不能同时携带；
 2. 完整复制 `BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`；
-3. 根据 `biunivers.open-resource.schema.json` 创建 Handler 声明；
+3. 根据所选版本对应的 `biunivers.open-resource.schema.json` 或
+   `biunivers.open-resource-v1.1.schema.json` 创建 Handler 声明；
 4. 只声明应用实际支持的扩展名、动作和最大权限；
 5. 消息监听器就绪后先请求 `resource.getCapabilities`；
 6. 请求 `resource.claimLaunch`，将 `NO_LAUNCH_CONTEXT` 作为普通启动；
@@ -156,6 +158,16 @@ body,
 10. 大文件随机读取使用单区间 Range，并处理 `206`、`416`；
 11. 每约 60 秒续租仍在使用的 session，关闭文档时主动释放；
 12. 保存冲突时保留未保存内容，不静默覆盖。
+
+需要多资源时还必须：
+
+1. 使用 `biunivers.open-resource-v1.1.schema.json`；
+2. 把声明协议改为 `biunivers.open-resource/1.1`；
+3. 仅在确实支持集合语义的只读 Handler 上声明 `multiple: true`；
+4. 先确认 capabilities 中的 `openMany`，再调用 `resource.openMany`；
+5. 同时处理 `resource.claimLaunch` 返回的单数 `resource` 与复数 `resources`，两者互斥；
+6. 保持 `resources` 顺序，批量续租，并在替换或关闭集合时批量释放；
+7. 不猜测或自动取得同目录的其他文件。
 
 优先复制 `template/resource-app` 或 `resource-session-client.example.js`，不要凭记忆重写消息
 格式。不要把 `sessionId`、实例凭据、内容 URL 写入 URL、localStorage、IndexedDB、日志

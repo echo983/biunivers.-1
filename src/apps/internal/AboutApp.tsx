@@ -22,7 +22,10 @@ export function AboutApp() {
         </div>
         <div>
           <dt>文件</dt>
-          <dd>File Service · 批量操作 · ZIP 导出 · Wormhole · Resource Session v1</dd>
+          <dd>
+            File Service · 批量操作 · ZIP 导出 · Wormhole · Resource
+            Session v1
+          </dd>
         </div>
         <div>
           <dt>应用</dt>

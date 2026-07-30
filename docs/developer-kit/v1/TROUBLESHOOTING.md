@@ -133,8 +133,8 @@ body,
 
 ## 想从一个应用打开另一个应用
 
-Open Resource Protocol v1 只定义宿主从文件管理器向已声明 Handler 的应用交付文件，不是
-通用应用间调用。
+Open Resource Protocol v1/v1.1 只定义宿主向已声明 Handler 的应用交付用户明确选择的
+文件，不是通用应用间调用。
 
 不要通过访问 `window.parent` 或自行约定私有消息绕过限制。通用应用间调用仍属于未来能力。
 
@@ -149,13 +149,28 @@ Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 
 检查：
 
-- 根目录是否同时存在 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md` 和
+- 根目录是否存在声明版本对应的一份 Open Resource 协议原文和
   `biunivers.open-resource.json`；
 - 协议原文是否逐字一致；
-- `protocol` 是否为 `biunivers.open-resource/1`；
+- `protocol` 是否为宿主支持的 `biunivers.open-resource/1` 或
+  `biunivers.open-resource/1.1`，文件名是否与版本一致；
 - 扩展名是否使用小写和前导点；
 - 应用是否已启用；
 - Handler 是否声明了当前动作。
+
+## `resource.openMany` 不可用或文件管理器没有批量候选
+
+依次检查：
+
+- 声明是否为 `biunivers.open-resource/1.1`，并携带 v1.1 原文；
+- Handler 是否同时声明 `multiple: true`、`open` 和 `read`；
+- 每个所选文件的扩展名是否都被同一个 Handler 接受；
+- 所选项目是否全部是同一目录中的普通文件，数量是否为 2 至宿主上限；
+- `resource.getCapabilities` 是否返回 `openMany: true`；
+- 应用是否错误地只读取了 `claimLaunch` 的单数 `resource`，而没有处理复数 `resources`。
+
+宿主不会为了凑齐集合而自动附加同目录文件，也不会把多个不同 Handler 的匹配结果拼成一个
+批次。
 
 ## `resource.getCapabilities` 没有响应
 

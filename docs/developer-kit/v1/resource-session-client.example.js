@@ -42,14 +42,31 @@ export function getCapabilities() {
 
 export async function claimLaunch() {
   const context = await call("resource.claimLaunch");
-  return {
-    action: context.action,
-    resource: useSession(context.resource),
-  };
+  return context.resources
+    ? {
+        action: context.action,
+        resources: context.resources.map(useSession),
+      }
+    : {
+        action: context.action,
+        resource: useSession(context.resource),
+      };
 }
 
 export async function chooseFile(access = "read") {
   return useSession(await call("resource.open", { access }));
+}
+
+export async function chooseFiles(maximum = 100) {
+  const capabilities = await getCapabilities();
+  if (!capabilities.openMany) {
+    throw new Error("当前宿主或应用声明未启用多资源能力");
+  }
+  const result = await call("resource.openMany", {
+    access: "read",
+    maximum,
+  });
+  return result.resources.map(useSession);
 }
 
 export async function saveAs(suggestedName) {
@@ -79,4 +96,16 @@ export function useSession(session) {
     release: () =>
       call("resource.release", { sessionIds: [session.sessionId] }),
   };
+}
+
+export function renewSessions(resources) {
+  return call("resource.renew", {
+    sessionIds: resources.map((resource) => resource.session.sessionId),
+  });
+}
+
+export function releaseSessions(resources) {
+  return call("resource.release", {
+    sessionIds: resources.map((resource) => resource.session.sessionId),
+  });
 }

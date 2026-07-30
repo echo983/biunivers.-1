@@ -61,17 +61,28 @@
 - [ ] 安装后可以打开、调整尺寸、最小化、还原和关闭
 - [ ] 更新失败时没有破坏原已安装版本
 
-## 可选：Open Resource v1
+## 可选：Open Resource v1 / v1.1
 
 仅在应用声明文件处理能力时检查：
 
-- [ ] 根目录存在 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`
+- [ ] 根目录存在声明版本对应的 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md` 或
+      `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md`，且没有同时携带两份
 - [ ] Open Resource 协议文件是官方原文，没有改写
 - [ ] 根目录存在 `biunivers.open-resource.json`
-- [ ] 声明通过 `biunivers.open-resource.schema.json`
+- [ ] 声明通过版本对应的 `biunivers.open-resource.schema.json` 或
+      `biunivers.open-resource-v1.1.schema.json`
 - [ ] Handler ID 在应用内唯一且更新时保持稳定
 - [ ] 扩展名为小写且带前导点
 - [ ] 声明 `edit` 的 Handler 使用 `read-write`
+- [ ] `multiple: true` 只出现在 v1.1、包含 `open` 且为 `read` 的 Handler
+
+多资源应用还应检查：
+
+- [ ] `resource.getCapabilities` 返回 `openMany: true`
+- [ ] `resource.openMany` 取消、不足两项、超上限和混合不支持类型有明确行为
+- [ ] `resource.claimLaunch` 同时处理互斥的 `resource` 与 `resources`
+- [ ] 应用保持宿主返回顺序，并批量续租和释放全部 Session
+- [ ] 应用不会自动枚举或取得同目录的其他资源
 
 ## 可选：Resource Session v1
 

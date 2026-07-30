@@ -44,6 +44,10 @@
 Handler 声明、Resource Session 客户端、续租和释放示例。两个模板都包含配套
 `AGENTS.md`。
 
+`template/resource-app` 保持最小的单资源 v1 示例。需要一次处理多个只读文件时，先完成
+模板的单资源路径，再按本页“Open Resource v1.1 多资源扩展”升级；可参考已经通过宿主验收的
+[BiuniView v0.2.0](https://github.com/echo983/biunivers-image-viewer/tree/feature/open-resource-v1.1)。
+
 不要删除或改写：
 
 ```text
@@ -52,12 +56,15 @@ BIUNIVERS_APP_PROTOCOL_V1.md
 
 它必须与本开发包根目录的协议原文完全一致。
 
-资源应用还不得删除或改写：
+单资源模板还不得删除或改写：
 
 ```text
 BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md
 BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md
 ```
+
+升级 v1.1 时，用 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md` 替换 v1 Open Resource 原文；
+Resource Session v1 原文继续保留。
 
 ### 第二步：修改应用身份
 
@@ -330,9 +337,9 @@ Static App Protocol v1 本身不定义：
 - 自动更新；
 - Biunivers 内部 store 或父页面 DOM。
 
-文件处理器声明由 Open Resource Protocol v1 定义；新应用的文件选择、读取、续租和保存由
-Resource Session Protocol v1 定义。Host API v1 只作为旧应用兼容底座。不要自行设计私有
-的父页面调用方式。
+文件处理器声明由 Open Resource Protocol v1/v1.1 定义；新应用的文件选择、读取、续租和
+保存由 Resource Session Protocol v1 定义。Host API v1 只作为旧应用兼容底座。不要自行
+设计私有的父页面调用方式。
 
 ## 给 AI 开发代理
 
