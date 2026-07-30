@@ -130,6 +130,9 @@ if [[ "$SCENARIO" = restart ]]; then
   kill -KILL "$DAEMON_PID"
   wait "$DAEMON_PID" 2>/dev/null || true
   DAEMON_PID=""
+  if [[ -S "$SOCKET_PATH" ]]; then
+    rm -f -- "$SOCKET_PATH"
+  fi
   start_daemon
   RESULT="$("$NODE_BIN" scripts/verify-compute-runtime-restart.mjs \
     verify "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
