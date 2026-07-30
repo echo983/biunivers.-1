@@ -61,7 +61,7 @@ function loadDiagnosticExecutor(
   environment: Environment,
 ): ExecutorDefinition {
   const image = environment.BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE?.trim() ?? "";
-  if (!/^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$/.test(image)) {
+  if (!/^(?:[a-z0-9][a-z0-9._/-]*@)?sha256:[0-9a-f]{64}$/.test(image)) {
     throw new Error(
       "BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE must be digest-pinned.",
     );

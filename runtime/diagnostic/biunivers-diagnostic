@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+test "$(id -u)" = "65532"
+test "$(id -g)" = "65532"
+test -d /workspace
+test -w /workspace
+test "$(awk '/^CapEff:/ { print $2 }' /proc/self/status)" = "0000000000000000"
+test ! -e /var/run/docker.sock
+test ! -e /dev/fuse
+
+interfaces="$(find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+test "$interfaces" = "lo"
+
+temporary="/workspace/.biunivers-runtime-diagnostic.tmp"
+result="/workspace/.biunivers-runtime-diagnostic.json"
+printf '%s\n' \
+  '{"schemaVersion":1,"uid":65532,"gid":65532,"network":"none","capabilities":"none","workspaceWritable":true}' \
+  > "$temporary"
+mv "$temporary" "$result"
+
+while :; do
+  sleep 3600
+done

@@ -1,6 +1,6 @@
 const EXECUTOR_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,127}$/;
 const IMAGE_PATTERN =
-  /^[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64}$/;
+  /^(?:[a-z0-9][a-z0-9._/-]*@)?sha256:[0-9a-f]{64}$/;
 
 export interface ExecutorDefinition {
   executorId: string;

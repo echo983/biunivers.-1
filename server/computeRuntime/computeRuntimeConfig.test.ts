@@ -29,6 +29,14 @@ describe("loadComputeRuntimeConfig", () => {
     ]);
   });
 
+  it("accepts a local content-addressed image identity", () => {
+    const config = loadComputeRuntimeConfig({
+      BIUNIVERS_RUNTIME_AUTH_TOKEN: TOKEN,
+      BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE: `sha256:${"33".repeat(32)}`,
+    });
+    expect(config.executors[0]?.image).toBe(`sha256:${"33".repeat(32)}`);
+  });
+
   it.each([
     [{ BIUNIVERS_RUNTIME_AUTH_TOKEN: "short" }, "AUTH_TOKEN"],
     [
