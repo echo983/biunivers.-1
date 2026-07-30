@@ -18,8 +18,10 @@ export type LocalRunState =
   | "PREPARING"
   | "PREPARED"
   | "RUNNING"
+  | "FROZEN"
   | "STOPPED"
-  | "FAILED";
+  | "FAILED"
+  | "DESTROYED";
 
 export interface RuntimeManifest {
   schemaVersion: 1;
@@ -216,6 +218,36 @@ export class RunDirectoryManager {
     return updated;
   }
 
+  async destroy(runIdHex: string, preserveUpper: boolean): Promise<void> {
+    const manifest = await this.inspect(runIdHex);
+    if (manifest.state === "DESTROYED") {
+      if (!preserveUpper) await rm(this.paths(runIdHex).root, { recursive: true });
+      return;
+    }
+    if (manifest.state !== "STOPPED" && manifest.state !== "FAILED") {
+      throw new RunDirectoryError(
+        "RUN_STATE_CONFLICT",
+        "Only a STOPPED or FAILED local Run can be destroyed.",
+      );
+    }
+    const paths = this.paths(runIdHex);
+    if (!preserveUpper) {
+      await rm(paths.root, { recursive: true });
+      return;
+    }
+    for (const path of [paths.lower, paths.work, paths.merged]) {
+      await rm(path, { recursive: true, force: true });
+    }
+    for (const name of ["gateway.sock", "snapshot.json"]) {
+      await rm(join(paths.root, name), { force: true });
+    }
+    await this.transition({
+      runIdHex,
+      expectedState: manifest.state,
+      newState: "DESTROYED",
+    });
+  }
+
   async reconcile(knownRunIdsHex: ReadonlySet<string>): Promise<ReconcileReport> {
     await this.initialize();
     for (const runIdHex of knownRunIdsHex) validateId(runIdHex, "Run ID");
@@ -267,9 +299,15 @@ function validateManifest(
     (manifest.revision as number) < 0 ||
     typeof manifest.executorId !== "string" ||
     !EXECUTOR_PATTERN.test(manifest.executorId) ||
-    !["PREPARING", "PREPARED", "RUNNING", "STOPPED", "FAILED"].includes(
-      manifest.state as string,
-    ) ||
+    ![
+      "PREPARING",
+      "PREPARED",
+      "RUNNING",
+      "FROZEN",
+      "STOPPED",
+      "FAILED",
+      "DESTROYED",
+    ].includes(manifest.state as string) ||
     (manifest.runtimeIdentity !== null &&
       typeof manifest.runtimeIdentity !== "string") ||
     !Number.isSafeInteger(manifest.createdAtMs) ||

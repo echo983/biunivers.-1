@@ -21,7 +21,10 @@ describe("ComputeRuntimeServer", () => {
       prepare: vi.fn().mockResolvedValue({ state: "PREPARED" }),
       start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       inspect: vi.fn().mockResolvedValue({ manifest: { state: "RUNNING" } }),
+      freeze: vi.fn().mockResolvedValue({ state: "FROZEN" }),
+      thaw: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       stop: vi.fn().mockResolvedValue({ state: "STOPPED" }),
+      destroy: vi.fn().mockResolvedValue(undefined),
     };
     const server = new ComputeRuntimeServer({
       socketPath,
@@ -74,6 +77,36 @@ describe("ComputeRuntimeServer", () => {
       error: "Runtime request is invalid.",
     });
     expect(runtime.start).toHaveBeenCalledTimes(1);
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "freeze",
+        runIdHex: "22".repeat(16),
+      }),
+    ).toMatchObject({ ok: true, result: { state: "FROZEN" } });
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "thaw",
+        runIdHex: "22".repeat(16),
+      }),
+    ).toMatchObject({ ok: true, result: { state: "RUNNING" } });
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "destroy",
+        runIdHex: "22".repeat(16),
+        preserveUpper: true,
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runtime.destroy).toHaveBeenCalledWith("22".repeat(16), true);
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "destroy",
+        runIdHex: "22".repeat(16),
+      }),
+    ).toMatchObject({ ok: false });
     await server.close();
   });
 
@@ -86,7 +119,10 @@ describe("ComputeRuntimeServer", () => {
       prepare: vi.fn(),
       start: vi.fn(),
       inspect: vi.fn(),
+      freeze: vi.fn(),
+      thaw: vi.fn(),
       stop: vi.fn(),
+      destroy: vi.fn(),
     };
     const server = new ComputeRuntimeServer({
       socketPath,

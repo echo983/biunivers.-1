@@ -148,6 +148,57 @@ describe("RunDirectoryManager", () => {
     ).toBe("keep");
   });
 
+  it("destroys only terminal Runs and obeys the explicit Upper policy", async () => {
+    const { manager } = await setup();
+    const preserved = await manager.prepare({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "33".repeat(16),
+      revision: 0,
+      executorId: "system.diagnostic",
+    });
+    await writeFile(join(preserved.paths.upper, "result.txt"), "keep");
+    await expect(manager.destroy(runIdHex, true)).rejects.toMatchObject({
+      code: "RUN_STATE_CONFLICT",
+    });
+    await manager.transition({
+      runIdHex,
+      expectedState: "PREPARING",
+      newState: "STOPPED",
+    });
+    await manager.destroy(runIdHex, true);
+    expect(await manager.inspect(runIdHex)).toMatchObject({
+      state: "DESTROYED",
+    });
+    expect(await readFile(join(preserved.paths.upper, "result.txt"), "utf8")).toBe(
+      "keep",
+    );
+    expect((await readdir(preserved.paths.root)).sort()).toEqual([
+      "runtime.json",
+      "upper",
+    ].sort());
+
+    const deletedId = "44".repeat(16);
+    const deleted = await manager.prepare({
+      runIdHex: deletedId,
+      workspaceIdHex,
+      inputHeadFidHex: "33".repeat(16),
+      revision: 0,
+      executorId: "system.diagnostic",
+    });
+    await writeFile(join(deleted.paths.upper, "discard.txt"), "discard");
+    await manager.transition({
+      runIdHex: deletedId,
+      expectedState: "PREPARING",
+      newState: "FAILED",
+      errorCode: "TEST_FAILURE",
+    });
+    await manager.destroy(deletedId, false);
+    await expect(manager.inspect(deletedId)).rejects.toMatchObject({
+      code: "RUN_DIRECTORY_NOT_FOUND",
+    });
+  });
+
   it("rejects broad, relative, or unresolved Run roots", () => {
     for (const root of ["/", "relative/runs", "/tmp/../etc/runs"]) {
       expect(() => new RunDirectoryManager({ root })).toThrowError(

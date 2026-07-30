@@ -11,6 +11,8 @@ const plan: DockerOciPlan = {
   containerName: "biunivers-run-test",
   createArguments: ["create", "--name", "biunivers-run-test", "image@sha256:x"],
   startArguments: ["start", "biunivers-run-test"],
+  freezeArguments: ["pause", "biunivers-run-test"],
+  thawArguments: ["unpause", "biunivers-run-test"],
   stopArguments: ["stop", "--time", "10", "biunivers-run-test"],
   inspectArguments: ["inspect", "--format", "{{json .State}}", "biunivers-run-test"],
   removeArguments: ["rm", "--force", "biunivers-run-test"],
@@ -43,6 +45,8 @@ describe("DockerOciAdapter", () => {
     executor.results.push(
       { stdout: `${"a".repeat(64)}\n`, stderr: "" },
       { stdout: "", stderr: "" },
+      { stdout: "", stderr: "" },
+      { stdout: "", stderr: "" },
       {
         stdout: JSON.stringify({
           Status: "running",
@@ -64,6 +68,8 @@ describe("DockerOciAdapter", () => {
     const adapter = new DockerOciAdapter(executor);
     expect(await adapter.create(plan, limits)).toBe("a".repeat(64));
     await adapter.start(plan, limits);
+    await adapter.freeze(plan, limits);
+    await adapter.thaw(plan, limits);
     expect(await adapter.inspect(plan, limits)).toMatchObject({
       status: "running",
       running: true,
@@ -74,6 +80,8 @@ describe("DockerOciAdapter", () => {
     expect(executor.calls.map((call) => call.arguments_[0])).toEqual([
       "create",
       "start",
+      "pause",
+      "unpause",
       "inspect",
       "stop",
       "rm",

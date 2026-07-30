@@ -106,6 +106,7 @@ function isInterrupted(manifest: RuntimeManifest): boolean {
   return (
     manifest.state === "PREPARING" ||
     manifest.state === "PREPARED" ||
-    manifest.state === "RUNNING"
+    manifest.state === "RUNNING" ||
+    manifest.state === "FROZEN"
   );
 }

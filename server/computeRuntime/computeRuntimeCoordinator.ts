@@ -34,7 +34,7 @@ export interface RuntimeInspection {
 type MountExecutor = Pick<MountSupervisor, "prepare" | "inspect" | "cleanup">;
 type OciExecutor = Pick<
   DockerOciAdapter,
-  "create" | "start" | "inspect" | "stop" | "remove"
+  "create" | "start" | "freeze" | "thaw" | "inspect" | "stop" | "remove"
 >;
 
 export class ComputeRuntimeCoordinator {
@@ -124,7 +124,12 @@ export class ComputeRuntimeCoordinator {
 
   async inspect(runIdHex: string): Promise<RuntimeInspection> {
     const manifest = await this.#directories.inspect(runIdHex);
-    if (!manifest.runtimeIdentity) return { manifest };
+    if (
+      !manifest.runtimeIdentity ||
+      (manifest.state !== "RUNNING" && manifest.state !== "FROZEN")
+    ) {
+      return { manifest };
+    }
     const executor = this.#executors.get(manifest.executorId);
     return {
       manifest,
@@ -135,22 +140,73 @@ export class ComputeRuntimeCoordinator {
     };
   }
 
-  async stop(runIdHex: string): Promise<RuntimeManifest> {
+  async freeze(runIdHex: string): Promise<RuntimeManifest> {
     const manifest = await this.#directories.inspect(runIdHex);
     if (manifest.state !== "RUNNING") {
-      throw new Error("Only a RUNNING local Run can be stopped.");
+      throw new Error("Only a RUNNING local Run can be frozen.");
+    }
+    const executor = this.#executors.get(manifest.executorId);
+    const plan = this.#plan(manifest, executor);
+    const limits = commandLimits(executor);
+    const state = await this.#oci.inspect(plan, limits);
+    if (!state.running || state.paused) {
+      throw new Error("Run container is not actively running.");
+    }
+    await this.#oci.freeze(plan, limits);
+    try {
+      return await this.#directories.transition({
+        runIdHex,
+        expectedState: "RUNNING",
+        newState: "FROZEN",
+      });
+    } catch (error) {
+      await ignoreFailure(() => this.#oci.thaw(plan, limits));
+      throw error;
+    }
+  }
+
+  async thaw(runIdHex: string): Promise<RuntimeManifest> {
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (manifest.state !== "FROZEN") {
+      throw new Error("Only a FROZEN local Run can be thawed.");
+    }
+    const executor = this.#executors.get(manifest.executorId);
+    const plan = this.#plan(manifest, executor);
+    const limits = commandLimits(executor);
+    const state = await this.#oci.inspect(plan, limits);
+    if (!state.running || !state.paused) {
+      throw new Error("Run container is not paused.");
+    }
+    await this.#oci.thaw(plan, limits);
+    try {
+      return await this.#directories.transition({
+        runIdHex,
+        expectedState: "FROZEN",
+        newState: "RUNNING",
+      });
+    } catch (error) {
+      await ignoreFailure(() => this.#oci.freeze(plan, limits));
+      throw error;
+    }
+  }
+
+  async stop(runIdHex: string): Promise<RuntimeManifest> {
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (manifest.state !== "RUNNING" && manifest.state !== "FROZEN") {
+      throw new Error("Only a RUNNING or FROZEN local Run can be stopped.");
     }
     const executor = this.#executors.get(manifest.executorId);
     const plan = this.#plan(manifest, executor);
     const limits = commandLimits(executor);
     try {
       const state = await this.#oci.inspect(plan, limits);
+      if (state.paused) await this.#oci.thaw(plan, limits);
       if (state.running) await this.#oci.stop(plan, limits);
       await this.#oci.remove(plan, limits);
       await this.#releasePreparedResources(runIdHex);
       const stopped = await this.#directories.transition({
         runIdHex,
-        expectedState: "RUNNING",
+        expectedState: manifest.state,
         newState: "STOPPED",
       });
       this.#activeRunIds.delete(runIdHex);
@@ -161,20 +217,57 @@ export class ComputeRuntimeCoordinator {
     }
   }
 
+  async destroy(runIdHex: string, preserveUpper: boolean): Promise<void> {
+    if (typeof preserveUpper !== "boolean") {
+      throw new Error("Destroy requires an explicit Upper preservation policy.");
+    }
+    let manifest = await this.#directories.inspect(runIdHex);
+    if (manifest.state === "RUNNING" || manifest.state === "FROZEN") {
+      manifest = await this.stop(runIdHex);
+    } else if (manifest.state === "PREPARED") {
+      await this.#releasePreparedResources(runIdHex);
+      manifest = await this.#directories.transition({
+        runIdHex,
+        expectedState: "PREPARED",
+        newState: "STOPPED",
+      });
+    }
+    if (
+      manifest.state !== "STOPPED" &&
+      manifest.state !== "FAILED" &&
+      manifest.state !== "DESTROYED"
+    ) {
+      throw new Error("Local Run is not safe to destroy.");
+    }
+    await this.#releasePreparedResources(runIdHex);
+    await this.#directories.destroy(runIdHex, preserveUpper);
+    this.#activeRunIds.delete(runIdHex);
+  }
+
   async shutdown(): Promise<void> {
     const errors: unknown[] = [];
     for (const runIdHex of [...this.#activeRunIds]) {
       try {
         const manifest = await this.#directories.inspect(runIdHex);
-        if (manifest.state === "RUNNING") {
+        if (manifest.state === "RUNNING" || manifest.state === "FROZEN") {
           const executor = this.#executors.get(manifest.executorId);
           const plan = this.#plan(manifest, executor);
           const limits = commandLimits(executor);
+          const state = await ignoreFailureWithResult(() =>
+            this.#oci.inspect(plan, limits),
+          );
+          if (state?.paused) {
+            await ignoreFailure(() => this.#oci.thaw(plan, limits));
+          }
           await ignoreFailure(() => this.#oci.stop(plan, limits));
           await ignoreFailure(() => this.#oci.remove(plan, limits));
         }
         await this.#releasePreparedResources(runIdHex);
-        if (manifest.state === "PREPARED" || manifest.state === "RUNNING") {
+        if (
+          manifest.state === "PREPARED" ||
+          manifest.state === "RUNNING" ||
+          manifest.state === "FROZEN"
+        ) {
           await this.#directories.transition({
             runIdHex,
             expectedState: manifest.state,
@@ -248,5 +341,15 @@ async function ignoreFailure(operation: () => Promise<unknown>): Promise<void> {
     await operation();
   } catch {
     // The primary failure is preserved; reconciliation will retry cleanup.
+  }
+}
+
+async function ignoreFailureWithResult<T>(
+  operation: () => Promise<T>,
+): Promise<T | undefined> {
+  try {
+    return await operation();
+  } catch {
+    return undefined;
   }
 }

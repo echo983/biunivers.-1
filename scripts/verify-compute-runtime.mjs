@@ -66,6 +66,30 @@ for (const [key, expected] of Object.entries({
   }
 }
 
+const freeze = await exchange({
+  tokenHex,
+  operation: "freeze",
+  runIdHex: fixture.runIdHex,
+});
+assertOk(freeze, "freeze");
+if (freeze.result.state !== "FROZEN") throw new Error("Run not FROZEN.");
+const frozenInspect = await exchange({
+  tokenHex,
+  operation: "inspect",
+  runIdHex: fixture.runIdHex,
+});
+assertOk(frozenInspect, "inspect-frozen");
+if (!frozenInspect.result.container?.paused) {
+  throw new Error("Frozen container is not paused.");
+}
+const thaw = await exchange({
+  tokenHex,
+  operation: "thaw",
+  runIdHex: fixture.runIdHex,
+});
+assertOk(thaw, "thaw");
+if (thaw.result.state !== "RUNNING") throw new Error("Run not thawed.");
+
 const stop = await exchange({
   tokenHex,
   operation: "stop",
@@ -84,12 +108,37 @@ const upperDiagnostic = JSON.parse(
     "utf8",
   ),
 );
+const destroy = await exchange({
+  tokenHex,
+  operation: "destroy",
+  runIdHex: fixture.runIdHex,
+  preserveUpper: true,
+});
+assertOk(destroy, "destroy");
+const destroyedInspect = await exchange({
+  tokenHex,
+  operation: "inspect",
+  runIdHex: fixture.runIdHex,
+});
+assertOk(destroyedInspect, "inspect-destroyed");
+if (destroyedInspect.result.manifest?.state !== "DESTROYED") {
+  throw new Error("Run not DESTROYED.");
+}
+await readFile(
+  join(
+    runRoot,
+    fixture.runIdHex,
+    "upper",
+    ".biunivers-runtime-diagnostic.json",
+  ),
+);
 console.log(
   JSON.stringify({
     runIdHex: fixture.runIdHex,
     runtimeIdentity: start.result.runtimeIdentity,
     diagnostic: upperDiagnostic,
-    finalState: stop.result.state,
+    finalState: destroyedInspect.result.manifest.state,
+    upperPreserved: true,
   }),
 );
 

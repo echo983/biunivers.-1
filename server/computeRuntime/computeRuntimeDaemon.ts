@@ -155,7 +155,8 @@ export async function assertNoInterruptedLocalRuns(
     if (
       manifest.state === "PREPARING" ||
       manifest.state === "PREPARED" ||
-      manifest.state === "RUNNING"
+      manifest.state === "RUNNING" ||
+      manifest.state === "FROZEN"
     ) {
       interrupted.push(runIdHex);
     }

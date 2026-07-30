@@ -9,7 +9,7 @@ const TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 
 type RuntimeExecutor = Pick<
   ComputeRuntimeCoordinator,
-  "prepare" | "start" | "inspect" | "stop"
+  "prepare" | "start" | "inspect" | "freeze" | "thaw" | "stop" | "destroy"
 >;
 
 export class ComputeRuntimeServer {
@@ -103,6 +103,15 @@ export class ComputeRuntimeServer {
         result = await this.#runtime.start(request.runIdHex);
       } else if (request.operation === "inspect") {
         result = await this.#runtime.inspect(request.runIdHex);
+      } else if (request.operation === "freeze") {
+        result = await this.#runtime.freeze(request.runIdHex);
+      } else if (request.operation === "thaw") {
+        result = await this.#runtime.thaw(request.runIdHex);
+      } else if (request.operation === "destroy") {
+        result = await this.#runtime.destroy(
+          request.runIdHex,
+          request.preserveUpper,
+        );
       } else {
         result = await this.#runtime.stop(request.runIdHex);
       }
@@ -133,8 +142,14 @@ type RuntimeRequest =
     }
   | {
       tokenHex: string;
-      operation: "start" | "inspect" | "stop";
+      operation: "start" | "inspect" | "freeze" | "thaw" | "stop";
       runIdHex: string;
+    }
+  | {
+      tokenHex: string;
+      operation: "destroy";
+      runIdHex: string;
+      preserveUpper: boolean;
     };
 
 function parseRequest(value: unknown): RuntimeRequest {
@@ -183,8 +198,25 @@ function parseRequest(value: unknown): RuntimeRequest {
       },
     };
   }
+  if (request.operation === "destroy") {
+    requireExactKeys(request, [
+      "tokenHex",
+      "operation",
+      "runIdHex",
+      "preserveUpper",
+    ]);
+    if (
+      typeof request.runIdHex !== "string" ||
+      typeof request.preserveUpper !== "boolean"
+    ) {
+      throw invalidRequest();
+    }
+    return request as RuntimeRequest;
+  }
   if (
-    !["start", "inspect", "stop"].includes(request.operation as string) ||
+    !["start", "inspect", "freeze", "thaw", "stop"].includes(
+      request.operation as string,
+    ) ||
     typeof request.runIdHex !== "string"
   ) {
     throw invalidRequest();

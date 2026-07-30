@@ -69,6 +69,7 @@ async function setup(options: { failStart?: boolean } = {}) {
     },
   };
   let containerRunning = false;
+  let containerPaused = false;
   const oci = {
     async create() {
       events.push("oci:create");
@@ -79,12 +80,20 @@ async function setup(options: { failStart?: boolean } = {}) {
       if (options.failStart) throw new Error("start failed");
       containerRunning = true;
     },
+    async freeze() {
+      events.push("oci:freeze");
+      containerPaused = true;
+    },
+    async thaw() {
+      events.push("oci:thaw");
+      containerPaused = false;
+    },
     async inspect() {
       events.push("oci:inspect");
       return {
         status: containerRunning ? "running" : "exited",
         running: containerRunning,
-        paused: false,
+        paused: containerPaused,
         restarting: false,
         oomKilled: false,
         dead: false,
@@ -97,10 +106,12 @@ async function setup(options: { failStart?: boolean } = {}) {
     async stop() {
       events.push("oci:stop");
       containerRunning = false;
+      containerPaused = false;
     },
     async remove() {
       events.push("oci:remove");
       containerRunning = false;
+      containerPaused = false;
     },
   };
   return {
@@ -189,6 +200,42 @@ describe("ComputeRuntimeCoordinator", () => {
     expect(setupResult.events).toContain("snapshot:release");
   });
 
+  it("freezes and thaws a running container without releasing its mounts", async () => {
+    const setupResult = await setup();
+    await setupResult.coordinator.prepare({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "44".repeat(16),
+      revision: 0,
+      executorId: executor.executorId,
+      capabilityHex: "55".repeat(32),
+    });
+    await setupResult.coordinator.start(runIdHex);
+
+    expect(await setupResult.coordinator.freeze(runIdHex)).toMatchObject({
+      state: "FROZEN",
+    });
+    expect(await setupResult.coordinator.inspect(runIdHex)).toMatchObject({
+      manifest: { state: "FROZEN" },
+      container: { running: true, paused: true },
+    });
+    expect(await setupResult.coordinator.thaw(runIdHex)).toMatchObject({
+      state: "RUNNING",
+    });
+    expect(setupResult.events).not.toContain("mount:cleanup");
+    await setupResult.coordinator.stop(runIdHex);
+    const upperFile = join(
+      setupResult.directories.paths(runIdHex).upper,
+      "frozen-result.txt",
+    );
+    await writeFile(upperFile, "keep");
+    await setupResult.coordinator.destroy(runIdHex, true);
+    expect(await setupResult.directories.inspect(runIdHex)).toMatchObject({
+      state: "DESTROYED",
+    });
+    expect(await readFile(upperFile, "utf8")).toBe("keep");
+  });
+
   it("cleans an active Run on daemon shutdown and preserves Upper", async () => {
     const setupResult = await setup();
     await setupResult.coordinator.prepare({
@@ -218,6 +265,7 @@ describe("ComputeRuntimeCoordinator", () => {
       "mount:prepare",
       "oci:create",
       "oci:start",
+      "oci:inspect",
       "oci:stop",
       "oci:remove",
       "mount:cleanup",

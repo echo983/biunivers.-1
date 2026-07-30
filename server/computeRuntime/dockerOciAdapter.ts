@@ -73,6 +73,20 @@ export class DockerOciAdapter {
     await this.#run(plan, plan.startArguments, limits);
   }
 
+  async freeze(
+    plan: DockerOciPlan,
+    limits: { timeoutMs: number; outputBytesLimit: number },
+  ): Promise<void> {
+    await this.#run(plan, plan.freezeArguments, limits);
+  }
+
+  async thaw(
+    plan: DockerOciPlan,
+    limits: { timeoutMs: number; outputBytesLimit: number },
+  ): Promise<void> {
+    await this.#run(plan, plan.thawArguments, limits);
+  }
+
   async inspect(
     plan: DockerOciPlan,
     limits: { timeoutMs: number; outputBytesLimit: number },

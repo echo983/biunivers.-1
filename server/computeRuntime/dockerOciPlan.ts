@@ -8,6 +8,8 @@ export interface DockerOciPlan {
   containerName: string;
   createArguments: string[];
   startArguments: string[];
+  freezeArguments: string[];
+  thawArguments: string[];
   stopArguments: string[];
   inspectArguments: string[];
   removeArguments: string[];
@@ -60,6 +62,8 @@ export function buildDockerOciPlan(input: {
       ...input.executor.arguments,
     ],
     startArguments: ["start", containerName],
+    freezeArguments: ["pause", containerName],
+    thawArguments: ["unpause", containerName],
     stopArguments: ["stop", "--time", "10", containerName],
     inspectArguments: [
       "inspect",
