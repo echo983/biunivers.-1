@@ -1,8 +1,14 @@
 import type { ServerConfig } from "../config.js";
+import { FileContentStore } from "../files/fileContentStore.js";
 import { startFileService, type FileServiceRuntime } from "../files/fileServiceRuntime.js";
 import { VerifiedChunkCache } from "../workspace/verifiedChunkCache.js";
 import { WorkspaceContentReader } from "../workspace/workspaceContentReader.js";
 import { WorkspaceSnapshotProvider } from "../workspace/workspaceSnapshotProvider.js";
+import { TargetTreeProjector } from "../workspaceCommit/targetTreeProjector.js";
+import { UpperContentMaterializer } from "../workspaceCommit/upperContentMaterializer.js";
+import { UpperScanner } from "../workspaceCommit/upperScanner.js";
+import { WorkspaceCommitCoordinator } from "../workspaceCommit/workspaceCommitCoordinator.js";
+import { WorkspaceCommitObjectBuilder } from "../workspaceCommit/workspaceCommitObjectBuilder.js";
 import { ComputeRuntimeCoordinator } from "./computeRuntimeCoordinator.js";
 import type { ComputeRuntimeConfig } from "./computeRuntimeConfig.js";
 import { ComputeRuntimeServer } from "./computeRuntimeServer.js";
@@ -10,6 +16,7 @@ import { DockerOciAdapter } from "./dockerOciAdapter.js";
 import { ExecutorRegistry } from "./executorRegistry.js";
 import { InterruptedRunRecovery } from "./interruptedRunRecovery.js";
 import { MountSupervisor } from "./mountSupervisor.js";
+import { ManagedComputeRuntime } from "./managedComputeRuntime.js";
 import { PvlogSnapshotProvisioner } from "./pvlogSnapshotProvisioner.js";
 import { RunDirectoryManager } from "./runDirectoryManager.js";
 
@@ -79,10 +86,49 @@ export async function startComputeRuntimeDaemon(options: {
       oci: new DockerOciAdapter(),
       snapshots,
     });
+    const maximumUpperBytes = Math.max(
+      ...options.runtimeConfig.executors.map(
+        (executor) => executor.upperBytesLimit,
+      ),
+    );
+    const maximumUpperInodes = Math.max(
+      ...options.runtimeConfig.executors.map(
+        (executor) => executor.upperInodesLimit,
+      ),
+    );
+    const managedRuntime = new ManagedComputeRuntime({
+      runtime: coordinator,
+      directories,
+      refStore: fileRuntime.refStore,
+      committer: new WorkspaceCommitCoordinator({
+        repository: fileRuntime.repository,
+        refStore: fileRuntime.refStore,
+        scanner: new UpperScanner({
+          binary: options.runtimeConfig.workspaceCowScannerBinary,
+        }),
+        projector: new TargetTreeProjector({
+          maxEntries: maximumUpperInodes,
+          maxDepth: 128,
+        }),
+        materializer: new UpperContentMaterializer({
+          content: new FileContentStore(fileRuntime.repository),
+        }),
+        builder: new WorkspaceCommitObjectBuilder({
+          repository: fileRuntime.repository,
+          writerId: "workspace-runtime",
+        }),
+        limits: {
+          maxEntries: maximumUpperInodes,
+          maxDepth: 128,
+          maxFileBytes: maximumUpperBytes,
+          maxTotalBytes: maximumUpperBytes,
+        },
+      }),
+    });
     const server = new ComputeRuntimeServer({
       socketPath: options.runtimeConfig.socketPath,
       authenticationTokenHex: options.runtimeConfig.authenticationTokenHex,
-      runtime: coordinator,
+      runtime: managedRuntime,
     });
     await server.listen();
     return new RunningComputeRuntimeDaemon({
@@ -90,7 +136,7 @@ export async function startComputeRuntimeDaemon(options: {
       quarantinedPaths: reconciliation.quarantined.length,
       recoveredRuns: recovery.recovered.length,
       server,
-      coordinator,
+      coordinator: managedRuntime,
       fileRuntime,
     });
   } catch (error) {
@@ -104,7 +150,7 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
   readonly quarantinedPaths: number;
   readonly recoveredRuns: number;
   readonly #server: ComputeRuntimeServer;
-  readonly #coordinator: ComputeRuntimeCoordinator;
+  readonly #coordinator: Pick<ManagedComputeRuntime, "shutdown">;
   readonly #fileRuntime: FileServiceRuntime;
   #closed = false;
 
@@ -113,7 +159,7 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
     quarantinedPaths: number;
     recoveredRuns: number;
     server: ComputeRuntimeServer;
-    coordinator: ComputeRuntimeCoordinator;
+    coordinator: Pick<ManagedComputeRuntime, "shutdown">;
     fileRuntime: FileServiceRuntime;
   }) {
     this.socketPath = options.socketPath;

@@ -8,6 +8,7 @@ ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
 HOST_CONTAINER="${BIUNIVERS_TEST_CONTAINER:-biunivers-v02-test}"
 TEST_ROOT="$(mktemp -d /tmp/biunivers-compute-runtime.XXXXXX)"
 PVLOGFS_BINARY="$TEST_ROOT/cargo-target/release/biunivers-pvlogfs"
+COW_SCANNER_BINARY="$TEST_ROOT/cargo-target/release/biunivers-workspace-cow-scan"
 RUN_ROOT="$TEST_ROOT/runs"
 SOCKET_PATH="$TEST_ROOT/runtime.sock"
 FIXTURE_PATH="$TEST_ROOT/fixture.json"
@@ -81,6 +82,9 @@ fi
 CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
   "$CARGO_BIN" build --release \
   --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
+CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
+  "$CARGO_BIN" build --release \
+  --manifest-path crates/workspace-cow/Cargo.toml >/dev/null
 
 curl --fail --silent --show-error \
   --request POST \
@@ -99,6 +103,7 @@ export BIUNIVERS_RUNTIME_CACHE="$TEST_ROOT/cache"
 export BIUNIVERS_RUNTIME_SOCKET="$SOCKET_PATH"
 export BIUNIVERS_RUNTIME_AUTH_TOKEN="$TOKEN_HEX"
 export BIUNIVERS_PVLOGFS_BINARY="$PVLOGFS_BINARY"
+export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$COW_SCANNER_BINARY"
 export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE="$IMAGE_ID"
 
 "$NODE_BIN" dist/server/computeRuntime/computeRuntimeCli.js >"$LOG_PATH" 2>&1 &
@@ -112,15 +117,11 @@ done
 
 RESULT="$("$NODE_BIN" scripts/verify-compute-runtime.mjs \
   "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
-RUNTIME_IDENTITY="$("$NODE_BIN" -e \
-  'const value=JSON.parse(process.argv[1]); process.stdout.write(value.runtimeIdentity)' \
-  "$RESULT")"
-"$NODE_BIN" scripts/compute-runtime-fixture.mjs finish \
-  "$FIXTURE_PATH" "$RUNTIME_IDENTITY"
+"$NODE_BIN" scripts/compute-runtime-fixture.mjs verify "$FIXTURE_PATH"
 FIXTURE_FINISHED=true
 
 kill -TERM "$DAEMON_PID"
 wait "$DAEMON_PID"
 DAEMON_PID=""
 echo "$RESULT"
-echo "Compute Runtime 真实 PVLogFS、overlay、非 root OCI 沙箱和清理链全部通过。"
+echo "Compute Runtime 真实 PVLogFS、overlay、非 root OCI 沙箱、COW 提交和清理链全部通过。"

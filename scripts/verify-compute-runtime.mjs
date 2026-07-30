@@ -97,6 +97,15 @@ const stop = await exchange({
 });
 assertOk(stop, "stop");
 if (stop.result.state !== "STOPPED") throw new Error("Run not STOPPED.");
+const commit = await exchange({
+  tokenHex,
+  operation: "commit",
+  runIdHex: fixture.runIdHex,
+});
+assertOk(commit, "commit");
+if (!commit.result.changed || commit.result.run?.state !== "COMMITTED") {
+  throw new Error("Run COW output was not committed.");
+}
 const upperDiagnostic = JSON.parse(
   await readFile(
     join(
@@ -137,6 +146,11 @@ console.log(
     runIdHex: fixture.runIdHex,
     runtimeIdentity: start.result.runtimeIdentity,
     diagnostic: upperDiagnostic,
+    commit: {
+      revision: commit.result.ref.revision,
+      operationCount: commit.result.operationCount,
+      outputHeadFidHex: commit.result.run.outputHeadFidHex,
+    },
     finalState: destroyedInspect.result.manifest.state,
     upperPreserved: true,
   }),

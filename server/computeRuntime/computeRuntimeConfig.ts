@@ -8,6 +8,7 @@ export interface ComputeRuntimeConfig {
   socketPath: string;
   cachePath: string;
   pvlogfsBinary: string;
+  workspaceCowScannerBinary: string;
   authenticationTokenHex: string;
   executors: readonly ExecutorDefinition[];
 }
@@ -39,6 +40,11 @@ export function loadComputeRuntimeConfig(
       "/opt/biunivers/bin/biunivers-pvlogfs",
     "BIUNIVERS_PVLOGFS_BINARY",
   );
+  const workspaceCowScannerBinary = absoluteFile(
+    environment.BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY?.trim() ||
+      "/opt/biunivers/bin/biunivers-workspace-cow-scan",
+    "BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY",
+  );
   const authenticationTokenHex =
     environment.BIUNIVERS_RUNTIME_AUTH_TOKEN?.trim() ?? "";
   if (!/^[0-9a-f]{64}$/.test(authenticationTokenHex)) {
@@ -52,6 +58,7 @@ export function loadComputeRuntimeConfig(
     socketPath,
     cachePath,
     pvlogfsBinary,
+    workspaceCowScannerBinary,
     authenticationTokenHex,
     executors: Object.freeze([loadDiagnosticExecutor(environment)]),
   });

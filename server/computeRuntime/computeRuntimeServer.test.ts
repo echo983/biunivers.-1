@@ -24,6 +24,7 @@ describe("ComputeRuntimeServer", () => {
       freeze: vi.fn().mockResolvedValue({ state: "FROZEN" }),
       thaw: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       stop: vi.fn().mockResolvedValue({ state: "STOPPED" }),
+      commit: vi.fn().mockResolvedValue({ changed: true }),
       destroy: vi.fn().mockResolvedValue(undefined),
     };
     const server = new ComputeRuntimeServer({
@@ -103,6 +104,14 @@ describe("ComputeRuntimeServer", () => {
     expect(
       await exchange(socketPath, {
         tokenHex,
+        operation: "commit",
+        runIdHex: "22".repeat(16),
+      }),
+    ).toEqual({ ok: true, result: { changed: true } });
+    expect(runtime.commit).toHaveBeenCalledWith("22".repeat(16));
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
         operation: "destroy",
         runIdHex: "22".repeat(16),
       }),
@@ -122,6 +131,7 @@ describe("ComputeRuntimeServer", () => {
       freeze: vi.fn(),
       thaw: vi.fn(),
       stop: vi.fn(),
+      commit: vi.fn(),
       destroy: vi.fn(),
     };
     const server = new ComputeRuntimeServer({

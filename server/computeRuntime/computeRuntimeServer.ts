@@ -10,7 +10,9 @@ const TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 type RuntimeExecutor = Pick<
   ComputeRuntimeCoordinator,
   "prepare" | "start" | "inspect" | "freeze" | "thaw" | "stop" | "destroy"
->;
+> & {
+  commit(runIdHex: string): Promise<unknown>;
+};
 
 export class ComputeRuntimeServer {
   readonly #socketPath: string;
@@ -112,6 +114,8 @@ export class ComputeRuntimeServer {
           request.runIdHex,
           request.preserveUpper,
         );
+      } else if (request.operation === "commit") {
+        result = await this.#runtime.commit(request.runIdHex);
       } else {
         result = await this.#runtime.stop(request.runIdHex);
       }
@@ -142,7 +146,13 @@ type RuntimeRequest =
     }
   | {
       tokenHex: string;
-      operation: "start" | "inspect" | "freeze" | "thaw" | "stop";
+      operation:
+        | "start"
+        | "inspect"
+        | "freeze"
+        | "thaw"
+        | "stop"
+        | "commit";
       runIdHex: string;
     }
   | {
@@ -214,7 +224,7 @@ function parseRequest(value: unknown): RuntimeRequest {
     return request as RuntimeRequest;
   }
   if (
-    !["start", "inspect", "freeze", "thaw", "stop"].includes(
+    !["start", "inspect", "freeze", "thaw", "stop", "commit"].includes(
       request.operation as string,
     ) ||
     typeof request.runIdHex !== "string"

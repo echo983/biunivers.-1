@@ -16,6 +16,8 @@ describe("loadComputeRuntimeConfig", () => {
       cachePath: "/srv/biunivers/compute-runtime/chunk-cache",
       socketPath: "/srv/biunivers/compute-runtime/runtime.sock",
       pvlogfsBinary: "/opt/biunivers/bin/biunivers-pvlogfs",
+      workspaceCowScannerBinary:
+        "/opt/biunivers/bin/biunivers-workspace-cow-scan",
       authenticationTokenHex: TOKEN,
     });
     expect(config.executors).toEqual([
