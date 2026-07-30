@@ -119,6 +119,7 @@ describe("MountSupervisor", () => {
     expect(calls[1]).toEqual([
       "/usr/bin/fuse-overlayfs",
       [
+        "-f",
         "-o",
         `lowerdir=${paths.lower},upperdir=${paths.upper},workdir=${paths.work},allow_other`,
         paths.merged,

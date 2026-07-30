@@ -116,6 +116,7 @@ export class MountSupervisor {
       ]);
       await this.#waitUntilMounted(input.paths.lower, pvlogfs);
       overlay = this.#launcher.start(this.#overlayBinary, [
+        "-f",
         "-o",
         [
           `lowerdir=${input.paths.lower}`,

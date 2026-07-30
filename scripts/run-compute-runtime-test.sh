@@ -18,12 +18,17 @@ FIXTURE_FINISHED=false
 NODE_BIN="node"
 
 cleanup() {
+  local exit_code=$?
   if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
     kill -TERM "$DAEMON_PID"
     wait "$DAEMON_PID" || true
   fi
   if [[ -f "$FIXTURE_PATH" ]] && [[ "$FIXTURE_FINISHED" != true ]]; then
     "$NODE_BIN" scripts/compute-runtime-fixture.mjs fail "$FIXTURE_PATH" || true
+  fi
+  if [[ "$exit_code" -ne 0 ]] && [[ -f "$LOG_PATH" ]]; then
+    echo "Compute Runtime daemon 日志：" >&2
+    tail -n 100 "$LOG_PATH" >&2
   fi
 }
 trap cleanup EXIT
