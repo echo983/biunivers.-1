@@ -76,9 +76,9 @@ fn run() -> Result<(), String> {
         max_total_bytes: positive(&arguments[4], "max total bytes")? as u64,
     };
     let root = open_root(upper).map_err(|error| format!("open Upper: {error}"))?;
-    validate_xattrs(root.as_raw_fd(), "", true)?;
-    let first = scan(root.as_raw_fd(), &limits)?;
-    let second = scan(root.as_raw_fd(), &limits)?;
+    let root_opaque = validate_xattrs(root.as_raw_fd(), "", true)?;
+    let first = scan(root.as_raw_fd(), root_opaque, &limits)?;
+    let second = scan(root.as_raw_fd(), root_opaque, &limits)?;
     if first.entries != second.entries || first.total_file_bytes != second.total_file_bytes {
         return Err("Upper changed while it was being scanned".to_owned());
     }
@@ -94,13 +94,13 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn scan(root_fd: RawFd, limits: &Limits) -> Result<ScanState<'_>, String> {
+fn scan(root_fd: RawFd, root_opaque: bool, limits: &Limits) -> Result<ScanState<'_>, String> {
     let mut state = ScanState {
         limits,
         entries: Vec::new(),
         total_file_bytes: 0,
     };
-    scan_directory(root_fd, "", 0, &mut state)?;
+    scan_directory(root_fd, "", 0, root_opaque, &mut state)?;
     state
         .entries
         .sort_by(|left, right| left.path.cmp(&right.path));
@@ -111,6 +111,7 @@ fn scan_directory(
     directory_fd: RawFd,
     parent_path: &str,
     depth: usize,
+    opaque: bool,
     state: &mut ScanState<'_>,
 ) -> Result<(), String> {
     if depth > state.limits.max_depth {
@@ -158,6 +159,14 @@ fn scan_directory(
         } else {
             format!("{parent_path}/{name}")
         };
+        if name == ".wh..opq" || name == ".wh..wh..opq" {
+            if !opaque {
+                unsafe { libc::closedir(directory) };
+                return Err(path_error(&path, "reserved overlay marker is invalid"));
+            }
+            validate_opaque_marker(directory_fd, name_bytes, &path)?;
+            continue;
+        }
         scan_entry(directory_fd, name_bytes, &path, depth + 1, state)?;
     }
 }
@@ -257,7 +266,34 @@ fn scan_entry(
             mtime_ns: mtime_ns(&confirmed).to_string(),
             opaque,
         });
-        scan_directory(owned.as_raw_fd(), path, depth, state)?;
+        scan_directory(owned.as_raw_fd(), path, depth, opaque, state)?;
+    }
+    Ok(())
+}
+
+fn validate_opaque_marker(parent_fd: RawFd, name: &[u8], path: &str) -> Result<(), String> {
+    let name_c = CString::new(name).map_err(|_| path_error(path, "marker name contains NUL"))?;
+    let mut status: libc::stat = unsafe { std::mem::zeroed() };
+    if unsafe {
+        libc::fstatat(
+            parent_fd,
+            name_c.as_ptr(),
+            &mut status,
+            libc::AT_SYMLINK_NOFOLLOW,
+        )
+    } != 0
+    {
+        return Err(path_io(path, io::Error::last_os_error()));
+    }
+    let valid = if name == b".wh..opq" {
+        status.st_mode & libc::S_IFMT == libc::S_IFCHR && status.st_rdev == 0
+    } else {
+        status.st_mode & libc::S_IFMT == libc::S_IFREG
+            && status.st_size == 0
+            && status.st_nlink == 1
+    };
+    if !valid {
+        return Err(path_error(path, "opaque marker representation is invalid"));
     }
     Ok(())
 }
@@ -410,7 +446,7 @@ mod tests {
             0
         );
 
-        let result = scan(file.as_raw_fd(), &limits).unwrap();
+        let result = scan(file.as_raw_fd(), false, &limits).unwrap();
         assert_eq!(result.total_file_bytes, 5);
         assert_eq!(result.entries.len(), 2);
         assert_eq!(result.entries[0].path, "docs");
@@ -425,7 +461,7 @@ mod tests {
         write(root.join("source"), b"x").unwrap();
         symlink("source", root.join("link")).unwrap();
         assert!(
-            scan(file.as_raw_fd(), &limits)
+            scan(file.as_raw_fd(), false, &limits)
                 .unwrap_err()
                 .contains("symlink")
         );
@@ -433,7 +469,7 @@ mod tests {
 
         hard_link(root.join("source"), root.join("hard")).unwrap();
         assert!(
-            scan(file.as_raw_fd(), &limits)
+            scan(file.as_raw_fd(), false, &limits)
                 .unwrap_err()
                 .contains("hardlink")
         );
@@ -454,7 +490,7 @@ mod tests {
             0
         );
         assert!(
-            scan(file.as_raw_fd(), &limits)
+            scan(file.as_raw_fd(), false, &limits)
                 .unwrap_err()
                 .contains("unsupported xattr")
         );
