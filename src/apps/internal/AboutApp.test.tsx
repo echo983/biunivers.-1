@@ -13,7 +13,7 @@ describe("AboutApp", () => {
     expect(screen.getByText(`版本 ${packageJson.version}`)).toBeVisible();
     expect(
       screen.getByText(
-        "File Service · 批量操作 · ZIP 导出 · Wormhole · Resource Session v1",
+        "File Service · 批量操作 · ZIP 导出 · Wormhole · Resource Session v1 · Workspace",
       ),
     ).toBeVisible();
     expect(screen.getByText("Static App v1 · Open Resource v1/v1.1")).toBeVisible();

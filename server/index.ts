@@ -31,6 +31,7 @@ import { WormholeRuntime } from "./wormhole/wormholeRuntime.js";
 import { WormholeControlService } from "./wormhole/wormholeControlService.js";
 import { WormholeFileService } from "./wormhole/wormholeFileService.js";
 import { createWormholeRouter } from "./wormhole/wormholeRouter.js";
+import { WorkspaceControlService } from "./workspace/workspaceControlService.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -101,6 +102,7 @@ async function main() {
       "system.about",
       "system.files",
       "system.wormhole",
+      "system.workspaces",
     ]),
   });
   const appService = new AppService({
@@ -198,6 +200,18 @@ async function main() {
           writerId: config.fileService.writerId,
         })
       : undefined;
+  const workspaceControl =
+    fileCapabilities &&
+    fileService.repository &&
+    fileService.refStore &&
+    config.fileService
+      ? new WorkspaceControlService({
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          capabilities: fileCapabilities,
+          writerId: config.fileService.writerId,
+        })
+      : undefined;
   const wormholeRuntime =
     fileCapabilities && fileService.status.mode === "ready"
       ? new WormholeRuntime()
@@ -277,6 +291,12 @@ async function main() {
         icon: "/icons/wormhole.svg",
         desktop: false,
       },
+      {
+        id: "system.workspaces",
+        name: "工作空间",
+        icon: "/icons/workspaces.svg",
+        desktop: false,
+      },
     ],
     ...(fileService.repository && fileService.refStore
       ? {
@@ -317,10 +337,15 @@ async function main() {
     fileHost,
     fileServiceBackup,
     fileServiceGcScanner,
-    internalFileAppIds: new Set(["system.files", "system.wormhole"]),
+    internalFileAppIds: new Set([
+      "system.files",
+      "system.wormhole",
+      "system.workspaces",
+    ]),
     internalFileManager,
     internalZipExporter: internalFileManager,
     wormholeControl,
+    workspaceControl,
     wormholeRouter,
     openResourceResolver,
     openResourceLaunchService,

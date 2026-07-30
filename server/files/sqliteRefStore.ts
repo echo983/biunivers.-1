@@ -542,6 +542,32 @@ export class SqliteRefStore {
     return rows.map(mapWorkspace);
   }
 
+  setWorkspaceRetention(
+    workspaceIdHex: string,
+    retention: WorkspaceRetention,
+    updatedAtMs: number,
+  ): WorkspaceRecord {
+    validateId(workspaceIdHex, "workspace ID");
+    if (retention !== "TEMPORARY" && retention !== "KEPT") {
+      throw invalid("Workspace retention is invalid.");
+    }
+    validateTimestamp(updatedAtMs);
+    return this.#database.transaction(() => {
+      const current = this.getWorkspace(workspaceIdHex);
+      if (updatedAtMs < current.updatedAtMs) {
+        throw invalid("Workspace update timestamp predates its current state.");
+      }
+      this.#database
+        .prepare(
+          `UPDATE workspace_records
+           SET retention = ?, updated_at_ms = ?
+           WHERE workspace_id = ?`,
+        )
+        .run(retention, updatedAtMs, fromHex(workspaceIdHex));
+      return this.getWorkspace(workspaceIdHex);
+    })();
+  }
+
   deleteWorkspace(workspaceIdHex: string): void {
     validateId(workspaceIdHex, "workspace ID");
     this.#database.transaction(() => {
