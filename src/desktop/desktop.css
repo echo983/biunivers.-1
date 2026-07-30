@@ -1505,6 +1505,7 @@
   padding: 18px;
   overflow: auto;
   gap: 14px;
+  color: #1f2937;
   border: 1px solid #c9d1dd;
   border-radius: 10px;
   background: #fff;
@@ -1530,10 +1531,15 @@
 
 .file-manager-dialog select {
   padding: 7px 9px;
-  color: inherit;
-  border: 1px solid var(--surface-border);
+  color: #1f2937;
+  border: 1px solid #aeb9c9;
   border-radius: 7px;
-  background: #202632;
+  background: #fff;
+}
+
+.file-manager-dialog select option {
+  color: #1f2937;
+  background: #fff;
 }
 
 .file-manager-dialog form > div,
