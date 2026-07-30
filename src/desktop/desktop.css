@@ -633,8 +633,7 @@
   gap: 8px;
 }
 
-.workspace-app__files > button,
-.workspace-app__file {
+.workspace-app__files > button {
   display: grid;
   grid-template-columns: 32px 1fr;
   gap: 2px 8px;
@@ -644,14 +643,18 @@
 }
 
 .workspace-app__file {
-  border: 1px solid var(--surface-border);
-  border-radius: 7px;
   background: rgb(255 255 255 / 3%);
 }
 
-.workspace-app__files > button small,
-.workspace-app__file small {
+.workspace-app__files > button > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.workspace-app__files > button small {
   grid-column: 2;
+  min-width: 0;
 }
 
 .workspace-app__empty {

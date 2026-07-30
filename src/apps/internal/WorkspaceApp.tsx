@@ -218,9 +218,9 @@ export function WorkspaceApp() {
               <button type="button" onClick={() => setDirectoryId(undefined)}>
                 /
               </button>
-              {listing?.breadcrumbs?.map((entry) => (
+              {listing?.breadcrumbs?.map((entry, index) => (
                 <span key={entry.entryId}>
-                  {" / "}
+                  {index === 0 ? "" : " / "}
                   <button
                     type="button"
                     onClick={() => setDirectoryId(entry.entryId)}
@@ -236,10 +236,15 @@ export function WorkspaceApp() {
                 <WorkspaceEntry
                   key={entry.entryId}
                   entry={entry}
-                  onOpen={() =>
-                    entry.kind === "directory" &&
-                    setDirectoryId(entry.entryId)
-                  }
+                  onActivate={() => {
+                    if (entry.kind === "directory") {
+                      setDirectoryId(entry.entryId);
+                      return;
+                    }
+                    setNotice(
+                      `“${entry.name}”属于隔离 Workspace；当前阶段仅支持只读目录浏览。`,
+                    );
+                  }}
                 />
               ))}
             </div>
@@ -254,10 +259,10 @@ export function WorkspaceApp() {
 
 function WorkspaceEntry({
   entry,
-  onOpen,
+  onActivate,
 }: {
   entry: FileEntry;
-  onOpen: () => void;
+  onActivate: () => void;
 }) {
   const content = (
     <>
@@ -272,13 +277,11 @@ function WorkspaceEntry({
       </small>
     </>
   );
-  if (entry.kind === "file") {
-    return <div className="workspace-app__file">{content}</div>;
-  }
   return (
     <button
       type="button"
-      onDoubleClick={onOpen}
+      className={entry.kind === "file" ? "workspace-app__file" : undefined}
+      onDoubleClick={onActivate}
     >
       {content}
     </button>
