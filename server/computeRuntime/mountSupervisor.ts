@@ -132,7 +132,6 @@ export class MountSupervisor {
         input.paths.merged,
       ]);
       await this.#waitUntilMounted(input.paths.merged, overlay);
-      await this.#mounts.makeWorkspaceWritable(input.paths.merged);
       this.#active.set(input.runIdHex, {
         paths: input.paths,
         pvlogfs,

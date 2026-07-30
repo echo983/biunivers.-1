@@ -135,7 +135,6 @@ describe("MountSupervisor", () => {
     await supervisor.cleanup(runIdHex);
     expect(mounts.log).toEqual([
       "writable:upper",
-      "writable:merged",
       "unmount:merged",
       "stop:overlay:SIGTERM",
       "unmount:lower",
