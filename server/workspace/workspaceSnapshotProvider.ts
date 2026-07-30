@@ -109,7 +109,13 @@ function projectStableInodes(index: EntryIndex): WorkspaceSnapshotEntry[] {
   }
   const ordered = reachable
     .filter((entry) => entry.entryIdHex !== root.entryIdHex)
-    .sort((left, right) => left.entryIdHex.localeCompare(right.entryIdHex));
+    .sort((left, right) =>
+      left.entryIdHex < right.entryIdHex
+        ? -1
+        : left.entryIdHex > right.entryIdHex
+          ? 1
+          : 0,
+    );
   const inodeByEntryId = new Map<string, number>([[root.entryIdHex, 1]]);
   ordered.forEach((entry, position) => {
     inodeByEntryId.set(entry.entryIdHex, position + 2);
