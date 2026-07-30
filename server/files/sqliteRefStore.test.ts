@@ -214,6 +214,264 @@ describe("SqliteRefStore", () => {
     store.close();
   });
 
+  it("holds one write lease through RUNNING, STOPPED, and COMMITTING", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const workspace = store.createWorkspace(workspaceInput());
+    const firstRunId = "90909090909090909090909090909090";
+    const created = store.createWorkspaceRun({
+      runIdHex: firstRunId,
+      workspaceIdHex,
+      executorId: "system.diagnostic",
+      inputHeadFidHex: workspace.baselineHeadFidHex,
+      createdAtMs: workspace.createdAtMs + 1,
+    });
+    expect(created.state).toBe("PREPARING");
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBe(
+      firstRunId,
+    );
+    expect(() =>
+      store.createWorkspaceRun({
+        runIdHex: "91919191919191919191919191919191",
+        workspaceIdHex,
+        executorId: "system.diagnostic",
+        inputHeadFidHex: workspace.baselineHeadFidHex,
+        createdAtMs: workspace.createdAtMs + 2,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "WORKSPACE_ACTIVE" }) as RefStoreError,
+    );
+    expect(() => store.deleteWorkspace(workspaceIdHex)).toThrowError(
+      expect.objectContaining({ code: "WORKSPACE_ACTIVE" }) as RefStoreError,
+    );
+
+    const running = store.transitionWorkspaceRun({
+      runIdHex: firstRunId,
+      expectedState: "PREPARING",
+      newState: "RUNNING",
+      runtimeIdentity: "container-1",
+      timestampMs: workspace.createdAtMs + 3,
+    });
+    expect(running).toMatchObject({
+      state: "RUNNING",
+      runtimeIdentity: "container-1",
+      startedAtMs: workspace.createdAtMs + 3,
+      finishedAtMs: null,
+    });
+    expect(
+      store.transitionWorkspaceRun({
+        runIdHex: firstRunId,
+        expectedState: "RUNNING",
+        newState: "STOPPED",
+        timestampMs: workspace.createdAtMs + 4,
+      }).state,
+    ).toBe("STOPPED");
+    expect(
+      store.transitionWorkspaceRun({
+        runIdHex: firstRunId,
+        expectedState: "STOPPED",
+        newState: "COMMITTING",
+        timestampMs: workspace.createdAtMs + 5,
+      }).state,
+    ).toBe("COMMITTING");
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBe(
+      firstRunId,
+    );
+
+    const conflict = store.transitionWorkspaceRun({
+      runIdHex: firstRunId,
+      expectedState: "COMMITTING",
+      newState: "CONFLICT",
+      outputHeadFidHex: "92929292929292929292929292929292",
+      errorCode: "REF_CONFLICT",
+      timestampMs: workspace.createdAtMs + 6,
+    });
+    expect(conflict).toMatchObject({
+      state: "CONFLICT",
+      outputHeadFidHex: "92929292929292929292929292929292",
+      errorCode: "REF_CONFLICT",
+      finishedAtMs: workspace.createdAtMs + 6,
+    });
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    expect(store.listWorkspaceRuns(workspaceIdHex)).toEqual([conflict]);
+
+    const second = store.createWorkspaceRun({
+      runIdHex: "93939393939393939393939393939393",
+      workspaceIdHex,
+      executorId: "system.diagnostic",
+      inputHeadFidHex: workspace.baselineHeadFidHex,
+      createdAtMs: workspace.createdAtMs + 7,
+    });
+    expect(second.state).toBe("PREPARING");
+    store.close();
+  });
+
+  it("rejects stale, illegal, or incomplete Run transitions without releasing the lease", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const workspace = store.createWorkspace(workspaceInput());
+    const runIdHex = "94949494949494949494949494949494";
+    store.createWorkspaceRun({
+      runIdHex,
+      workspaceIdHex,
+      executorId: "system.diagnostic",
+      inputHeadFidHex: workspace.baselineHeadFidHex,
+      createdAtMs: workspace.createdAtMs + 5,
+    });
+
+    expect(() =>
+      store.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "PREPARING",
+        newState: "STOPPED",
+        timestampMs: workspace.createdAtMs + 6,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
+    );
+    expect(() =>
+      store.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "PREPARING",
+        newState: "RUNNING",
+        timestampMs: workspace.createdAtMs + 6,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
+    );
+    expect(() =>
+      store.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "PREPARING",
+        newState: "FAILED",
+        errorCode: "PREPARE_FAILED",
+        timestampMs: workspace.createdAtMs,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
+    );
+    expect(store.getWorkspaceRun(runIdHex).state).toBe("PREPARING");
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBe(
+      runIdHex,
+    );
+
+    const failed = store.transitionWorkspaceRun({
+      runIdHex,
+      expectedState: "PREPARING",
+      newState: "FAILED",
+      errorCode: "PREPARE_FAILED",
+      timestampMs: workspace.createdAtMs + 7,
+    });
+    expect(failed.state).toBe("FAILED");
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    expect(() =>
+      store.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "PREPARING",
+        newState: "RUNNING",
+        runtimeIdentity: "container-late",
+        timestampMs: workspace.createdAtMs + 8,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "RUN_STATE_CONFLICT" }) as RefStoreError,
+    );
+    store.close();
+  });
+
+  it("rejects a Run whose input Head is not the current Workspace Ref", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    store.createWorkspace(workspaceInput());
+
+    expect(() =>
+      store.createWorkspaceRun({
+        runIdHex: "95959595959595959595959595959595",
+        workspaceIdHex,
+        executorId: "system.diagnostic",
+        inputHeadFidHex: "96969696969696969696969696969696",
+        createdAtMs: initial.updatedAtMs + 2,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "REF_CONFLICT" }) as RefStoreError,
+    );
+    expect(store.listWorkspaceRuns(workspaceIdHex)).toEqual([]);
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    store.close();
+  });
+
+  it("atomically publishes a committed Run with its Workspace Ref and lease release", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const workspace = store.createWorkspace(workspaceInput());
+    const runIdHex = "97979797979797979797979797979797";
+    prepareCommittingRun(store, workspace, runIdHex);
+
+    const result = store.commitWorkspaceRun({
+      runIdHex,
+      expectedHeadFidHex: workspace.baselineHeadFidHex,
+      expectedRevision: 0,
+      newHeadFidHex: "98989898989898989898989898989898",
+      newRevision: 1,
+      timestampMs: workspace.createdAtMs + 10,
+    });
+    expect(result).toMatchObject({
+      outcome: "committed",
+      run: {
+        state: "COMMITTED",
+        outputHeadFidHex: "98989898989898989898989898989898",
+        errorCode: null,
+      },
+      ref: {
+        revision: 1,
+        headFidHex: "98989898989898989898989898989898",
+      },
+    });
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    store.close();
+  });
+
+  it("records a lost Ref CAS as CONFLICT without overwriting the winner", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const workspace = store.createWorkspace(workspaceInput());
+    const runIdHex = "99999999999999999999999999999999";
+    prepareCommittingRun(store, workspace, runIdHex);
+    const winnerHead = "a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0";
+    store.compareAndSwap({
+      refId: workspace.refId,
+      expectedHeadFidHex: workspace.baselineHeadFidHex,
+      expectedRevision: 0,
+      newHeadFidHex: winnerHead,
+      newRevision: 1,
+      updatedAtMs: workspace.createdAtMs + 9,
+    });
+
+    const result = store.commitWorkspaceRun({
+      runIdHex,
+      expectedHeadFidHex: workspace.baselineHeadFidHex,
+      expectedRevision: 0,
+      newHeadFidHex: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      newRevision: 1,
+      timestampMs: workspace.createdAtMs + 10,
+    });
+    expect(result).toMatchObject({
+      outcome: "conflict",
+      run: {
+        state: "CONFLICT",
+        outputHeadFidHex: "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        errorCode: "REF_CONFLICT",
+      },
+      ref: { headFidHex: winnerHead, revision: 1 },
+    });
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    store.close();
+  });
+
   it("publishes a fully initialized genesis database in one create-only step", async () => {
     const path = await databasePath();
     const store = await SqliteRefStore.initializeWithRef(path, initial);
@@ -413,6 +671,39 @@ function createLegacySchemaV1(path: string): void {
     PRAGMA user_version = 1;
   `);
   database.close();
+}
+
+function prepareCommittingRun(
+  store: SqliteRefStore,
+  workspace: ReturnType<SqliteRefStore["getWorkspace"]>,
+  runIdHex: string,
+): void {
+  store.createWorkspaceRun({
+    runIdHex,
+    workspaceIdHex: workspace.workspaceIdHex,
+    executorId: "system.diagnostic",
+    inputHeadFidHex: workspace.baselineHeadFidHex,
+    createdAtMs: workspace.createdAtMs + 1,
+  });
+  store.transitionWorkspaceRun({
+    runIdHex,
+    expectedState: "PREPARING",
+    newState: "RUNNING",
+    runtimeIdentity: `container-${runIdHex.slice(0, 4)}`,
+    timestampMs: workspace.createdAtMs + 2,
+  });
+  store.transitionWorkspaceRun({
+    runIdHex,
+    expectedState: "RUNNING",
+    newState: "STOPPED",
+    timestampMs: workspace.createdAtMs + 3,
+  });
+  store.transitionWorkspaceRun({
+    runIdHex,
+    expectedState: "STOPPED",
+    newState: "COMMITTING",
+    timestampMs: workspace.createdAtMs + 4,
+  });
 }
 
 function readSchema(path: string): {

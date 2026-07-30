@@ -60,6 +60,63 @@ export interface CreateWorkspaceInput extends WorkspaceRecord {
   ref: CreateRefInput;
 }
 
+export type WorkspaceRunState =
+  | "PREPARING"
+  | "RUNNING"
+  | "STOPPED"
+  | "COMMITTING"
+  | "COMMITTED"
+  | "CONFLICT"
+  | "FAILED"
+  | "DISCARDED";
+
+export interface WorkspaceRunRecord {
+  runIdHex: string;
+  workspaceIdHex: string;
+  executorId: string;
+  inputHeadFidHex: string;
+  outputHeadFidHex: string | null;
+  state: WorkspaceRunState;
+  runtimeIdentity: string | null;
+  errorCode: string | null;
+  createdAtMs: number;
+  startedAtMs: number | null;
+  finishedAtMs: number | null;
+}
+
+export interface CreateWorkspaceRunInput {
+  runIdHex: string;
+  workspaceIdHex: string;
+  executorId: string;
+  inputHeadFidHex: string;
+  createdAtMs: number;
+}
+
+export interface TransitionWorkspaceRunInput {
+  runIdHex: string;
+  expectedState: WorkspaceRunState;
+  newState: Exclude<WorkspaceRunState, "COMMITTED">;
+  timestampMs: number;
+  runtimeIdentity?: string;
+  outputHeadFidHex?: string;
+  errorCode?: string;
+}
+
+export interface CommitWorkspaceRunInput {
+  runIdHex: string;
+  expectedHeadFidHex: string;
+  expectedRevision: number;
+  newHeadFidHex: string;
+  newRevision: number;
+  timestampMs: number;
+}
+
+export interface CommitWorkspaceRunResult {
+  outcome: "committed" | "conflict";
+  run: WorkspaceRunRecord;
+  ref: FilesystemRef;
+}
+
 export type RefStoreErrorCode =
   | "REFSTORE_MISSING"
   | "REFSTORE_CORRUPT"
@@ -70,6 +127,9 @@ export type RefStoreErrorCode =
   | "WORKSPACE_ALREADY_EXISTS"
   | "WORKSPACE_NOT_FOUND"
   | "WORKSPACE_ACTIVE"
+  | "RUN_ALREADY_EXISTS"
+  | "RUN_NOT_FOUND"
+  | "RUN_STATE_CONFLICT"
   | "INVALID_REF_VALUE";
 
 export class RefStoreError extends Error {
@@ -497,6 +557,289 @@ export class SqliteRefStore {
     })();
   }
 
+  createWorkspaceRun(input: CreateWorkspaceRunInput): WorkspaceRunRecord {
+    validateId(input.runIdHex, "Run ID");
+    validateId(input.workspaceIdHex, "workspace ID");
+    validateExecutorId(input.executorId);
+    validateFid(input.inputHeadFidHex);
+    validateTimestamp(input.createdAtMs);
+    return this.#database.transaction(() => {
+      const workspace = this.getWorkspace(input.workspaceIdHex);
+      if (workspace.state !== "READY" || workspace.activeWriteRunIdHex) {
+        throw new RefStoreError(
+          "WORKSPACE_ACTIVE",
+          "Workspace is not available for a new write Run.",
+        );
+      }
+      const ref = this.getRef(workspace.refId);
+      if (ref.headFidHex !== input.inputHeadFidHex) {
+        throw new RefStoreError(
+          "REF_CONFLICT",
+          "Run input Head is not the current Workspace Ref.",
+        );
+      }
+      try {
+        this.#database
+          .prepare(
+            `INSERT INTO workspace_runs (
+               run_id, workspace_id, executor_id, input_head_fid,
+               output_head_fid, state, runtime_identity, error_code,
+               created_at_ms, started_at_ms, finished_at_ms
+             ) VALUES (?, ?, ?, ?, NULL, 'PREPARING', NULL, NULL, ?, NULL, NULL)`,
+          )
+          .run(
+            fromHex(input.runIdHex),
+            fromHex(input.workspaceIdHex),
+            input.executorId,
+            fromHex(input.inputHeadFidHex),
+            input.createdAtMs,
+          );
+      } catch (error) {
+        if (isSqliteConstraint(error)) {
+          throw new RefStoreError(
+            "RUN_ALREADY_EXISTS",
+            "Run ID already exists.",
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      const leased = this.#database
+        .prepare(
+          `UPDATE workspace_records
+           SET active_write_run_id = ?, updated_at_ms = ?
+           WHERE workspace_id = ? AND active_write_run_id IS NULL`,
+        )
+        .run(
+          fromHex(input.runIdHex),
+          input.createdAtMs,
+          fromHex(input.workspaceIdHex),
+        );
+      if (leased.changes !== 1) {
+        throw new RefStoreError(
+          "WORKSPACE_ACTIVE",
+          "Workspace write lease was acquired concurrently.",
+        );
+      }
+      return this.getWorkspaceRun(input.runIdHex);
+    })();
+  }
+
+  getWorkspaceRun(runIdHex: string): WorkspaceRunRecord {
+    validateId(runIdHex, "Run ID");
+    const row = this.#database
+      .prepare(
+        `SELECT run_id, workspace_id, executor_id, input_head_fid,
+                output_head_fid, state, runtime_identity, error_code,
+                created_at_ms, started_at_ms, finished_at_ms
+         FROM workspace_runs
+         WHERE run_id = ?`,
+      )
+      .get(fromHex(runIdHex)) as WorkspaceRunRow | undefined;
+    if (!row) {
+      throw new RefStoreError("RUN_NOT_FOUND", "Workspace Run was not found.");
+    }
+    return mapWorkspaceRun(row);
+  }
+
+  listWorkspaceRuns(workspaceIdHex: string): WorkspaceRunRecord[] {
+    validateId(workspaceIdHex, "workspace ID");
+    this.getWorkspace(workspaceIdHex);
+    const rows = this.#database
+      .prepare(
+        `SELECT run_id, workspace_id, executor_id, input_head_fid,
+                output_head_fid, state, runtime_identity, error_code,
+                created_at_ms, started_at_ms, finished_at_ms
+         FROM workspace_runs
+         WHERE workspace_id = ?
+         ORDER BY created_at_ms, run_id`,
+      )
+      .all(fromHex(workspaceIdHex)) as WorkspaceRunRow[];
+    return rows.map(mapWorkspaceRun);
+  }
+
+  transitionWorkspaceRun(
+    input: TransitionWorkspaceRunInput,
+  ): WorkspaceRunRecord {
+    validateId(input.runIdHex, "Run ID");
+    validateTimestamp(input.timestampMs);
+    validateRunTransitionInput(input);
+    return this.#database.transaction(() => {
+      const current = this.getWorkspaceRun(input.runIdHex);
+      if (
+        input.timestampMs < current.createdAtMs ||
+        (current.startedAtMs !== null &&
+          input.timestampMs < current.startedAtMs)
+      ) {
+        throw invalid("Run transition timestamp moves backwards.");
+      }
+      if (current.state !== input.expectedState) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          `Run is ${current.state}, not ${input.expectedState}.`,
+        );
+      }
+      if (!isAllowedRunTransition(current.state, input.newState)) {
+        throw invalid(
+          `Run transition ${current.state} → ${input.newState} is not allowed.`,
+        );
+      }
+      const workspace = this.getWorkspace(current.workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== current.runIdHex) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Run no longer owns the Workspace write lease.",
+        );
+      }
+      const terminal = isTerminalRunState(input.newState);
+      const result = this.#database
+        .prepare(
+          `UPDATE workspace_runs
+           SET state = ?,
+               runtime_identity = COALESCE(?, runtime_identity),
+               output_head_fid = COALESCE(?, output_head_fid),
+               error_code = ?,
+               started_at_ms = CASE
+                 WHEN ? = 'RUNNING' THEN ? ELSE started_at_ms END,
+               finished_at_ms = CASE
+                 WHEN ? = 1 THEN ? ELSE finished_at_ms END
+           WHERE run_id = ? AND state = ?`,
+        )
+        .run(
+          input.newState,
+          input.runtimeIdentity ?? null,
+          input.outputHeadFidHex
+            ? fromHex(input.outputHeadFidHex)
+            : null,
+          input.errorCode ?? null,
+          input.newState,
+          input.timestampMs,
+          terminal ? 1 : 0,
+          input.timestampMs,
+          fromHex(input.runIdHex),
+          input.expectedState,
+        );
+      if (result.changes !== 1) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Run changed before its transition was published.",
+        );
+      }
+      if (terminal) {
+        const released = this.#database
+          .prepare(
+            `UPDATE workspace_records
+             SET active_write_run_id = NULL, updated_at_ms = ?
+             WHERE workspace_id = ? AND active_write_run_id = ?`,
+          )
+          .run(
+            input.timestampMs,
+            fromHex(current.workspaceIdHex),
+            fromHex(current.runIdHex),
+          );
+        if (released.changes !== 1) {
+          throw new RefStoreError(
+            "RUN_STATE_CONFLICT",
+            "Workspace write lease could not be released.",
+          );
+        }
+      }
+      return this.getWorkspaceRun(input.runIdHex);
+    })();
+  }
+
+  commitWorkspaceRun(
+    input: CommitWorkspaceRunInput,
+  ): CommitWorkspaceRunResult {
+    validateId(input.runIdHex, "Run ID");
+    validateFid(input.expectedHeadFidHex);
+    validateFid(input.newHeadFidHex);
+    validateSafeInteger(input.expectedRevision, "expected revision");
+    validateSafeInteger(input.newRevision, "new revision");
+    validateTimestamp(input.timestampMs);
+    if (input.newRevision !== input.expectedRevision + 1) {
+      throw invalid("A committed Run must advance revision by exactly one.");
+    }
+    return this.#database.transaction(() => {
+      const run = this.getWorkspaceRun(input.runIdHex);
+      if (run.state !== "COMMITTING") {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          `Run is ${run.state}, not COMMITTING.`,
+        );
+      }
+      if (
+        run.inputHeadFidHex !== input.expectedHeadFidHex ||
+        input.timestampMs < run.createdAtMs ||
+        (run.startedAtMs !== null && input.timestampMs < run.startedAtMs)
+      ) {
+        throw invalid("Run commit input does not match its fixed input Head.");
+      }
+      const workspace = this.getWorkspace(run.workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== run.runIdHex) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Run no longer owns the Workspace write lease.",
+        );
+      }
+      const updated = this.#database
+        .prepare(
+          `UPDATE filesystem_refs
+           SET head_fid = ?, revision = ?, updated_at_ms = ?
+           WHERE ref_id = ? AND head_fid = ? AND revision = ?`,
+        )
+        .run(
+          fromHex(input.newHeadFidHex),
+          input.newRevision,
+          input.timestampMs,
+          workspace.refId,
+          fromHex(input.expectedHeadFidHex),
+          input.expectedRevision,
+        );
+      const committed = updated.changes === 1;
+      const state: WorkspaceRunState = committed ? "COMMITTED" : "CONFLICT";
+      this.#database
+        .prepare(
+          `UPDATE workspace_runs
+           SET state = ?, output_head_fid = ?, error_code = ?,
+               finished_at_ms = ?
+           WHERE run_id = ? AND state = 'COMMITTING'`,
+        )
+        .run(
+          state,
+          fromHex(input.newHeadFidHex),
+          committed ? null : "REF_CONFLICT",
+          input.timestampMs,
+          fromHex(input.runIdHex),
+        );
+      const released = this.#database
+        .prepare(
+          `UPDATE workspace_records
+           SET active_write_run_id = NULL, updated_at_ms = ?
+           WHERE workspace_id = ? AND active_write_run_id = ?`,
+        )
+        .run(
+          input.timestampMs,
+          fromHex(run.workspaceIdHex),
+          fromHex(run.runIdHex),
+        );
+      if (released.changes !== 1) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Workspace write lease could not be released.",
+        );
+      }
+      const outcome: CommitWorkspaceRunResult["outcome"] = committed
+        ? "committed"
+        : "conflict";
+      return {
+        outcome,
+        run: this.getWorkspaceRun(run.runIdHex),
+        ref: this.getRef(workspace.refId),
+      };
+    })();
+  }
+
   async backupTo(destinationPath: string): Promise<void> {
     await mkdir(dirname(destinationPath), { recursive: true });
     const temporaryPath = join(
@@ -548,6 +891,20 @@ interface WorkspaceRow {
   active_write_run_id: Buffer | null;
   created_at_ms: number;
   updated_at_ms: number;
+}
+
+interface WorkspaceRunRow {
+  run_id: Buffer;
+  workspace_id: Buffer;
+  executor_id: string;
+  input_head_fid: Buffer;
+  output_head_fid: Buffer | null;
+  state: WorkspaceRunState;
+  runtime_identity: string | null;
+  error_code: string | null;
+  created_at_ms: number;
+  started_at_ms: number | null;
+  finished_at_ms: number | null;
 }
 
 function configureDatabase(database: Database.Database): void {
@@ -725,6 +1082,23 @@ function mapWorkspace(row: WorkspaceRow): WorkspaceRecord {
   };
 }
 
+function mapWorkspaceRun(row: WorkspaceRunRow): WorkspaceRunRecord {
+  return {
+    runIdHex: toHex(row.run_id),
+    workspaceIdHex: toHex(row.workspace_id),
+    executorId: row.executor_id,
+    inputHeadFidHex: toHex(row.input_head_fid),
+    outputHeadFidHex:
+      row.output_head_fid === null ? null : toHex(row.output_head_fid),
+    state: row.state,
+    runtimeIdentity: row.runtime_identity,
+    errorCode: row.error_code,
+    createdAtMs: row.created_at_ms,
+    startedAtMs: row.started_at_ms,
+    finishedAtMs: row.finished_at_ms,
+  };
+}
+
 function validateRef(input: CreateRefInput): void {
   validateRefId(input.refId);
   validateId(input.lineageIdHex, "lineage ID");
@@ -787,6 +1161,65 @@ function validateWorkspaceName(name: string): void {
   ) {
     throw invalid("Workspace name is invalid.");
   }
+}
+
+function validateExecutorId(executorId: string): void {
+  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(executorId)) {
+    throw invalid("Executor ID is invalid.");
+  }
+}
+
+function validateRunTransitionInput(
+  input: TransitionWorkspaceRunInput,
+): void {
+  if (input.runtimeIdentity !== undefined) {
+    if (
+      input.newState !== "RUNNING" ||
+      input.runtimeIdentity.length === 0 ||
+      Buffer.byteLength(input.runtimeIdentity) > 255
+    ) {
+      throw invalid("Runtime identity is invalid for this transition.");
+    }
+  } else if (input.newState === "RUNNING") {
+    throw invalid("RUNNING requires a Runtime identity.");
+  }
+  if (input.outputHeadFidHex !== undefined) {
+    validateFid(input.outputHeadFidHex);
+    if (input.newState !== "CONFLICT") {
+      throw invalid("Output Head is only accepted for a conflicting commit.");
+    }
+  }
+  if (input.errorCode !== undefined) {
+    if (
+      (input.newState !== "FAILED" && input.newState !== "CONFLICT") ||
+      !/^[A-Z][A-Z0-9_]{0,127}$/.test(input.errorCode)
+    ) {
+      throw invalid("Run error code is invalid for this transition.");
+    }
+  } else if (input.newState === "FAILED") {
+    throw invalid("FAILED requires an error code.");
+  }
+}
+
+function isAllowedRunTransition(
+  current: WorkspaceRunState,
+  next: WorkspaceRunState,
+): boolean {
+  const transitions: Record<WorkspaceRunState, readonly WorkspaceRunState[]> = {
+    PREPARING: ["RUNNING", "FAILED", "DISCARDED"],
+    RUNNING: ["STOPPED", "FAILED"],
+    STOPPED: ["COMMITTING", "FAILED", "DISCARDED"],
+    COMMITTING: ["CONFLICT", "FAILED"],
+    COMMITTED: [],
+    CONFLICT: [],
+    FAILED: [],
+    DISCARDED: [],
+  };
+  return transitions[current].includes(next);
+}
+
+function isTerminalRunState(state: WorkspaceRunState): boolean {
+  return ["COMMITTED", "CONFLICT", "FAILED", "DISCARDED"].includes(state);
 }
 
 function validateFid(value: string): void {
