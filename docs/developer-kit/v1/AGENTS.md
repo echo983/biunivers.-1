@@ -28,6 +28,7 @@ third-party application identity to the Biunivers host repository.
 If present, these are frozen protocol copies too:
 
 - `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md`
+- `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md`
 - `BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md`
 
 Do not reformat, translate, summarize, fix, or regenerate these files. Copy official replacements
@@ -64,6 +65,8 @@ Only follow this section when the repository includes
 - Treat `NO_LAUNCH_CONTEXT` as a normal desktop launch.
 - Use `resource.claimLaunch` for a host-delivered resource.
 - Use `resource.open` for an explicit user-driven file selection.
+- When the v1.1 declaration opts into `multiple: true`, use `resource.openMany` for an explicit
+  same-directory multi-file selection and preserve the returned order.
 - Use `resource.saveAs` for an explicit user-driven save target.
 - Send both the instance authorization and resource-session header on content GET and PUT.
 - Use a single HTTP Range for random access to large content and handle `206` and `416`.
