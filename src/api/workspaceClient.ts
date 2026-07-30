@@ -15,6 +15,29 @@ export interface WorkspaceSummary {
   revision: number;
 }
 
+export interface WorkspaceDiffEntryMetadata {
+  entryIdHex: string;
+  kind: "directory" | "file";
+  size: number;
+  mtimeMs: number;
+  contentFidHex: string | null;
+}
+
+export interface WorkspaceDiff {
+  workspaceIdHex: string;
+  baselineHeadFidHex: string;
+  currentHeadFidHex: string;
+  baselineRevision: number;
+  currentRevision: number;
+  changes: Array<{
+    path: string;
+    change: "added" | "modified" | "deleted";
+    before: WorkspaceDiffEntryMetadata | null;
+    after: WorkspaceDiffEntryMetadata | null;
+  }>;
+  summary: { added: number; modified: number; deleted: number };
+}
+
 export function createWorkspace(
   instanceToken: string,
   input: {
@@ -75,6 +98,16 @@ export function listWorkspaceFiles(
     : "";
   return request(
     `/api/v1/internal/workspaces/${workspaceIdHex}/files${query}`,
+    instanceToken,
+  );
+}
+
+export function getWorkspaceDiff(
+  instanceToken: string,
+  workspaceIdHex: string,
+): Promise<WorkspaceDiff> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/diff`,
     instanceToken,
   );
 }

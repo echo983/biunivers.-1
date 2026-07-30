@@ -64,7 +64,7 @@ type WormholeControlExecutor = Pick<
 >;
 type WorkspaceControlExecutor = Pick<
   WorkspaceControlService,
-  "create" | "list" | "setRetention" | "delete" | "listDirectory"
+  "create" | "list" | "setRetention" | "delete" | "listDirectory" | "diff"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -342,6 +342,26 @@ export function createDesktopServer({
               request.params.workspaceId,
               parent,
             ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/internal/workspaces/:workspaceId/diff",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.diff(instanceToken, request.params.workspaceId),
           );
       } catch (error) {
         next(error);

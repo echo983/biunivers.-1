@@ -49,12 +49,17 @@ describe("WorkspaceControlService", () => {
       checkpointFidHex: "55".repeat(16),
       entryCount: 2,
     });
+    const compare = vi.fn().mockResolvedValue({
+      workspaceIdHex: "11".repeat(16),
+      changes: [],
+    });
     const service = new WorkspaceControlService({
       repository: {} as ImmutableObjectRepository,
       refStore,
       capabilities,
       writerId: "test",
       deriver: { derive } as unknown as WorkspaceDeriver,
+      diff: { compare },
     });
 
     const created = await service.create(files.instanceToken, {
@@ -76,6 +81,13 @@ describe("WorkspaceControlService", () => {
     expect(() => service.list(thirdParty.instanceToken)).toThrowError(
       expect.objectContaining({ code: "PERMISSION_DENIED" }),
     );
+    await expect(
+      service.diff(workspaces.instanceToken, "11".repeat(16)),
+    ).resolves.toMatchObject({ changes: [] });
+    expect(compare).toHaveBeenCalledWith("11".repeat(16));
+    await expect(
+      service.diff(thirdParty.instanceToken, "11".repeat(16)),
+    ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     refStore.close();
   });
 });
