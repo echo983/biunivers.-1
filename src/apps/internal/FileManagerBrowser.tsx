@@ -66,7 +66,13 @@ type ToolbarIconName =
   | "download"
   | "open-with"
   | "add-desktop"
-  | "refresh";
+  | "refresh"
+  | "list-view"
+  | "icon-view";
+
+type FileManagerViewMode = "list" | "icons";
+
+const VIEW_MODE_STORAGE_KEY = "biunivers.file-manager.view-mode";
 
 type EditDialog =
   | { mode: "create-directory" }
@@ -110,6 +116,15 @@ export function FileManagerBrowser({
   const [notice, setNotice] = useState<string>();
   const [transfer, setTransfer] = useState<TransferState>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
+  const [viewMode, setViewMode] = useState<FileManagerViewMode>(() => {
+    try {
+      return localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "icons"
+        ? "icons"
+        : "list";
+    } catch {
+      return "list";
+    }
+  });
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const directoryNavigationPendingRef = useRef(false);
   const mutationPendingRef = useRef(false);
@@ -125,6 +140,14 @@ export function FileManagerBrowser({
     (state) => state.surface.items,
   );
   const addDesktopItem = useDesktopSurfaceStore((state) => state.add);
+  const changeViewMode = (next: FileManagerViewMode) => {
+    setViewMode(next);
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, next);
+    } catch {
+      // A blocked storage backend must not make the view switch unusable.
+    }
+  };
   const selectedEntries =
     listing?.entries.filter((entry) => selection.entryIds.has(entry.entryId)) ??
     [];
@@ -727,6 +750,30 @@ export function FileManagerBrowser({
               已选择 {selectedEntries.length} 项
             </span>
           )}
+          <div
+            className="file-manager-app__view-switch"
+            role="group"
+            aria-label="视图"
+          >
+            <button
+              type="button"
+              aria-label="列表视图"
+              title="列表视图"
+              aria-pressed={viewMode === "list"}
+              onClick={() => changeViewMode("list")}
+            >
+              <ToolbarIcon kind="list-view" />
+            </button>
+            <button
+              type="button"
+              aria-label="图标视图"
+              title="图标视图"
+              aria-pressed={viewMode === "icons"}
+              onClick={() => changeViewMode("icons")}
+            >
+              <ToolbarIcon kind="icon-view" />
+            </button>
+          </div>
         </div>
         <nav aria-label="当前位置" className="file-manager-app__breadcrumbs">
           <button type="button" onClick={() => navigateTo(-1)}>
@@ -778,7 +825,7 @@ export function FileManagerBrowser({
       >
         {loading ? (
           <p className="file-manager-app__empty">正在读取目录…</p>
-        ) : listing && listing.entries.length > 0 ? (
+        ) : listing && listing.entries.length > 0 && viewMode === "list" ? (
           <table>
             <thead>
               <tr>
@@ -836,6 +883,62 @@ export function FileManagerBrowser({
               ))}
             </tbody>
           </table>
+        ) : listing && listing.entries.length > 0 ? (
+          <div
+            className="file-manager-app__icon-grid"
+            role="grid"
+            aria-label="文件"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                setSelection({ entryIds: new Set() });
+              }
+            }}
+          >
+            {listing.entries.map((entry) => (
+              <button
+                key={entry.entryId}
+                type="button"
+                role="gridcell"
+                className={
+                  selection.entryIds.has(entry.entryId)
+                    ? "is-selected"
+                    : undefined
+                }
+                aria-selected={selection.entryIds.has(entry.entryId)}
+                onMouseDown={(event) => {
+                  if (event.shiftKey) event.preventDefault();
+                }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSelection((current) =>
+                    updateFileSelection(
+                      listing.entries.map((item) => item.entryId),
+                      current,
+                      entry.entryId,
+                      {
+                        toggle: event.ctrlKey || event.metaKey,
+                        range: event.shiftKey,
+                      },
+                    ),
+                  );
+                }}
+                onDoubleClick={() => activateEntry(entry)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") activateEntry(entry);
+                }}
+              >
+                <span
+                  className="file-manager-app__entry-icon"
+                  aria-hidden="true"
+                >
+                  {entry.kind === "directory" ? "📁" : "📄"}
+                </span>
+                <span className="file-manager-app__entry-name">
+                  {entry.name}
+                </span>
+              </button>
+            ))}
+          </div>
         ) : (
           <p className="file-manager-app__empty">此文件夹为空。</p>
         )}
@@ -1395,6 +1498,20 @@ function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
       "M4 17v-5h5",
       "M6.1 8a7 7 0 0 1 11.7-2L20 9",
       "M17.9 16a7 7 0 0 1-11.7 2L4 15",
+    ],
+    "list-view": [
+      "M4 6h2",
+      "M9 6h11",
+      "M4 12h2",
+      "M9 12h11",
+      "M4 18h2",
+      "M9 18h11",
+    ],
+    "icon-view": [
+      "M4 4h6v6H4z",
+      "M14 4h6v6h-6z",
+      "M4 14h6v6H4z",
+      "M14 14h6v6h-6z",
     ],
   };
   return (
