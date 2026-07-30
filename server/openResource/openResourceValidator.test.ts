@@ -9,6 +9,7 @@ import {
 } from "./openResourceValidator.js";
 
 let validator: OpenResourceValidator;
+let versionedValidator: OpenResourceValidator;
 
 beforeAll(async () => {
   validator = await OpenResourceValidator.create(
@@ -25,6 +26,40 @@ beforeAll(async () => {
       "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
     ),
   );
+  versionedValidator = await OpenResourceValidator.createRegistry([
+    {
+      protocol: "biunivers.open-resource/1",
+      schemaPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "biunivers.open-resource.schema.json",
+      ),
+      protocolPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+      ),
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+    },
+    {
+      protocol: "biunivers.open-resource/1.1",
+      schemaPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "biunivers.open-resource-v1.1.schema.json",
+      ),
+      protocolPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+      ),
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+    },
+  ]);
 });
 
 const textHandler = {
@@ -90,5 +125,19 @@ describe("OpenResourceValidator", () => {
         ],
       }),
     );
+  });
+
+  it("accepts v1.1 multiple handlers and rejects them under v1", () => {
+    const declaration = {
+      protocol: "biunivers.open-resource/1.1",
+      handlers: [{ ...textHandler, actions: ["open"], multiple: true }],
+    };
+    expect(versionedValidator.validate(declaration)).toEqual(declaration);
+    expect(() =>
+      validator.validate({
+        ...declaration,
+        protocol: "biunivers.open-resource/1",
+      }),
+    ).toThrow(OpenResourceValidationError);
   });
 });

@@ -146,6 +146,56 @@ export class ResourceSessionRegistry {
     });
   }
 
+  issueFiles(
+    appId: string,
+    entries: readonly IndexedEntry[],
+    revision: number,
+    access: "read",
+    mediaTypes: readonly string[],
+  ): PublicResourceSession[] {
+    validateAppId(appId);
+    validateRevision(revision);
+    if (
+      entries.length < 2 ||
+      entries.length > 100 ||
+      entries.length !== mediaTypes.length
+    ) {
+      throw invalid("Resource session batch must contain 2 to 100 files.");
+    }
+    if (
+      entries.some(
+        (entry) =>
+          entry.kind !== "file" ||
+          !entry.content ||
+          !ENTRY_ID_PATTERN.test(entry.entryIdHex),
+      )
+    ) {
+      throw invalid("Only valid files can create resource sessions.");
+    }
+    this.prune();
+    if (this.#sessions.size + entries.length > this.#maxSessions) {
+      throw new ResourceSessionError(
+        "RESOURCE_SESSION_LIMIT_REACHED",
+        "Active resource session limit has been reached.",
+      );
+    }
+
+    const issued: PublicResourceSession[] = [];
+    try {
+      entries.forEach((entry, index) => {
+        issued.push(
+          this.issueFile(appId, entry, revision, access, mediaTypes[index]),
+        );
+      });
+      return issued;
+    } catch (error) {
+      for (const session of issued) {
+        this.#sessions.delete(session.sessionId);
+      }
+      throw error;
+    }
+  }
+
   issuePendingFile(
     appId: string,
     parentEntryIdHex: string,

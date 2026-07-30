@@ -21,6 +21,7 @@ export interface AppDefinition {
     extensions: string[];
     mediaTypes?: string[];
     access: "read" | "read-write";
+    multiple?: boolean;
   }>;
 }
 

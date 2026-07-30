@@ -44,6 +44,10 @@
 Handler 声明、Resource Session 客户端、续租和释放示例。两个模板都包含配套
 `AGENTS.md`。
 
+`template/resource-app` 保持最小的单资源 v1 示例。需要一次处理多个只读文件时，先完成
+模板的单资源路径，再按本页“Open Resource v1.1 多资源扩展”升级；可参考已经通过宿主验收的
+[BiuniView v0.2.0](https://github.com/echo983/biunivers-image-viewer)。
+
 不要删除或改写：
 
 ```text
@@ -52,12 +56,15 @@ BIUNIVERS_APP_PROTOCOL_V1.md
 
 它必须与本开发包根目录的协议原文完全一致。
 
-资源应用还不得删除或改写：
+单资源模板还不得删除或改写：
 
 ```text
 BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md
 BIUNIVERS_RESOURCE_SESSION_PROTOCOL_V1.md
 ```
+
+升级 v1.1 时，用 `BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md` 替换 v1 Open Resource 原文；
+Resource Session v1 原文继续保留。
 
 ### 第二步：修改应用身份
 
@@ -294,6 +301,23 @@ biunivers.open-resource.json
 只有维护必须兼容旧宿主的应用时，才按冻结的 Open Resource 原文使用
 `launch.getContext` 和 Host API handle。不要在同一个资源生命周期中混用两套传输。
 
+### Open Resource v1.1 多资源扩展
+
+开发包目前包含
+[`Open Resource v1.1 协议`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md)、
+[`v1.1 Schema`](biunivers.open-resource-v1.1.schema.json) 和
+[`v1.1 示例`](biunivers.open-resource-v1.1.example.json)，以及
+[`openMany 请求 Schema`](biunivers.open-resource-v1.1.message.schema.json)。需要一次选择或
+接收多个只读文件的应用可以声明 `biunivers.open-resource/1.1`，在目标 Handler 上增加
+`"multiple": true`，并把 v1.1 协议原文以
+`BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md` 放在仓库根目录。不要同时附带 v1 和 v1.1
+两份 Open Resource 原文。
+
+应用主动选择时调用 `resource.openMany`；文件管理器批量交付时仍调用既有
+`resource.claimLaunch`，但成功结果是互斥的 `resources[]` 而不是 `resource`。每个数组项
+都是独立 Resource Session，应一起续租，并在替换或关闭集合时一起释放。宿主第一版实际
+上限为 100，只允许同一目录的普通文件和只读 Session。
+
 应用负责：
 
 - iframe 内部界面；
@@ -313,9 +337,9 @@ Static App Protocol v1 本身不定义：
 - 自动更新；
 - Biunivers 内部 store 或父页面 DOM。
 
-文件处理器声明由 Open Resource Protocol v1 定义；新应用的文件选择、读取、续租和保存由
-Resource Session Protocol v1 定义。Host API v1 只作为旧应用兼容底座。不要自行设计私有
-的父页面调用方式。
+文件处理器声明由 Open Resource Protocol v1/v1.1 定义；新应用的文件选择、读取、续租和
+保存由 Resource Session Protocol v1 定义。Host API v1 只作为旧应用兼容底座。不要自行
+设计私有的父页面调用方式。
 
 ## 给 AI 开发代理
 

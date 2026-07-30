@@ -19,7 +19,20 @@ export interface ResourceHandlerCandidate {
     extensions: string[];
     mediaTypes?: string[];
     access: "read" | "read-write";
+    multiple?: boolean;
   };
+}
+
+export interface MultiResourceHandlerResolution {
+  entries: Array<{
+    entryId: string;
+    name: string;
+    extension: string | null;
+  }>;
+  revision: number;
+  requestedAction: "open";
+  effectiveAction: "open";
+  candidates: ResourceHandlerCandidate[];
 }
 
 export interface ResourceHandlerResolution {
@@ -52,6 +65,25 @@ export function resolveResourceHandlers(
   );
 }
 
+export function resolveMultiResourceHandlers(
+  instanceToken: string,
+  entryIds: string[],
+  expectedRevision: number,
+): Promise<MultiResourceHandlerResolution> {
+  return internalFetch(
+    "/api/v1/internal/open-resources/resolve-many",
+    instanceToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        entryIds,
+        expectedRevision,
+        requestedAction: "open",
+      }),
+    },
+  );
+}
+
 export function createResourceLaunch(
   instanceToken: string,
   input: {
@@ -68,6 +100,30 @@ export function createResourceLaunch(
 }> {
   return internalFetch(
     "/api/v1/internal/open-resources",
+    instanceToken,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    },
+  );
+}
+
+export function createMultiResourceLaunch(
+  instanceToken: string,
+  input: {
+    entryIds: string[];
+    expectedRevision: number;
+    targetAppId: string;
+    handlerId: string;
+    action: "open";
+  },
+): Promise<{
+  targetAppId: string;
+  launchId: string;
+  expiresAt: string;
+}> {
+  return internalFetch(
+    "/api/v1/internal/open-resources/batches",
     instanceToken,
     {
       method: "POST",

@@ -11,6 +11,7 @@ function installed(
   name: string,
   actions: Array<"open" | "edit">,
   status: "active" | "disabled" = "active",
+  multiple = false,
 ): InstalledAppRecord {
   return {
     appId,
@@ -31,13 +32,16 @@ function installed(
       configuration: [],
     },
     openResource: {
-      protocol: "biunivers.open-resource/1",
+      protocol: multiple
+        ? "biunivers.open-resource/1.1"
+        : "biunivers.open-resource/1",
       handlers: [
         {
           id: "text",
           actions,
           extensions: [".txt"],
           access: actions.includes("edit") ? "read-write" : "read",
+          ...(multiple ? { multiple: true } : {}),
         },
       ],
     },
@@ -71,6 +75,15 @@ function setup(apps: InstalledAppRecord[]) {
       createdAtMs: 1,
       mtimeMs: 1,
       content: { kind: "chunk", fidHex: "30".repeat(16), size: 4 },
+    },
+    {
+      entryIdHex: "21".repeat(16),
+      parentEntryIdHex: "10".repeat(16),
+      name: "SECOND.TXT",
+      kind: "file",
+      createdAtMs: 1,
+      mtimeMs: 1,
+      content: { kind: "chunk", fidHex: "31".repeat(16), size: 5 },
     },
   ]);
   return {
@@ -147,5 +160,35 @@ describe("OpenResourceResolver", () => {
         requestedAction: "open",
       }),
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+  });
+
+  it("requires one v1.1 multiple handler to match every file", async () => {
+    const { resolver, instanceToken } = setup([
+      installed(
+        "io.github.example.legacy",
+        "Legacy",
+        ["open"],
+      ),
+      installed(
+        "io.github.example.gallery",
+        "Gallery",
+        ["open"],
+        "active",
+        true,
+      ),
+    ]);
+    await expect(
+      resolver.resolveMany(instanceToken, {
+        entryIds: ["20".repeat(16), "21".repeat(16)],
+        expectedRevision: 4,
+        requestedAction: "open",
+      }),
+    ).resolves.toMatchObject({
+      entries: [
+        { entryId: "20".repeat(16), extension: ".txt" },
+        { entryId: "21".repeat(16), extension: ".txt" },
+      ],
+      candidates: [{ appId: "io.github.example.gallery" }],
+    });
   });
 });

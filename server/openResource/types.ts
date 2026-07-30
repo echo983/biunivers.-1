@@ -4,9 +4,13 @@ export interface ResourceHandler {
   extensions: string[];
   mediaTypes?: string[];
   access: "read" | "read-write";
+  multiple?: boolean;
 }
 
+export type OpenResourceProtocol =
+  "biunivers.open-resource/1" | "biunivers.open-resource/1.1";
+
 export interface OpenResourceDeclaration {
-  protocol: "biunivers.open-resource/1";
+  protocol: OpenResourceProtocol;
   handlers: ResourceHandler[];
 }

@@ -62,6 +62,18 @@ const openResourceSchemaPath = resolve(
   "v1",
   "biunivers.open-resource.schema.json",
 );
+const openResourceV11ProtocolPath = resolve(
+  "docs",
+  "developer-kit",
+  "v1",
+  "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+);
+const openResourceV11SchemaPath = resolve(
+  "docs",
+  "developer-kit",
+  "v1",
+  "biunivers.open-resource-v1.1.schema.json",
+);
 const resourceSessionProtocolPath = resolve(
   "docs",
   "developer-kit",
@@ -80,9 +92,7 @@ function fetchApp(
       url,
       {
         headers: {
-          host: new URL(
-            appSpecificOrigin("http://localhost:8081", appId),
-          ).host,
+          host: new URL(appSpecificOrigin("http://localhost:8081", appId)).host,
         },
       },
       (incoming) => {
@@ -114,9 +124,7 @@ class FixtureSource implements RepositorySource {
   commitSha = commitSha;
   version = "1.0.0";
 
-  constructor(
-    private readonly mutate?: (rootDir: string) => Promise<void>,
-  ) {}
+  constructor(private readonly mutate?: (rootDir: string) => Promise<void>) {}
 
   async prepare(
     _repositoryInput: string,
@@ -187,30 +195,38 @@ async function listen(server: Server) {
 
 beforeAll(async () => {
   validator = await ManifestValidator.create(schemaPath, protocolPath);
-  openResourceValidator = await OpenResourceValidator.create(
-    openResourceSchemaPath,
-    openResourceProtocolPath,
-  );
-  resourceSessionProtocolBytes = await readFile(
-    resourceSessionProtocolPath,
-  );
+  openResourceValidator = await OpenResourceValidator.createRegistry([
+    {
+      protocol: "biunivers.open-resource/1",
+      schemaPath: openResourceSchemaPath,
+      protocolPath: openResourceProtocolPath,
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+    },
+    {
+      protocol: "biunivers.open-resource/1.1",
+      schemaPath: openResourceV11SchemaPath,
+      protocolPath: openResourceV11ProtocolPath,
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+    },
+  ]);
+  resourceSessionProtocolBytes = await readFile(resourceSessionProtocolPath);
 });
 
 afterEach(async () => {
   await Promise.all(
-    servers.splice(0).map(
-      (server) =>
-        new Promise<void>((resolveClose, reject) =>
-          server.close((error) =>
-            error ? reject(error) : resolveClose(),
+    servers
+      .splice(0)
+      .map(
+        (server) =>
+          new Promise<void>((resolveClose, reject) =>
+            server.close((error) => (error ? reject(error) : resolveClose())),
           ),
-        ),
-    ),
+      ),
   );
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { recursive: true, force: true }),
-    ),
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true })),
   );
 });
 
@@ -264,13 +280,8 @@ describe("inspect and install flow", () => {
     const base = `/apps/${commitSha}`;
     expect((await fetch(`${origin}${base}/index.html`)).status).toBe(404);
     expect(
-      (
-        await fetchApp(
-          origin,
-          "io.github.example.other",
-          `${base}/index.html`,
-        )
-      ).status,
+      (await fetchApp(origin, "io.github.example.other", `${base}/index.html`))
+        .status,
     ).toBe(404);
     expect(
       (
@@ -287,15 +298,13 @@ describe("inspect and install flow", () => {
       `${base}/index.html`,
     );
     expect(appResponse.status).toBe(200);
-    expect(
-      appResponse.headers.get("cross-origin-resource-policy"),
-    ).toBe("cross-origin");
+    expect(appResponse.headers.get("cross-origin-resource-policy")).toBe(
+      "cross-origin",
+    );
     await expect(
-      fetchApp(
-        origin,
-        installed.appId,
-        `${base}/.biunivers/config.json`,
-      ).then((response) => response.json()),
+      fetchApp(origin, installed.appId, `${base}/.biunivers/config.json`).then(
+        (response) => response.json(),
+      ),
     ).resolves.toEqual({ greeting: "来自安装流程" });
     expect(
       (await fetchApp(origin, installed.appId, `${base}/biunivers.app.json`))
@@ -332,10 +341,7 @@ describe("inspect and install flow", () => {
     );
 
     await expect(
-      services.inspections.create(
-        "https://github.com/example/hello",
-        "v1.0.0",
-      ),
+      services.inspections.create("https://github.com/example/hello", "v1.0.0"),
     ).rejects.toMatchObject({ code: "PROTOCOL_MISMATCH" });
     await expect(services.appStore.read()).resolves.toMatchObject({
       apps: [],
@@ -400,7 +406,17 @@ describe("inspect and install flow", () => {
       new FixtureSource(async (rootDir) => {
         await writeFile(
           join(rootDir, "biunivers.open-resource.json"),
-          "{}",
+          JSON.stringify({
+            protocol: "biunivers.open-resource/1",
+            handlers: [
+              {
+                id: "text",
+                actions: ["open"],
+                extensions: [".txt"],
+                access: "read",
+              },
+            ],
+          }),
         );
       }),
     );
@@ -419,12 +435,85 @@ describe("inspect and install flow", () => {
         );
         await writeFile(
           join(rootDir, "biunivers.open-resource.json"),
-          "{}",
+          JSON.stringify({
+            protocol: "biunivers.open-resource/1",
+            handlers: [
+              {
+                id: "text",
+                actions: ["open"],
+                extensions: [".txt"],
+                access: "read",
+              },
+            ],
+          }),
         );
       }),
     );
     await expect(
-      changed.inspections.create(
+      changed.inspections.create("https://github.com/example/hello", "v1.0.0"),
+    ).rejects.toMatchObject({
+      code: "OPEN_RESOURCE_PROTOCOL_MISMATCH",
+    });
+  });
+
+  it("accepts Open Resource v1.1 and rejects a mismatched protocol original", async () => {
+    const accepted = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md"),
+          await readFile(openResourceV11ProtocolPath),
+        );
+        await writeFile(
+          join(rootDir, "biunivers.open-resource.json"),
+          JSON.stringify({
+            protocol: "biunivers.open-resource/1.1",
+            handlers: [
+              {
+                id: "text-many",
+                actions: ["open"],
+                extensions: [".txt"],
+                access: "read",
+                multiple: true,
+              },
+            ],
+          }),
+        );
+      }),
+    );
+    const inspection = await accepted.inspections.create(
+      "https://github.com/example/hello",
+      "v1.0.0",
+    );
+    expect(inspection.openResource).toMatchObject({
+      protocol: "biunivers.open-resource/1.1",
+      handlers: [{ id: "text-many", multiple: true }],
+    });
+
+    const mismatched = await createServices(
+      new FixtureSource(async (rootDir) => {
+        await writeFile(
+          join(rootDir, "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md"),
+          await readFile(openResourceProtocolPath),
+        );
+        await writeFile(
+          join(rootDir, "biunivers.open-resource.json"),
+          JSON.stringify({
+            protocol: "biunivers.open-resource/1.1",
+            handlers: [
+              {
+                id: "text-many",
+                actions: ["open"],
+                extensions: [".txt"],
+                access: "read",
+                multiple: true,
+              },
+            ],
+          }),
+        );
+      }),
+    );
+    await expect(
+      mismatched.inspections.create(
         "https://github.com/example/hello",
         "v1.0.0",
       ),
@@ -443,10 +532,7 @@ describe("inspect and install flow", () => {
       }),
     );
     await expect(
-      exact.inspections.create(
-        "https://github.com/example/hello",
-        "v1.0.0",
-      ),
+      exact.inspections.create("https://github.com/example/hello", "v1.0.0"),
     ).resolves.toMatchObject({
       manifest: { appId: "io.github.example.hello" },
     });
@@ -460,10 +546,7 @@ describe("inspect and install flow", () => {
       }),
     );
     await expect(
-      changed.inspections.create(
-        "https://github.com/example/hello",
-        "v1.0.0",
-      ),
+      changed.inspections.create("https://github.com/example/hello", "v1.0.0"),
     ).rejects.toMatchObject({
       code: "RESOURCE_SESSION_PROTOCOL_MISMATCH",
     });
@@ -639,12 +722,12 @@ describe("inspect and install flow", () => {
     const appId = "io.github.example.hello";
     const oldBase = `/apps/${commitSha}`;
     const newBase = `/apps/${source.commitSha}`;
-    expect((await fetchApp(origin, appId, `${oldBase}/index.html`)).status).toBe(
-      200,
-    );
-    expect((await fetchApp(origin, appId, `${newBase}/index.html`)).status).toBe(
-      200,
-    );
+    expect(
+      (await fetchApp(origin, appId, `${oldBase}/index.html`)).status,
+    ).toBe(200);
+    expect(
+      (await fetchApp(origin, appId, `${newBase}/index.html`)).status,
+    ).toBe(200);
     await expect(
       fetchApp(origin, appId, `${newBase}/.biunivers/config.json`).then(
         (response) => response.json(),
@@ -655,8 +738,8 @@ describe("inspect and install flow", () => {
     await expect(services.appStore.read()).resolves.toMatchObject({
       apps: [],
     });
-    expect((await fetchApp(origin, appId, `${newBase}/index.html`)).status).toBe(
-      404,
-    );
+    expect(
+      (await fetchApp(origin, appId, `${newBase}/index.html`)).status,
+    ).toBe(404);
   });
 });

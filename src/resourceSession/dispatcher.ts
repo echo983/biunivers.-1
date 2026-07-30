@@ -3,6 +3,7 @@ import {
   claimResourceSessionLaunch,
   getResourceSessionMetadata,
   openResourceSession,
+  openResourceSessions,
   releaseResourceSessions,
   renewResourceSessions,
   ResourceSessionClientError,
@@ -16,10 +17,12 @@ import {
 
 interface DispatcherDependencies {
   selectFile: (writable: boolean) => Promise<string | null>;
+  selectFiles?: (maximum: number) => Promise<string[] | null>;
   selectSaveTarget: (
     suggestedName: string,
   ) => Promise<{ parentEntryId: string; name: string } | null>;
   open?: typeof openResourceSession;
+  openMany?: typeof openResourceSessions;
   createSaveTarget?: typeof createResourceSaveTarget;
   metadata?: typeof getResourceSessionMetadata;
   renew?: typeof renewResourceSessions;
@@ -47,6 +50,9 @@ export async function dispatchResourceSessionRequest(
           fullRead: true,
           singleRangeRead: true,
           fullWrite: true,
+          ...(dependencies.selectFiles
+            ? { openMany: true, maximumOpenMany: 100 }
+            : {}),
         };
         break;
       case "resource.claimLaunch":
@@ -71,6 +77,31 @@ export async function dispatchResourceSessionRequest(
           instanceToken,
           entryId,
           access,
+        );
+        break;
+      }
+      case "resource.openMany": {
+        if (!dependencies.selectFiles) {
+          return failureResourceSessionResponse(
+            request,
+            "RESOURCE_ACCESS_DENIED",
+            "应用没有声明多资源打开能力",
+          );
+        }
+        if (params.access !== undefined && params.access !== "read") {
+          throw new Error("access 必须是 read");
+        }
+        const requestedMaximum =
+          params.maximum === undefined
+            ? 100
+            : requireMaximum(params.maximum);
+        const entryIds = await dependencies.selectFiles(
+          Math.min(requestedMaximum, 100),
+        );
+        if (!entryIds) return cancelled(request, "文件选择");
+        result = await (dependencies.openMany ?? openResourceSessions)(
+          instanceToken,
+          entryIds,
         );
         break;
       }
@@ -156,6 +187,17 @@ function requireString(value: unknown, label: string): string {
     throw new Error(`${label} 必须是非空字符串`);
   }
   return value;
+}
+
+function requireMaximum(value: unknown): number {
+  if (
+    !Number.isSafeInteger(value) ||
+    (value as number) < 2 ||
+    (value as number) > 500
+  ) {
+    throw new Error("maximum 必须是 2 到 500 的整数");
+  }
+  return value as number;
 }
 
 function requireSessionId(value: unknown): string {

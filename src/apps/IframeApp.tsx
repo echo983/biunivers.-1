@@ -58,12 +58,21 @@ export function IframeApp({ app }: IframeAppProps) {
   const pickerResolverRef = useRef<((entryId: string | null) => void) | null>(
     null,
   );
+  const multiPickerResolverRef = useRef<
+    ((entryIds: string[] | null) => void) | null
+  >(null);
   const saveResolverRef = useRef<
     ((target: { parentEntryId: string; name: string } | null) => void) | null
   >(null);
   const [picker, setPicker] = useState<{
     instanceToken: string;
     writable: boolean;
+    mode: "single";
+  } | {
+    instanceToken: string;
+    writable: false;
+    mode: "multiple";
+    maximum: number;
   } | null>(null);
   const [saveDialog, setSaveDialog] = useState<{
     instanceToken: string;
@@ -75,6 +84,11 @@ export function IframeApp({ app }: IframeAppProps) {
     if (!appOrigin || !pendingResourceLaunch(app.id)) return;
     const iframeWindow = iframeRef.current?.contentWindow;
     if (!iframeWindow) return;
+    const openResourceProtocol = app.resourceHandlers?.some(
+      (handler) => handler.multiple === true,
+    )
+      ? "biunivers.open-resource/1.1"
+      : OPEN_RESOURCE_PROTOCOL;
     void instanceReadyRef.current.then((instanceToken) => {
       if (
         instanceToken &&
@@ -83,7 +97,7 @@ export function IframeApp({ app }: IframeAppProps) {
       ) {
         iframeWindow.postMessage(
           {
-            protocol: OPEN_RESOURCE_PROTOCOL,
+            protocol: openResourceProtocol,
             event: "launch.contextAvailable",
           },
           appOrigin,
@@ -97,7 +111,7 @@ export function IframeApp({ app }: IframeAppProps) {
         );
       }
     });
-  }, [app.id, appOrigin]);
+  }, [app.id, app.resourceHandlers, appOrigin]);
 
   const selectFile = useCallback(
     (writable: boolean): Promise<string | null> => {
@@ -105,11 +119,12 @@ export function IframeApp({ app }: IframeAppProps) {
       if (
         !instanceToken ||
         pickerResolverRef.current ||
+        multiPickerResolverRef.current ||
         saveResolverRef.current
       ) {
         return Promise.resolve(null);
       }
-      setPicker({ instanceToken, writable });
+      setPicker({ instanceToken, writable, mode: "single" });
       return new Promise((resolve) => {
         pickerResolverRef.current = resolve;
       });
@@ -124,6 +139,37 @@ export function IframeApp({ app }: IframeAppProps) {
     resolve?.(entryId);
   }, []);
 
+  const selectFiles = useCallback(
+    (maximum: number): Promise<string[] | null> => {
+      const instanceToken = instanceTokenRef.current;
+      if (
+        !instanceToken ||
+        pickerResolverRef.current ||
+        multiPickerResolverRef.current ||
+        saveResolverRef.current
+      ) {
+        return Promise.resolve(null);
+      }
+      setPicker({
+        instanceToken,
+        writable: false,
+        mode: "multiple",
+        maximum,
+      });
+      return new Promise((resolve) => {
+        multiPickerResolverRef.current = resolve;
+      });
+    },
+    [],
+  );
+
+  const finishMultiPicker = useCallback((entryIds: string[] | null) => {
+    const resolve = multiPickerResolverRef.current;
+    multiPickerResolverRef.current = null;
+    setPicker(null);
+    resolve?.(entryIds);
+  }, []);
+
   const selectSaveTarget = useCallback(
     (
       suggestedName: string,
@@ -132,6 +178,7 @@ export function IframeApp({ app }: IframeAppProps) {
       if (
         !instanceToken ||
         pickerResolverRef.current ||
+        multiPickerResolverRef.current ||
         saveResolverRef.current
       ) {
         return Promise.resolve(null);
@@ -158,6 +205,8 @@ export function IframeApp({ app }: IframeAppProps) {
     () => () => {
       pickerResolverRef.current?.(null);
       pickerResolverRef.current = null;
+      multiPickerResolverRef.current?.(null);
+      multiPickerResolverRef.current = null;
       saveResolverRef.current?.(null);
       saveResolverRef.current = null;
     },
@@ -268,6 +317,11 @@ export function IframeApp({ app }: IframeAppProps) {
                 instanceToken,
                 {
                   selectFile,
+                  ...(app.resourceHandlers?.some(
+                    (handler) => handler.multiple === true,
+                  )
+                    ? { selectFiles }
+                    : {}),
                   selectSaveTarget,
                   ...(launchId
                     ? {
@@ -316,7 +370,14 @@ export function IframeApp({ app }: IframeAppProps) {
 
     window.addEventListener("message", receiveRequest);
     return () => window.removeEventListener("message", receiveRequest);
-  }, [app.id, appOrigin, selectFile, selectSaveTarget]);
+  }, [
+    app.id,
+    app.resourceHandlers,
+    appOrigin,
+    selectFile,
+    selectFiles,
+    selectSaveTarget,
+  ]);
 
   if (!app.url) {
     return (
@@ -350,11 +411,20 @@ export function IframeApp({ app }: IframeAppProps) {
           aria-hidden="true"
         />
       )}
-      {picker ? (
+      {picker?.mode === "single" ? (
         <HostFilePicker
           instanceToken={picker.instanceToken}
           writable={picker.writable}
           onSelect={finishPicker}
+        />
+      ) : null}
+      {picker?.mode === "multiple" ? (
+        <HostFilePicker
+          instanceToken={picker.instanceToken}
+          writable={false}
+          multiple
+          maximum={picker.maximum}
+          onSelect={finishMultiPicker}
         />
       ) : null}
       {saveDialog ? (
