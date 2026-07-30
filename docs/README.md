@@ -139,6 +139,13 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Open Resource v1.1 施工计划](<浏览器云端个人桌面 Open Resource v1.1 施工计划.md>) | 已完成 | 六阶段实现、自动验证、真实应用验收和合并门槛 |
 | [Open Resource v1.1 多资源验收](<acceptance/Open Resource v1.1 多资源验收.md>) | 已通过 | 全量测试、Docker、BiuniView 主动多选与批量 Launch、旧版单资源兼容 |
 
+## V0.13：Workspace Runtime 设计候选
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [V0.13 Workspace Runtime 技术设计](<浏览器云端个人桌面 V0.13 Workspace Runtime 技术设计.md>) | 设计候选 | 选择集派生、固定 HEAD PVLogFS、COW 挂载、沙箱 Run、提交、Diff 与导回 |
+| [V0.13 Workspace Runtime 规范评审](<浏览器云端个人桌面 V0.13 Workspace Runtime 规范评审.md>) | 评审通过 | 自洽性、冗余删减、风险和挂载技术探针 Go/No-Go |
+
 ## 第三方应用生态 V1：发布候选
 
 | 文档 | 状态 | 内容 |
