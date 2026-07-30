@@ -129,13 +129,13 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
-| [Open Resource v1.1 协议草案](developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md) | 实现候选 | `resource.openMany`、Handler `multiple`、批量 Launch、独立 Session 和兼容边界 |
+| [Open Resource v1.1 协议](developer-kit/v1/BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md) | 已实现 | `resource.openMany`、Handler `multiple`、批量 Launch、独立 Session 和兼容边界 |
 | [Open Resource v1.1 Handler Schema](developer-kit/v1/biunivers.open-resource-v1.1.schema.json) | 已实现 | v1.1 严格声明格式，不修改 v1 Schema |
 | [Open Resource v1.1 openMany 请求 Schema](developer-kit/v1/biunivers.open-resource-v1.1.message.schema.json) | 已实现 | 复用 Resource Session v1 消息通道的严格多选请求 |
 | [Open Resource v1.1 技术设计](<浏览器云端个人桌面 Open Resource v1.1 技术设计.md>) | 实现基线 | 版本化安装、共同 Handler、批量签发、多选 picker 和 Pending Launch 集合化 |
 | [Open Resource v1.1 规范评审](<浏览器云端个人桌面 Open Resource v1.1 规范评审.md>) | 评审通过 | 必要性、协议数量、只读授权边界、兼容与风险控制 |
-| [Open Resource v1.1 施工计划](<浏览器云端个人桌面 Open Resource v1.1 施工计划.md>) | 验收中 | 阶段 1 至 5 完成，BiuniView 真实应用与 Docker 验收进行中 |
-| [Open Resource v1.1 多资源验收](<acceptance/Open Resource v1.1 多资源验收.md>) | 自动验证通过 | 全量测试、构建、Lint 和 BiuniView 静态证据；Docker/界面待执行 |
+| [Open Resource v1.1 施工计划](<浏览器云端个人桌面 Open Resource v1.1 施工计划.md>) | 已完成 | 六阶段实现、自动验证、真实应用验收和合并门槛 |
+| [Open Resource v1.1 多资源验收](<acceptance/Open Resource v1.1 多资源验收.md>) | 已通过 | 全量测试、Docker、BiuniView 主动多选与批量 Launch、旧版单资源兼容 |
 
 ## 第三方应用生态 V1：发布候选
 
