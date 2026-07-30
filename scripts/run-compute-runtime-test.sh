@@ -4,6 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 IMAGE_ID="${1:-}"
+SCENARIO="${BIUNIVERS_COMPUTE_RUNTIME_SCENARIO:-commit}"
 ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
 HOST_CONTAINER="${BIUNIVERS_TEST_CONTAINER:-biunivers-v02-test}"
 TEST_ROOT="$(mktemp -d /tmp/biunivers-compute-runtime.XXXXXX)"
@@ -17,6 +18,11 @@ TOKEN_HEX="$(openssl rand -hex 32)"
 DAEMON_PID=""
 FIXTURE_FINISHED=false
 NODE_BIN="node"
+
+if [[ "$SCENARIO" != commit ]] && [[ "$SCENARIO" != restart ]]; then
+  echo "BIUNIVERS_COMPUTE_RUNTIME_SCENARIO 只能是 commit 或 restart。" >&2
+  exit 1
+fi
 
 cleanup() {
   local exit_code=$?
@@ -106,22 +112,42 @@ export BIUNIVERS_PVLOGFS_BINARY="$PVLOGFS_BINARY"
 export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$COW_SCANNER_BINARY"
 export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE="$IMAGE_ID"
 
-"$NODE_BIN" dist/server/computeRuntime/computeRuntimeCli.js >"$LOG_PATH" 2>&1 &
-DAEMON_PID="$!"
-for _ in $(seq 1 100); do
-  [[ -S "$SOCKET_PATH" ]] && break
-  kill -0 "$DAEMON_PID"
-  sleep 0.1
-done
-[[ -S "$SOCKET_PATH" ]]
+start_daemon() {
+  "$NODE_BIN" dist/server/computeRuntime/computeRuntimeCli.js >>"$LOG_PATH" 2>&1 &
+  DAEMON_PID="$!"
+  for _ in $(seq 1 100); do
+    [[ -S "$SOCKET_PATH" ]] && break
+    kill -0 "$DAEMON_PID"
+    sleep 0.1
+  done
+  [[ -S "$SOCKET_PATH" ]]
+}
 
-RESULT="$("$NODE_BIN" scripts/verify-compute-runtime.mjs \
-  "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
-"$NODE_BIN" scripts/compute-runtime-fixture.mjs verify "$FIXTURE_PATH"
+start_daemon
+if [[ "$SCENARIO" = restart ]]; then
+  "$NODE_BIN" scripts/verify-compute-runtime-restart.mjs \
+    start "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT"
+  kill -KILL "$DAEMON_PID"
+  wait "$DAEMON_PID" 2>/dev/null || true
+  DAEMON_PID=""
+  start_daemon
+  RESULT="$("$NODE_BIN" scripts/verify-compute-runtime-restart.mjs \
+    verify "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
+  "$NODE_BIN" scripts/compute-runtime-fixture.mjs \
+    verify-recovery "$FIXTURE_PATH"
+else
+  RESULT="$("$NODE_BIN" scripts/verify-compute-runtime.mjs \
+    "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
+  "$NODE_BIN" scripts/compute-runtime-fixture.mjs verify "$FIXTURE_PATH"
+fi
 FIXTURE_FINISHED=true
 
 kill -TERM "$DAEMON_PID"
 wait "$DAEMON_PID"
 DAEMON_PID=""
 echo "$RESULT"
-echo "Compute Runtime 真实 PVLogFS、overlay、非 root OCI 沙箱、COW 提交和清理链全部通过。"
+if [[ "$SCENARIO" = restart ]]; then
+  echo "Compute Runtime daemon 强制终止、容器/挂载清理、Upper 保留、Ref 不变和租约释放全部通过。"
+else
+  echo "Compute Runtime 真实 PVLogFS、overlay、非 root OCI 沙箱、COW 提交和清理链全部通过。"
+fi

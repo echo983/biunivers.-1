@@ -5,9 +5,12 @@ import { loadCurrentEntryIndex } from "../dist/server/files/entryIndex.js";
 import { startFileService } from "../dist/server/files/fileServiceRuntime.js";
 
 const [operation, fixturePath] = process.argv.slice(2);
-if (!["prepare", "verify", "fail"].includes(operation) || !fixturePath) {
+if (
+  !["prepare", "verify", "verify-recovery", "fail"].includes(operation) ||
+  !fixturePath
+) {
   throw new Error(
-    "usage: compute-runtime-fixture.mjs <prepare|verify|fail> <fixture-json>",
+    "usage: compute-runtime-fixture.mjs <prepare|verify|verify-recovery|fail> <fixture-json>",
   );
 }
 
@@ -91,6 +94,32 @@ try {
           revision: ref.revision,
           outputHeadFidHex: run.outputHeadFidHex,
           diagnostic: value,
+        }),
+      );
+    } else if (operation === "verify-recovery") {
+      if (
+        run.state !== "FAILED" ||
+        run.errorCode !== "INTERRUPTED_DAEMON_RECOVERY" ||
+        run.outputHeadFidHex !== null
+      ) {
+        throw new Error(`Recovered control Run is invalid: ${run.state}`);
+      }
+      const workspace = runtime.refStore.getWorkspace(fixture.workspaceIdHex);
+      const ref = runtime.refStore.getRef(workspace.refId);
+      if (
+        workspace.activeWriteRunIdHex !== null ||
+        ref.headFidHex !== fixture.inputHeadFidHex ||
+        ref.revision !== fixture.revision
+      ) {
+        throw new Error("Recovery changed the Ref or retained its write lease.");
+      }
+      console.log(
+        JSON.stringify({
+          state: run.state,
+          errorCode: run.errorCode,
+          revision: ref.revision,
+          headFidHex: ref.headFidHex,
+          writeLeaseReleased: true,
         }),
       );
     } else if (
