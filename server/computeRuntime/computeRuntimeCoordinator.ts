@@ -43,6 +43,7 @@ export class ComputeRuntimeCoordinator {
   readonly #mounts: MountExecutor;
   readonly #oci: OciExecutor;
   readonly #snapshots: SnapshotProvisioner;
+  readonly #activeRunIds = new Set<string>();
 
   constructor(options: {
     directories: RunDirectoryManager;
@@ -78,12 +79,15 @@ export class ComputeRuntimeCoordinator {
         paths: prepared.paths,
         capabilityHex: input.capabilityHex,
       });
-      return await this.#directories.transition({
+      const manifest = await this.#directories.transition({
         runIdHex: input.runIdHex,
         expectedState: "PREPARING",
         newState: "PREPARED",
       });
+      this.#activeRunIds.add(input.runIdHex);
+      return manifest;
     } catch (error) {
+      this.#activeRunIds.delete(input.runIdHex);
       await this.#releasePreparedResources(input.runIdHex);
       await this.#markFailed(input.runIdHex, "PREPARE_FAILED");
       throw error;
@@ -110,6 +114,7 @@ export class ComputeRuntimeCoordinator {
         runtimeIdentity,
       });
     } catch (error) {
+      this.#activeRunIds.delete(runIdHex);
       if (created) await ignoreFailure(() => this.#oci.remove(plan, limits));
       await this.#releasePreparedResources(runIdHex);
       await this.#markFailed(runIdHex, "START_FAILED");
@@ -143,14 +148,51 @@ export class ComputeRuntimeCoordinator {
       if (state.running) await this.#oci.stop(plan, limits);
       await this.#oci.remove(plan, limits);
       await this.#releasePreparedResources(runIdHex);
-      return await this.#directories.transition({
+      const stopped = await this.#directories.transition({
         runIdHex,
         expectedState: "RUNNING",
         newState: "STOPPED",
       });
+      this.#activeRunIds.delete(runIdHex);
+      return stopped;
     } catch (error) {
       await this.#markFailed(runIdHex, "STOP_FAILED");
       throw error;
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    const errors: unknown[] = [];
+    for (const runIdHex of [...this.#activeRunIds]) {
+      try {
+        const manifest = await this.#directories.inspect(runIdHex);
+        if (manifest.state === "RUNNING") {
+          const executor = this.#executors.get(manifest.executorId);
+          const plan = this.#plan(manifest, executor);
+          const limits = commandLimits(executor);
+          await ignoreFailure(() => this.#oci.stop(plan, limits));
+          await ignoreFailure(() => this.#oci.remove(plan, limits));
+        }
+        await this.#releasePreparedResources(runIdHex);
+        if (manifest.state === "PREPARED" || manifest.state === "RUNNING") {
+          await this.#directories.transition({
+            runIdHex,
+            expectedState: manifest.state,
+            newState: "FAILED",
+            errorCode: "DAEMON_SHUTDOWN",
+          });
+        }
+      } catch (error) {
+        errors.push(error);
+      } finally {
+        this.#activeRunIds.delete(runIdHex);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors,
+        "Compute Runtime shutdown did not clean every active Run.",
+      );
     }
   }
 

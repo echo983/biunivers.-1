@@ -17,7 +17,8 @@
     "build:pvlog-wasm": "wasm-pack build crates/pvlog-core --target nodejs --out-dir ../../generated/pvlog-core-wasm",
     "test:e2e": "playwright test",
     "preview": "vite preview",
-    "start": "node dist/server/index.js"
+    "start": "node dist/server/index.js",
+    "start:compute-runtime": "node dist/server/computeRuntime/computeRuntimeCli.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1097.0",

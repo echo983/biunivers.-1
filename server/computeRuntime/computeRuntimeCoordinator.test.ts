@@ -188,4 +188,40 @@ describe("ComputeRuntimeCoordinator", () => {
     expect(setupResult.events).toContain("mount:cleanup");
     expect(setupResult.events).toContain("snapshot:release");
   });
+
+  it("cleans an active Run on daemon shutdown and preserves Upper", async () => {
+    const setupResult = await setup();
+    await setupResult.coordinator.prepare({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "44".repeat(16),
+      revision: 0,
+      executorId: executor.executorId,
+      capabilityHex: "55".repeat(32),
+    });
+    await setupResult.coordinator.start(runIdHex);
+    const upperFile = join(
+      setupResult.directories.paths(runIdHex).upper,
+      "shutdown-result.txt",
+    );
+    await writeFile(upperFile, "keep");
+
+    await setupResult.coordinator.shutdown();
+
+    expect(await setupResult.directories.inspect(runIdHex)).toMatchObject({
+      state: "FAILED",
+      errorCode: "DAEMON_SHUTDOWN",
+    });
+    expect(await readFile(upperFile, "utf8")).toBe("keep");
+    expect(setupResult.events).toEqual([
+      "snapshot:provision",
+      "mount:prepare",
+      "oci:create",
+      "oci:start",
+      "oci:stop",
+      "oci:remove",
+      "mount:cleanup",
+      "snapshot:release",
+    ]);
+  });
 });
