@@ -1088,6 +1088,100 @@ pub fn encode_checkpoint(checkpoint: &Checkpoint) -> Vec<u8> {
     encoder.finish()
 }
 
+pub fn encode_genesis_checkpoint_from_packed(
+    lineage_id: [u8; 16],
+    packed: &[u8],
+) -> Result<Vec<u8>, String> {
+    fn take<const N: usize>(packed: &[u8], offset: &mut usize) -> Result<[u8; N], String> {
+        let end = offset
+            .checked_add(N)
+            .ok_or_else(|| "packed Entry offset overflow".to_string())?;
+        let value = packed
+            .get(*offset..end)
+            .ok_or_else(|| "packed Entries are truncated".to_string())?
+            .try_into()
+            .map_err(|_| "packed Entry field has an invalid length".to_string())?;
+        *offset = end;
+        Ok(value)
+    }
+
+    if lineage_id == [0; 16] {
+        return Err("lineage ID must not be all zeroes".into());
+    }
+    if packed.len() > MAX_ENCODED_OBJECT_BYTES {
+        return Err("packed Entries exceed 32 MiB".into());
+    }
+    let mut offset = 0usize;
+    let count = usize::try_from(u32::from_be_bytes(take::<4>(packed, &mut offset)?))
+        .map_err(|_| "packed Entry count is invalid".to_string())?;
+    if count == 0 || count > 1_000_000 {
+        return Err("packed Entry count is outside its limit".into());
+    }
+    let mut entries = Vec::with_capacity(count);
+    for _ in 0..count {
+        let entry_id = EntryId(take::<16>(packed, &mut offset)?);
+        validate_entry_id(entry_id)?;
+        let parent_flag = take::<1>(packed, &mut offset)?[0];
+        let parent_bytes = take::<16>(packed, &mut offset)?;
+        let parent_id = match parent_flag {
+            0 if parent_bytes == [0; 16] => None,
+            1 => Some(EntryId(parent_bytes)),
+            _ => return Err("packed Entry parent is invalid".into()),
+        };
+        let kind = take::<1>(packed, &mut offset)?[0];
+        let created_at_ms = u64::from_be_bytes(take::<8>(packed, &mut offset)?);
+        let mtime_ms = u64::from_be_bytes(take::<8>(packed, &mut offset)?);
+        let size = u64::from_be_bytes(take::<8>(packed, &mut offset)?);
+        let content_kind = take::<1>(packed, &mut offset)?[0];
+        let content_fid = Fid(take::<16>(packed, &mut offset)?);
+        let name_length = usize::try_from(u32::from_be_bytes(take::<4>(packed, &mut offset)?))
+            .map_err(|_| "packed Entry name length is invalid".to_string())?;
+        let name_end = offset
+            .checked_add(name_length)
+            .ok_or_else(|| "packed Entry name offset overflow".to_string())?;
+        let name = std::str::from_utf8(
+            packed
+                .get(offset..name_end)
+                .ok_or_else(|| "packed Entry name is truncated".to_string())?,
+        )
+        .map_err(|_| "packed Entry name is not UTF-8".to_string())?
+        .to_string();
+        offset = name_end;
+        let kind = match (kind, content_kind, size, content_fid.0) {
+            (1, 0, 0, fid) if fid == [0; 16] => EntryKind::Directory,
+            (2, 1, size, fid) => EntryKind::File {
+                content: ContentRef::Chunk(Fid(fid)),
+                size,
+            },
+            (2, 2, size, fid) => EntryKind::File {
+                content: ContentRef::Manifest(Fid(fid)),
+                size,
+            },
+            _ => return Err("packed Entry kind or content is invalid".into()),
+        };
+        entries.push(Entry {
+            entry_id,
+            parent_id,
+            name,
+            kind,
+            created_at_ms,
+            mtime_ms,
+        });
+    }
+    if offset != packed.len() {
+        return Err("packed Entries contain trailing bytes".into());
+    }
+    validate_checkpoint_entries(&entries)?;
+    let bytes = encode_checkpoint(&Checkpoint {
+        lineage_id,
+        revision: 0,
+        covered_segment: None,
+        entries,
+    });
+    decode_checkpoint(&bytes)?;
+    Ok(bytes)
+}
+
 pub fn decode_checkpoint(bytes: &[u8]) -> Result<Checkpoint, String> {
     let mut decoder = Decoder::new(bytes)?;
     decoder.map(6)?;
@@ -1409,8 +1503,8 @@ mod wasm {
         ABI_VERSION, Checkpoint, CheckpointRef, ChunkRef, Entry, EntryId, EntryKind, Fid, Head,
         IncrementalFidHasher, MAX_ABI_INPUT_BYTES, Manifest, Operation, Segment, apply_segment,
         combine_segments_packed, decode_checkpoint, decode_head, decode_manifest, decode_segment,
-        encode_checkpoint, encode_head, encode_manifest, encode_segment, fid_bytes, fid_hex,
-        validate_entry_id,
+        encode_checkpoint, encode_genesis_checkpoint_from_packed, encode_head, encode_manifest,
+        encode_segment, fid_bytes, fid_hex, validate_entry_id,
     };
     use wasm_bindgen::prelude::*;
 
@@ -1586,6 +1680,15 @@ mod wasm {
                 mtime_ms: created_at_ms,
             }],
         }))
+    }
+
+    #[wasm_bindgen(js_name = encodeGenesisCheckpointFromPacked)]
+    pub fn encode_genesis_checkpoint_from_packed_wasm(
+        lineage_id: &[u8],
+        packed: &[u8],
+    ) -> Result<Vec<u8>, JsError> {
+        encode_genesis_checkpoint_from_packed(array_16(lineage_id, "lineage ID")?, packed)
+            .map_err(|error| JsError::new(&error))
     }
 
     #[wasm_bindgen(js_name = encodeGenesisHead)]
