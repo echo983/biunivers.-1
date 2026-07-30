@@ -33,13 +33,14 @@ function installed(
       configuration: [],
     },
     openResource: {
-      protocol: "biunivers.open-resource/1",
+      protocol: "biunivers.open-resource/1.1",
       handlers: [
         {
           id: "text",
           actions: ["open", "edit"],
           extensions: [".txt"],
           access: "read-write",
+          multiple: true,
         },
       ],
     },
@@ -56,6 +57,12 @@ function setup(resourceSessionService?: {
     entryId: string,
     access: "read" | "edit",
   ) => Promise<PublicResourceSession>;
+  issueFiles?: (
+    instanceToken: string,
+    entryIds: readonly string[],
+    handlerId?: string,
+    expectedRevision?: number,
+  ) => Promise<PublicResourceSession[]>;
 }) {
   const capabilities = new FileCapabilityRegistry();
   const launches = new OpenResourceLaunchRegistry();
@@ -77,6 +84,15 @@ function setup(resourceSessionService?: {
       createdAtMs: 1,
       mtimeMs: 1,
       content: { kind: "chunk", fidHex: "30".repeat(16), size: 4 },
+    },
+    {
+      entryIdHex: "21".repeat(16),
+      parentEntryIdHex: "10".repeat(16),
+      name: "second.txt",
+      kind: "file",
+      createdAtMs: 1,
+      mtimeMs: 1,
+      content: { kind: "chunk", fidHex: "31".repeat(16), size: 5 },
     },
   ]);
   const service = new OpenResourceLaunchService({
@@ -216,6 +232,37 @@ describe("OpenResourceLaunchService", () => {
     await expect(
       service.claim(target, created.launchId),
     ).rejects.toMatchObject({ code: "NO_LAUNCH_CONTEXT" });
+  });
+
+  it("creates and claims an ordered multi-resource launch", async () => {
+    const resources = [
+      { sessionId: "first", access: "read" },
+      { sessionId: "second", access: "read" },
+    ] as PublicResourceSession[];
+    const issueFiles = vi.fn().mockResolvedValue(resources);
+    const issueFile = vi.fn();
+    const { capabilities, service } = setup({ issueFile, issueFiles });
+    const source = capabilities.createInstance(
+      "system.files",
+      "files-window",
+    ).instanceToken;
+    const target = capabilities.createInstance(
+      appId,
+      "notes-window",
+    ).instanceToken;
+    const entryIds = [entryId, "21".repeat(16)];
+    const created = await service.createMany(source, {
+      entryIds,
+      expectedRevision: 3,
+      targetAppId: appId,
+      handlerId: "text",
+      action: "open",
+    });
+    await expect(
+      service.claimResourceSession(target, created.launchId),
+    ).resolves.toEqual({ action: "open", resources });
+    expect(issueFiles).toHaveBeenCalledWith(target, entryIds, "text", 3);
+    expect(issueFile).not.toHaveBeenCalled();
   });
 
   it("consumes safely when revision or handler changes before claim", async () => {

@@ -59,10 +59,17 @@ type WormholeControlExecutor = Pick<
   WormholeControlService,
   "status" | "enable" | "rotate" | "disable"
 >;
-type OpenResourceResolverExecutor = Pick<OpenResourceResolver, "resolve">;
+type OpenResourceResolverExecutor = Pick<
+  OpenResourceResolver,
+  "resolve" | "resolveMany"
+>;
 type OpenResourceLaunchExecutor = Pick<
   OpenResourceLaunchService,
-  "create" | "claim" | "claimResourceSession" | "cancelTarget"
+  | "create"
+  | "createMany"
+  | "claim"
+  | "claimResourceSession"
+  | "cancelTarget"
 >;
 
 interface DesktopServerDependencies {
@@ -635,6 +642,45 @@ export function createDesktopServer({
   );
 
   app.post(
+    "/api/v1/host/resource-sessions/batches",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!resourceSessionService) throw resourceUnsupported();
+        const instanceToken = readInstanceToken(request);
+        const { entryIds, access } = request.body as Record<
+          string,
+          unknown
+        >;
+        if (!Array.isArray(entryIds) || access !== "read") {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds 和 read access 必填",
+          );
+        }
+        const resources = await resourceSessionService.issueFiles(
+          instanceToken,
+          entryIds as string[],
+        );
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json({
+            resources: resources.map((resource) =>
+              presentResourceSession(
+                resource,
+                instanceToken,
+                config.desktopOrigin,
+              ),
+            ),
+          });
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
     "/api/v1/host/resource-sessions/metadata",
     async (request, response, next) => {
       try {
@@ -734,9 +780,20 @@ export function createDesktopServer({
             instanceToken,
             launchId,
           );
-        response
-          .set("Cache-Control", "no-store")
-          .json({
+        response.set("Cache-Control", "no-store");
+        if ("resources" in result) {
+          response.json({
+            action: result.action,
+            resources: result.resources.map((resource) =>
+              presentResourceSession(
+                resource,
+                instanceToken,
+                config.desktopOrigin,
+              ),
+            ),
+          });
+        } else {
+          response.json({
             action: result.action,
             resource: presentResourceSession(
               result.resource,
@@ -744,6 +801,7 @@ export function createDesktopServer({
               config.desktopOrigin,
             ),
           });
+        }
       } catch (error) {
         next(error);
       }
@@ -1161,6 +1219,46 @@ export function createDesktopServer({
   );
 
   app.post(
+    "/api/v1/internal/open-resources/resolve-many",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceResolver) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用资源打开能力",
+            503,
+          );
+        }
+        const instanceToken = readInstanceToken(request);
+        const { entryIds, expectedRevision, requestedAction } =
+          request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(entryIds) ||
+          !isRevision(expectedRevision) ||
+          requestedAction !== "open"
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds、expectedRevision 和 open requestedAction 必填",
+          );
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await openResourceResolver.resolveMany(instanceToken, {
+              entryIds: entryIds as string[],
+              expectedRevision,
+              requestedAction,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
     "/api/v1/internal/open-resources",
     async (request, response, next) => {
       try {
@@ -1198,6 +1296,56 @@ export function createDesktopServer({
           .json(
             await openResourceLaunchService.create(instanceToken, {
               entryId,
+              expectedRevision,
+              targetAppId,
+              handlerId,
+              action,
+            }),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/open-resources/batches",
+    async (request, response, next) => {
+      try {
+        requireDesktopOrigin(request, config.desktopOrigin);
+        if (!openResourceLaunchService) {
+          throw new AppError(
+            "HOST_API_UNSUPPORTED",
+            "当前宿主尚未启用资源打开能力",
+            503,
+          );
+        }
+        const instanceToken = readInstanceToken(request);
+        const {
+          entryIds,
+          expectedRevision,
+          targetAppId,
+          handlerId,
+          action,
+        } = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(entryIds) ||
+          !isRevision(expectedRevision) ||
+          typeof targetAppId !== "string" ||
+          typeof handlerId !== "string" ||
+          action !== "open"
+        ) {
+          throw new AppError(
+            "REQUEST_INVALID",
+            "entryIds、expectedRevision、targetAppId、handlerId 和 open action 必填",
+          );
+        }
+        response
+          .status(201)
+          .set("Cache-Control", "no-store")
+          .json(
+            await openResourceLaunchService.createMany(instanceToken, {
+              entryIds: entryIds as string[],
               expectedRevision,
               targetAppId,
               handlerId,

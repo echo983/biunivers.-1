@@ -6,6 +6,7 @@ const METHODS = new Set([
   "resource.getCapabilities",
   "resource.claimLaunch",
   "resource.open",
+  "resource.openMany",
   "resource.saveAs",
   "resource.getMetadata",
   "resource.renew",

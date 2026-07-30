@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  lstat,
-  readFile,
-  readdir,
-  rm,
-} from "node:fs/promises";
+import { lstat, readFile, readdir, rm } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
 import type { AppStore } from "./appStore.js";
 import { AppError } from "./appError.js";
@@ -162,11 +157,7 @@ export class InspectionService {
   async create(repository: string, requestedRef: string) {
     await this.cleanupExpired();
     const inspectionId = randomUUID();
-    const stagingDir = join(
-      this.options.dataDir,
-      "staging",
-      inspectionId,
-    );
+    const stagingDir = join(this.options.dataDir, "staging", inspectionId);
 
     let prepared: PreparedRepository | undefined;
     try {
@@ -222,33 +213,43 @@ export class InspectionService {
         );
       }
 
-      const openResourceProtocolPath = await optionalRegularFile(
-        prepared.rootDir,
-        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+      const manifestRootDir = prepared.rootDir;
+      const openResourceProtocolPaths = (
+        await Promise.all(
+          this.options.openResourceValidator.supportedProtocolFileNames.map(
+            async (fileName) => ({
+              fileName,
+              path: await optionalRegularFile(manifestRootDir, fileName),
+            }),
+          ),
+        )
+      ).filter(
+        (
+          value,
+        ): value is {
+          fileName: string;
+          path: string;
+        } => Boolean(value.path),
       );
       const openResourceDeclarationPath = await optionalRegularFile(
         prepared.rootDir,
         "biunivers.open-resource.json",
       );
-      if (Boolean(openResourceProtocolPath) !== Boolean(openResourceDeclarationPath)) {
+      if (
+        openResourceProtocolPaths.length > 1 ||
+        Boolean(openResourceProtocolPaths.length) !==
+          Boolean(openResourceDeclarationPath)
+      ) {
         throw new AppError(
           "OPEN_RESOURCE_FILES_INCOMPLETE",
-          "Open Resource 协议原文和声明文件必须同时存在",
+          "Open Resource 声明必须且只能附带对应版本的一份协议原文",
         );
       }
       let openResource: OpenResourceDeclaration | undefined;
-      if (openResourceProtocolPath && openResourceDeclarationPath) {
-        const extensionProtocolBytes = await readFile(openResourceProtocolPath);
-        if (
-          !extensionProtocolBytes.equals(
-            this.options.openResourceValidator.protocolBytes,
-          )
-        ) {
-          throw new AppError(
-            "OPEN_RESOURCE_PROTOCOL_MISMATCH",
-            "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md 不是宿主支持的协议原文",
-          );
-        }
+      if (
+        openResourceProtocolPaths.length === 1 &&
+        openResourceDeclarationPath
+      ) {
         let declarationValue: unknown;
         try {
           declarationValue = JSON.parse(
@@ -273,6 +274,30 @@ export class InspectionService {
             );
           }
           throw error;
+        }
+        const expectedFileName =
+          this.options.openResourceValidator.protocolFileName(
+            openResource.protocol,
+          );
+        const providedProtocol = openResourceProtocolPaths[0];
+        if (providedProtocol.fileName !== expectedFileName) {
+          throw new AppError(
+            "OPEN_RESOURCE_PROTOCOL_MISMATCH",
+            `${providedProtocol.fileName} 与声明的协议版本不匹配`,
+          );
+        }
+        const extensionProtocolBytes = await readFile(providedProtocol.path);
+        if (
+          !extensionProtocolBytes.equals(
+            this.options.openResourceValidator.protocolBytesFor(
+              openResource.protocol,
+            ),
+          )
+        ) {
+          throw new AppError(
+            "OPEN_RESOURCE_PROTOCOL_MISMATCH",
+            `${expectedFileName} 不是宿主支持的协议原文`,
+          );
         }
       }
 
@@ -331,11 +356,7 @@ export class InspectionService {
     } catch (error) {
       await rm(stagingDir, { recursive: true, force: true });
       if (error instanceof GitHubSourceError) {
-        throw new AppError(
-          error.code,
-          error.message,
-          error.status,
-        );
+        throw new AppError(error.code, error.message, error.status);
       }
       throw error;
     }
@@ -345,11 +366,7 @@ export class InspectionService {
     const inspection = this.inspections.get(inspectionId);
     if (!inspection || Date.parse(inspection.expiresAt) <= Date.now()) {
       this.inspections.delete(inspectionId);
-      throw new AppError(
-        "INSPECTION_NOT_FOUND",
-        "检查记录不存在或已过期",
-        404,
-      );
+      throw new AppError("INSPECTION_NOT_FOUND", "检查记录不存在或已过期", 404);
     }
     return inspection;
   }
@@ -357,11 +374,7 @@ export class InspectionService {
   async consume(inspectionId: string) {
     const inspection = this.get(inspectionId);
     this.inspections.delete(inspectionId);
-    const stagingDir = join(
-      this.options.dataDir,
-      "staging",
-      inspectionId,
-    );
+    const stagingDir = join(this.options.dataDir, "staging", inspectionId);
     await rm(stagingDir, { recursive: true, force: true });
     return inspection;
   }
@@ -374,11 +387,7 @@ export class InspectionService {
       expired.map(async (inspection) => {
         this.inspections.delete(inspection.inspectionId);
         await rm(
-          join(
-            this.options.dataDir,
-            "staging",
-            inspection.inspectionId,
-          ),
+          join(this.options.dataDir, "staging", inspection.inspectionId),
           { recursive: true, force: true },
         );
       }),

@@ -21,7 +21,8 @@ export interface PendingOpenResourceLaunch {
   launchId: string;
   targetAppId: string;
   handlerId: string;
-  entryId: string;
+  entryId?: string;
+  entryIds?: string[];
   expectedRevision: number;
   action: "open" | "edit";
   writable: boolean;

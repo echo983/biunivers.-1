@@ -106,6 +106,33 @@ describe("ResourceSessionRegistry", () => {
     });
   });
 
+  it("issues an ordered batch atomically", () => {
+    const { registry } = harness();
+    const first = fileEntry("aa".repeat(16));
+    const second = {
+      ...fileEntry("bb".repeat(16)),
+      entryIdHex: "33".repeat(16),
+      name: "second.mkv",
+    };
+    const sessions = registry.issueFiles(
+      appId,
+      [first, second],
+      8,
+      "read",
+      ["video/x-matroska", "video/x-matroska"],
+    );
+    expect(sessions.map((session) => session.metadata.name)).toEqual([
+      "movie.mkv",
+      "second.mkv",
+    ]);
+    expect(
+      sessions.map(
+        (session) =>
+          registry.authorize(appId, session.sessionId).entryIdHex,
+      ),
+    ).toEqual([first.entryIdHex, second.entryIdHex]);
+  });
+
   it("expires after 300 seconds and cannot be revived", () => {
     const { registry, advance } = harness();
     const session = registry.issueFile(appId, fileEntry(), 1, "read");

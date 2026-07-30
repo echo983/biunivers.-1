@@ -56,6 +56,8 @@ function parseResourceHandlers(value: unknown) {
           /^\.[a-z0-9]+$/.test(extension),
       ) ||
       (handler.access !== "read" && handler.access !== "read-write") ||
+      (handler.multiple !== undefined &&
+        typeof handler.multiple !== "boolean") ||
       (handler.mediaTypes !== undefined &&
         (!Array.isArray(handler.mediaTypes) ||
           !handler.mediaTypes.every(
@@ -72,6 +74,7 @@ function parseResourceHandlers(value: unknown) {
         ? { mediaTypes: handler.mediaTypes as string[] }
         : {}),
       access: handler.access,
+      ...(handler.multiple === true ? { multiple: true } : {}),
     });
   }
   return handlers;

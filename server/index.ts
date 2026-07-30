@@ -37,33 +37,43 @@ async function main() {
   const appStore = new AppStore(config.dataDir);
   await appStore.initialize();
   const validator = await ManifestValidator.create(
-    resolve(
-      "docs",
-      "developer-kit",
-      "v1",
-      "biunivers.app.schema.json",
-    ),
-    resolve(
-      "docs",
-      "developer-kit",
-      "v1",
-      "BIUNIVERS_APP_PROTOCOL_V1.md",
-    ),
+    resolve("docs", "developer-kit", "v1", "biunivers.app.schema.json"),
+    resolve("docs", "developer-kit", "v1", "BIUNIVERS_APP_PROTOCOL_V1.md"),
   );
-  const openResourceValidator = await OpenResourceValidator.create(
-    resolve(
-      "docs",
-      "developer-kit",
-      "v1",
-      "biunivers.open-resource.schema.json",
-    ),
-    resolve(
-      "docs",
-      "developer-kit",
-      "v1",
-      "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
-    ),
-  );
+  const openResourceValidator = await OpenResourceValidator.createRegistry([
+    {
+      protocol: "biunivers.open-resource/1",
+      schemaPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "biunivers.open-resource.schema.json",
+      ),
+      protocolPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+      ),
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1.md",
+    },
+    {
+      protocol: "biunivers.open-resource/1.1",
+      schemaPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "biunivers.open-resource-v1.1.schema.json",
+      ),
+      protocolPath: resolve(
+        "docs",
+        "developer-kit",
+        "v1",
+        "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+      ),
+      protocolFileName: "BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md",
+    },
+  ]);
   const source = new GitHubSource({
     token: config.githubToken,
     maxArchiveBytes: config.maxAppBytes,

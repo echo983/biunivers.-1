@@ -11,10 +11,16 @@ export class ResourceSessionClientError extends Error {
 export function claimResourceSessionLaunch(
   instanceToken: string,
   launchId: string,
-): Promise<{
-  action: "open" | "edit";
-  resource: ResourceSessionCapability;
-}> {
+): Promise<
+  | {
+      action: "open" | "edit";
+      resource: ResourceSessionCapability;
+    }
+  | {
+      action: "open";
+      resources: ResourceSessionCapability[];
+    }
+> {
   return request(
     "/api/v1/host/resource-sessions/launches/claim",
     instanceToken,
@@ -50,6 +56,20 @@ export function openResourceSession(
     entryId,
     access,
   });
+}
+
+export function openResourceSessions(
+  instanceToken: string,
+  entryIds: string[],
+): Promise<{ resources: ResourceSessionCapability[] }> {
+  return request(
+    "/api/v1/host/resource-sessions/batches",
+    instanceToken,
+    {
+      entryIds,
+      access: "read",
+    },
+  );
 }
 
 export function createResourceSaveTarget(

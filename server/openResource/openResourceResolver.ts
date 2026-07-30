@@ -79,6 +79,62 @@ export class OpenResourceResolver {
       candidates: effectiveCandidates,
     };
   }
+
+  async resolveMany(
+    instanceToken: string,
+    input: {
+      entryIds: string[];
+      expectedRevision: number;
+      requestedAction: "open";
+    },
+  ) {
+    const identity =
+      this.options.capabilities.authorizeInstance(instanceToken);
+    if (identity.appId !== INTERNAL_FILE_APP_ID) {
+      throw denied();
+    }
+    if (
+      !Number.isSafeInteger(input.expectedRevision) ||
+      input.expectedRevision < 0 ||
+      !Array.isArray(input.entryIds) ||
+      input.entryIds.length < 2 ||
+      input.entryIds.length > 100 ||
+      new Set(input.entryIds).size !== input.entryIds.length
+    ) {
+      throw invalid("Multi-resource selection must contain 2 to 100 unique files.");
+    }
+
+    const index = await this.options.loadIndex();
+    if (index.revision !== input.expectedRevision) {
+      throw conflict();
+    }
+    const entries = input.entryIds.map((entryId) => index.get(entryId));
+    if (
+      entries.some(
+        (entry) => !entry || entry.kind !== "file" || !entry.content,
+      )
+    ) {
+      throw notFound();
+    }
+    const files = entries.filter(
+      (entry): entry is NonNullable<typeof entry> & { kind: "file" } =>
+        Boolean(entry && entry.kind === "file"),
+    );
+    const extensions = files.map((entry) => fileExtension(entry.name));
+    const state = await this.options.appStore.read();
+
+    return {
+      entries: files.map((entry, indexInBatch) => ({
+        entryId: entry.entryIdHex,
+        name: entry.name,
+        extension: extensions[indexInBatch],
+      })),
+      revision: index.revision,
+      requestedAction: input.requestedAction,
+      effectiveAction: input.requestedAction,
+      candidates: candidatesForMany(state.apps, extensions),
+    };
+  }
 }
 
 function candidatesFor(
@@ -97,6 +153,42 @@ function candidatesFor(
           (handler) =>
             handler.actions.includes(action) &&
             handler.extensions.includes(extension),
+        )
+        .map((handler) => ({
+          appId: app.appId,
+          appName: app.manifest.name,
+          handler,
+        })),
+    )
+    .sort((left, right) =>
+      left.appName.localeCompare(right.appName) ||
+      left.appId.localeCompare(right.appId) ||
+      left.handler.id.localeCompare(right.handler.id),
+    );
+}
+
+function candidatesForMany(
+  apps: InstalledAppRecord[],
+  extensions: Array<string | null>,
+): ResourceHandlerCandidate[] {
+  if (extensions.some((extension) => extension === null)) {
+    return [];
+  }
+  return apps
+    .filter(
+      (app) =>
+        app.status === "active" &&
+        app.openResource?.protocol === "biunivers.open-resource/1.1",
+    )
+    .flatMap((app) =>
+      (app.openResource?.handlers ?? [])
+        .filter(
+          (handler) =>
+            handler.multiple === true &&
+            handler.actions.includes("open") &&
+            extensions.every((extension) =>
+              handler.extensions.includes(extension!),
+            ),
         )
         .map((handler) => ({
           appId: app.appId,

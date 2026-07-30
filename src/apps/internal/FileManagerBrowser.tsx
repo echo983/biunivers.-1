@@ -9,6 +9,7 @@ import {
   copyEntries,
   copyFile,
   createFile,
+  createMultiResourceLaunch,
   createResourceLaunch,
   createDirectory,
   moveEntries,
@@ -16,6 +17,8 @@ import {
   removeEntries,
   removeEntry,
   resolveResourceHandlers,
+  resolveMultiResourceHandlers,
+  type MultiResourceHandlerResolution,
   type ResourceHandlerCandidate,
   type ResourceHandlerResolution,
 } from "../../api/internalFileManagerClient";
@@ -82,10 +85,17 @@ type EditDialog =
   | { mode: "copy"; entry: FileEntry }
   | null;
 
-interface OpenWithState {
-  entry: FileEntry;
-  resolution: ResourceHandlerResolution;
-}
+type OpenWithState =
+  | {
+      kind: "single";
+      entry: FileEntry;
+      resolution: ResourceHandlerResolution;
+    }
+  | {
+      kind: "multiple";
+      entries: FileEntry[];
+      resolution: MultiResourceHandlerResolution;
+    };
 
 interface TransferState {
   kind: "upload" | "download";
@@ -428,20 +438,37 @@ export function FileManagerBrowser({
   ) => {
     setWorking(true);
     setError(undefined);
-    setNotice(`正在用“${candidate.appName}”打开“${state.entry.name}”…`);
+    setNotice(
+      state.kind === "single"
+        ? `正在用“${candidate.appName}”打开“${state.entry.name}”…`
+        : `正在用“${candidate.appName}”打开 ${state.entries.length} 个文件…`,
+    );
     try {
       if (!appRegistry[candidate.appId]) {
         throw new Error("目标应用尚未加载，请刷新桌面后重试。");
       }
-      const launch = await createResourceLaunch(instanceToken, {
-        entryId: state.entry.entryId,
-        expectedRevision: state.resolution.revision,
-        targetAppId: candidate.appId,
-        handlerId: candidate.handler.id,
-        action: state.resolution.effectiveAction,
-      });
+      const launch =
+        state.kind === "single"
+          ? await createResourceLaunch(instanceToken, {
+              entryId: state.entry.entryId,
+              expectedRevision: state.resolution.revision,
+              targetAppId: candidate.appId,
+              handlerId: candidate.handler.id,
+              action: state.resolution.effectiveAction,
+            })
+          : await createMultiResourceLaunch(instanceToken, {
+              entryIds: state.entries.map((entry) => entry.entryId),
+              expectedRevision: state.resolution.revision,
+              targetAppId: candidate.appId,
+              handlerId: candidate.handler.id,
+              action: "open",
+            });
       openApp(candidate.appId, { launchId: launch.launchId });
-      if (remember && state.resolution.extension) {
+      if (
+        state.kind === "single" &&
+        remember &&
+        state.resolution.extension
+      ) {
         setDefaultResourceHandler(
           resourceHandlerKey(
             state.resolution.extension,
@@ -455,7 +482,8 @@ export function FileManagerBrowser({
       }
       setOpenWith(undefined);
       setNotice(
-        state.resolution.effectiveAction === "open" &&
+        state.kind === "single" &&
+          state.resolution.effectiveAction === "open" &&
           state.resolution.requestedAction === "edit"
           ? `已用“${candidate.appName}”以只读方式打开。`
           : `已用“${candidate.appName}”打开。`,
@@ -494,7 +522,7 @@ export function FileManagerBrowser({
         listing.revision,
         "edit",
       );
-      const state = { entry, resolution };
+      const state: OpenWithState = { kind: "single", entry, resolution };
       if (resolution.candidates.length === 0) {
         setNotice(undefined);
         setError(`没有能够打开“${entry.name}”的应用。`);
@@ -515,6 +543,51 @@ export function FileManagerBrowser({
       }
       setNotice(undefined);
       setOpenWith(state);
+    } catch (reason) {
+      setNotice(undefined);
+      if (
+        reason instanceof FileHostClientError &&
+        reason.code === "FILE_VERSION_CONFLICT"
+      ) {
+        setError("文件系统已发生变化，目录已刷新，请重新操作。");
+        refresh();
+      } else {
+        setError(messageOf(reason));
+      }
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const openFiles = async (entries: FileEntry[]) => {
+    if (entries.length > 100) {
+      setError("一次最多用同一应用打开 100 个文件。");
+      return;
+    }
+    if (
+      entries.length < 2 ||
+      entries.some((entry) => entry.kind !== "file") ||
+      !listing ||
+      working
+    ) {
+      return;
+    }
+    setWorking(true);
+    setError(undefined);
+    setNotice(`正在查找 ${entries.length} 个文件的共同打开方式…`);
+    try {
+      const resolution = await resolveMultiResourceHandlers(
+        instanceToken,
+        entries.map((entry) => entry.entryId),
+        listing.revision,
+      );
+      if (resolution.candidates.length === 0) {
+        setNotice(undefined);
+        setError("没有能够同时打开这些文件的应用。");
+        return;
+      }
+      setNotice(undefined);
+      setOpenWith({ kind: "multiple", entries, resolution });
     } catch (reason) {
       setNotice(undefined);
       if (
@@ -749,8 +822,18 @@ export function FileManagerBrowser({
               type="button"
               aria-label="打开方式"
               title="打开方式"
-              disabled={!selected || selected.kind !== "file" || working}
-              onClick={() => selected && void openFile(selected, true)}
+              disabled={
+                selectedEntries.length === 0 ||
+                selectedEntries.some((entry) => entry.kind !== "file") ||
+                working
+              }
+              onClick={() => {
+                if (selectedEntries.length === 1) {
+                  void openFile(selectedEntries[0], true);
+                } else {
+                  void openFiles(selectedEntries);
+                }
+              }}
             >
               <ToolbarIcon kind="open-with" />
             </button>
@@ -1247,9 +1330,12 @@ function OpenWithDialog({
         }}
       >
         <h2 id="file-manager-open-with-title">
-          打开“{state.entry.name}”
+          {state.kind === "single"
+            ? `打开“${state.entry.name}”`
+            : `打开 ${state.entries.length} 个文件`}
         </h2>
-        {state.resolution.effectiveAction === "open" &&
+        {state.kind === "single" &&
+          state.resolution.effectiveAction === "open" &&
           state.resolution.requestedAction === "edit" && (
             <p>没有可编辑此文件的应用，以下应用将以只读方式打开。</p>
           )}
@@ -1277,7 +1363,7 @@ function OpenWithDialog({
             );
           })}
         </fieldset>
-        {state.resolution.extension && (
+        {state.kind === "single" && state.resolution.extension && (
           <label>
             <input
               type="checkbox"

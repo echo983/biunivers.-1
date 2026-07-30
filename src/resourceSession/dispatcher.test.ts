@@ -60,6 +60,47 @@ describe("Resource Session dispatcher", () => {
     );
   });
 
+  it("opens an ordered multi-file selection only for opted-in apps", async () => {
+    const entryIds = ["11".repeat(16), "22".repeat(16)];
+    const selectFiles = vi.fn().mockResolvedValue(entryIds);
+    const openMany = vi.fn().mockResolvedValue({
+      resources: [{ sessionId: "first" }, { sessionId: "second" }],
+    });
+    await expect(
+      dispatchResourceSessionRequest(
+        request("resource.openMany", { access: "read", maximum: 20 }),
+        "instance-token",
+        {
+          selectFile: vi.fn(),
+          selectFiles,
+          selectSaveTarget: vi.fn(),
+          openMany,
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: true,
+      result: {
+        resources: [{ sessionId: "first" }, { sessionId: "second" }],
+      },
+    });
+    expect(selectFiles).toHaveBeenCalledWith(20);
+    expect(openMany).toHaveBeenCalledWith("instance-token", entryIds);
+
+    await expect(
+      dispatchResourceSessionRequest(
+        request("resource.openMany", {}),
+        "instance-token",
+        {
+          selectFile: vi.fn(),
+          selectSaveTarget: vi.fn(),
+        },
+      ),
+    ).resolves.toMatchObject({
+      ok: false,
+      error: { code: "RESOURCE_ACCESS_DENIED" },
+    });
+  });
+
   it("creates pending save targets and handles cancellation", async () => {
     const createSaveTarget = vi
       .fn()
