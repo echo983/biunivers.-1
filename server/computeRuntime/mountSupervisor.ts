@@ -1,4 +1,5 @@
 import { spawn, execFile } from "node:child_process";
+import { chmod } from "node:fs/promises";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import type { RunPaths } from "./runDirectoryManager.js";
@@ -18,6 +19,7 @@ export interface CommandLauncher {
 
 export interface MountController {
   isMounted(path: string): Promise<boolean>;
+  makeWorkspaceWritable(path: string): Promise<void>;
   unmount(path: string): Promise<void>;
 }
 
@@ -127,6 +129,7 @@ export class MountSupervisor {
         input.paths.merged,
       ]);
       await this.#waitUntilMounted(input.paths.merged, overlay);
+      await this.#mounts.makeWorkspaceWritable(input.paths.merged);
       this.#active.set(input.runIdHex, {
         paths: input.paths,
         pvlogfs,
@@ -258,6 +261,10 @@ export class SystemMountController implements MountController {
     } catch {
       return false;
     }
+  }
+
+  async makeWorkspaceWritable(path: string): Promise<void> {
+    await chmod(path, 0o707);
   }
 
   async unmount(path: string): Promise<void> {

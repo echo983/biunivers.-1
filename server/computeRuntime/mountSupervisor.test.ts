@@ -54,6 +54,10 @@ class FakeMounts implements MountController {
     return this.mounted.has(path);
   }
 
+  async makeWorkspaceWritable(path: string): Promise<void> {
+    this.log.push(`writable:${path.endsWith("/merged") ? "merged" : "other"}`);
+  }
+
   async unmount(path: string): Promise<void> {
     this.log.push(`unmount:${path.endsWith("/merged") ? "merged" : "lower"}`);
     this.mounted.delete(path);
@@ -128,6 +132,7 @@ describe("MountSupervisor", () => {
 
     await supervisor.cleanup(runIdHex);
     expect(mounts.log).toEqual([
+      "writable:merged",
       "unmount:merged",
       "stop:overlay:SIGTERM",
       "unmount:lower",
