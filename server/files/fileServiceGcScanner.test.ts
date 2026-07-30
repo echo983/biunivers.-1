@@ -33,6 +33,7 @@ describe("FileServiceGcScanner", () => {
       Buffer.from("reachable"),
     );
     await new FileSystemTransactions({
+      refId: "main",
       repository,
       refStore: genesis.store,
       writerId: "test",

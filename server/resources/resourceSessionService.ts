@@ -30,6 +30,7 @@ export class ResourceSessionService {
     const index = await loadCurrentEntryIndex(
       this.options.repository,
       this.options.refStore,
+      "main",
     );
     const entry = index.get(entryId);
     if (!entry || entry.kind !== "file" || !entry.content) {
@@ -71,6 +72,7 @@ export class ResourceSessionService {
     const index = await loadCurrentEntryIndex(
       this.options.repository,
       this.options.refStore,
+      "main",
     );
     if (
       expectedRevision !== undefined &&
@@ -132,6 +134,7 @@ export class ResourceSessionService {
     const index = await loadCurrentEntryIndex(
       this.options.repository,
       this.options.refStore,
+      "main",
     );
     const parent = index.get(parentEntryId);
     if (!parent || parent.kind !== "directory") {

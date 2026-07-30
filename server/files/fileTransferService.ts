@@ -36,6 +36,7 @@ export class FileTransferService {
     this.#capabilities = options.capabilities;
     this.#contentStore = new FileContentStore(options.repository);
     this.#transactions = new FileSystemTransactions({
+      refId: "main",
       repository: options.repository,
       refStore: options.refStore,
       writerId: options.writerId,
@@ -58,6 +59,7 @@ export class FileTransferService {
       const index = await loadCurrentEntryIndex(
         this.#repository,
         this.#refStore,
+        "main",
       );
       if (!transfer.entryIdHex) {
         throw new FileCapabilityError(
@@ -115,6 +117,7 @@ export class FileTransferService {
         const before = await loadCurrentEntryIndex(
           this.#repository,
           this.#refStore,
+          "main",
         );
         const entry = before.get(transfer.entryIdHex);
         if (
@@ -144,6 +147,7 @@ export class FileTransferService {
       const after = await loadCurrentEntryIndex(
         this.#repository,
         this.#refStore,
+        "main",
       );
       const updated = after.get(published.entryIdHex);
       if (!updated || updated.kind !== "file") {

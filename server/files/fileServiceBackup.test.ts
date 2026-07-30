@@ -36,6 +36,7 @@ describe("FileServiceBackup", () => {
       Buffer.from("revision one"),
     );
     await new FileSystemTransactions({
+      refId: "main",
       repository,
       refStore: genesis.store,
       writerId: "test",
@@ -62,6 +63,7 @@ describe("FileServiceBackup", () => {
       Buffer.from("revision two"),
     );
     await new FileSystemTransactions({
+      refId: "main",
       repository,
       refStore: genesis.store,
       writerId: "test",
@@ -72,7 +74,7 @@ describe("FileServiceBackup", () => {
     });
 
     const backup = await SqliteRefStore.openExisting(backupPath);
-    await expect(loadCurrentEntryIndex(repository, backup)).resolves.toMatchObject({
+    await expect(loadCurrentEntryIndex(repository, backup, "main")).resolves.toMatchObject({
       revision: 1,
       rootEntryIdHex: genesis.rootEntryIdHex,
     });

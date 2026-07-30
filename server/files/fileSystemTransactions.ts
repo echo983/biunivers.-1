@@ -12,6 +12,7 @@ import {
 interface TransactionServiceOptions {
   repository: ImmutableObjectRepository;
   refStore: SqliteRefStore;
+  refId: string;
   writerId: string;
   core?: PvlogCore;
   now?: () => number;
@@ -102,6 +103,7 @@ interface CurrentFileSystemState {
 export class FileSystemTransactions {
   readonly #repository: ImmutableObjectRepository;
   readonly #refStore: SqliteRefStore;
+  readonly #refId: string;
   readonly #writerId: string;
   readonly #core: PvlogCore;
   readonly #now: () => number;
@@ -111,6 +113,7 @@ export class FileSystemTransactions {
   constructor(options: TransactionServiceOptions) {
     this.#repository = options.repository;
     this.#refStore = options.refStore;
+    this.#refId = options.refId;
     this.#writerId = options.writerId;
     this.#core = options.core ?? loadPvlogCore();
     this.#now = options.now ?? Date.now;
@@ -334,7 +337,7 @@ export class FileSystemTransactions {
   async #loadCurrentState(
     expectedRevision?: number,
   ): Promise<CurrentFileSystemState> {
-    const ref = this.#refStore.getRef("main");
+    const ref = this.#refStore.getRef(this.#refId);
     if (
       expectedRevision !== undefined &&
       ref.revision !== expectedRevision
@@ -404,7 +407,7 @@ export class FileSystemTransactions {
 
     await this.#beforePublish?.();
     const ref = this.#refStore.compareAndSwap({
-      refId: "main",
+      refId: this.#refId,
       expectedHeadFidHex: state.ref.headFidHex,
       expectedRevision: state.ref.revision,
       newHeadFidHex: head.key.fidHex,

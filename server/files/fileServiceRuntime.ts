@@ -59,6 +59,7 @@ export class FileServiceRuntime {
       const index = await loadCurrentEntryIndex(
         this.repository,
         this.refStore,
+        "main",
       );
       return {
         mode: "ready",
@@ -105,7 +106,7 @@ export async function startFileService(
     } else {
       refStore = await SqliteRefStore.openExisting(config.databasePath);
     }
-    const entryIndex = await loadCurrentEntryIndex(repository, refStore);
+    const entryIndex = await loadCurrentEntryIndex(repository, refStore, "main");
     return new FileServiceRuntime(
       {
         mode: "ready",

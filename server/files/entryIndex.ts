@@ -60,9 +60,10 @@ export class EntryIndex {
 export async function loadCurrentEntryIndex(
   repository: ImmutableObjectRepository,
   refStore: SqliteRefStore,
+  refId: string,
   core: PvlogCore = loadPvlogCore(),
 ): Promise<EntryIndex> {
-  const ref = refStore.getRef("main");
+  const ref = refStore.getRef(refId);
   const head = await repository.get("heads", ref.headFidHex);
   core.validateHead(head);
   const revision = Number(core.headRevision(head));

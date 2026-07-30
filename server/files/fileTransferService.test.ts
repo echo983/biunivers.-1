@@ -73,6 +73,7 @@ async function setup() {
   const content = await contentStore.putBytes(Buffer.from("original"));
   const transactionIds = [id(0x30), id(0x40)];
   const transactions = new FileSystemTransactions({
+    refId: "main",
     repository,
     refStore: genesis.store,
     writerId: "test",
@@ -83,7 +84,7 @@ async function setup() {
     name: "notes.md",
     content,
   });
-  const index = await loadCurrentEntryIndex(repository, genesis.store);
+  const index = await loadCurrentEntryIndex(repository, genesis.store, "main");
   const entry = index.get(created.entryIdHex)!;
   const capabilities = new FileCapabilityRegistry();
   const instance = capabilities.createInstance(
@@ -221,6 +222,7 @@ describe("FileTransferService", () => {
     const index = await loadCurrentEntryIndex(
       fixture.repository,
       fixture.refStore,
+      "main",
     );
     const updated = index.get(fixture.entry.entryIdHex)!;
     const chunks = [];
@@ -355,6 +357,7 @@ describe("FileTransferService", () => {
     const index = await loadCurrentEntryIndex(
       fixture.repository,
       fixture.refStore,
+      "main",
     );
     expect(index.revision).toBe(2);
     const chunks = [];

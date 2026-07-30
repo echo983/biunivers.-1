@@ -90,6 +90,7 @@ export class PvlogMountBridge {
     const index = await loadCurrentEntryIndex(
       options.runtime.repository,
       options.runtime.refStore,
+      "main",
     );
     const indexLoadMs = performance.now() - started;
     const after = options.runtime.refStore.getRef("main");

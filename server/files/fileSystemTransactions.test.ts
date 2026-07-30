@@ -92,6 +92,7 @@ describe("FileSystemTransactions", () => {
     const firstContent = await contentStore.putBytes(Buffer.from("first"));
     const transactionIds = [id(0x30), id(0x40), id(0x50)];
     const transactions = new FileSystemTransactions({
+      refId: "main",
       repository: setupResult.repository,
       refStore: setupResult.refStore,
       writerId: "test",
@@ -148,6 +149,7 @@ describe("FileSystemTransactions", () => {
     });
     const firstIds = [id(0x31), id(0x41)];
     const first = new FileSystemTransactions({
+      refId: "main",
       repository: setupResult.repository,
       refStore: setupResult.refStore,
       writerId: "first",
@@ -160,6 +162,7 @@ describe("FileSystemTransactions", () => {
     });
     const secondIds = [id(0x32), id(0x42)];
     const second = new FileSystemTransactions({
+      refId: "main",
       repository: setupResult.repository,
       refStore: secondConnection,
       writerId: "second",
@@ -207,6 +210,7 @@ describe("FileSystemTransactions", () => {
       id(0x46),
     ];
     const transactions = new FileSystemTransactions({
+      refId: "main",
       repository: setupResult.repository,
       refStore: setupResult.refStore,
       writerId: "crud-test",
@@ -248,6 +252,7 @@ describe("FileSystemTransactions", () => {
     const index = await loadCurrentEntryIndex(
       setupResult.repository,
       setupResult.refStore,
+      "main",
     );
     expect(index.revision).toBe(5);
     expect(index.has(directory.entryIdHex)).toBe(false);
@@ -261,6 +266,76 @@ describe("FileSystemTransactions", () => {
     });
     expect(index.listChildren(setupResult.rootEntryIdHex).map((entry) => entry.name))
       .toEqual(["renamed.md"]);
+    setupResult.refStore.close();
+  });
+
+  it("publishes only to its explicit Ref and leaves main unchanged", async () => {
+    const setupResult = await setup();
+    const core = loadPvlogCore();
+    const lineageId = id(0x70);
+    const rootEntryId = id(0x71);
+    const checkpointBytes = core.encodeGenesisCheckpoint(
+      lineageId,
+      rootEntryId,
+      150n,
+    );
+    const checkpoint = await setupResult.repository.put(
+      "checkpoints",
+      checkpointBytes,
+    );
+    const headBytes = core.encodeGenesisHead(
+      lineageId,
+      rootEntryId,
+      Buffer.from(checkpoint.key.fidHex, "hex"),
+      150n,
+      "workspace",
+    );
+    const head = await setupResult.repository.put("heads", headBytes);
+    const workspaceRefId = `ws-${"72".repeat(16)}`;
+    setupResult.refStore.createRef({
+      refId: workspaceRefId,
+      lineageIdHex: Buffer.from(lineageId).toString("hex"),
+      headFidHex: head.key.fidHex,
+      revision: 0,
+      updatedAtMs: 150,
+    });
+    const mainBefore = setupResult.refStore.getRef("main");
+    const ids = [id(0x73), id(0x74)];
+    const transactions = new FileSystemTransactions({
+      refId: workspaceRefId,
+      repository: setupResult.repository,
+      refStore: setupResult.refStore,
+      writerId: "workspace",
+      now: () => 200,
+      randomId: () => ids.shift()!,
+    });
+
+    const created = await transactions.createDirectory({
+      parentEntryIdHex: Buffer.from(rootEntryId).toString("hex"),
+      name: "output",
+    });
+
+    expect(created.ref).toMatchObject({
+      refId: workspaceRefId,
+      revision: 1,
+    });
+    expect(setupResult.refStore.getRef("main")).toEqual(mainBefore);
+    const mainIndex = await loadCurrentEntryIndex(
+      setupResult.repository,
+      setupResult.refStore,
+      "main",
+    );
+    const workspaceIndex = await loadCurrentEntryIndex(
+      setupResult.repository,
+      setupResult.refStore,
+      workspaceRefId,
+    );
+    expect(mainIndex.listChildren(mainIndex.rootEntryIdHex)).toEqual([]);
+    expect(
+      workspaceIndex
+        .listChildren(workspaceIndex.rootEntryIdHex)
+        .map((entry) => entry.name),
+    ).toEqual(["output"]);
     setupResult.refStore.close();
   });
 });
