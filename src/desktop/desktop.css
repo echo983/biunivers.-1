@@ -410,6 +410,112 @@
   color: #852e2e;
 }
 
+.wormhole-app {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.wormhole-app header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.wormhole-app h1,
+.wormhole-app h2 {
+  margin: 0;
+}
+
+.wormhole-app h2 {
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.wormhole-app header p,
+.wormhole-app section p {
+  color: #596274;
+  line-height: 1.5;
+}
+
+.wormhole-app section {
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid #dfe4ed;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.wormhole-app button,
+.wormhole-app select {
+  padding: 7px 11px;
+  border: 1px solid #c8d0dd;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.wormhole-app header button.is-enabled {
+  color: #8b2525;
+}
+
+.wormhole-app dl {
+  margin: 0;
+}
+
+.wormhole-app dl div {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  padding: 5px 0;
+}
+
+.wormhole-app dt {
+  color: #6c7482;
+}
+
+.wormhole-app dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.wormhole-app__actions {
+  display: flex;
+  margin-top: 12px;
+  gap: 8px;
+}
+
+.wormhole-app__command {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.wormhole-app__command code {
+  padding: 10px;
+  overflow: auto;
+  border-radius: 7px;
+  background: #eef1f6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.wormhole-app section label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.wormhole-app__warning {
+  color: #8b5425 !important;
+}
+
+.wormhole-app__notice {
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: #e5f2e9;
+  color: #285d39;
+}
+
 .iframe-app {
   position: relative;
   display: grid;
