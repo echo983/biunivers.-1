@@ -88,7 +88,9 @@ export class WorkspaceSnapshotProvider {
   }
 }
 
-function projectStableInodes(index: EntryIndex): WorkspaceSnapshotEntry[] {
+export function projectStableInodes(
+  index: EntryIndex,
+): WorkspaceSnapshotEntry[] {
   const root = index.get(index.rootEntryIdHex);
   if (!root || root.kind !== "directory" || root.parentEntryIdHex !== null) {
     throw new Error("Workspace EntryIndex root is invalid.");

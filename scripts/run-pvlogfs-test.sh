@@ -112,6 +112,26 @@ first_file="$(find "${mount_dir}" -type f -print -quit)"
   exit 1
 }
 dd if="${first_file}" bs=4096 count=1 status=none >/dev/null
+dd if="${first_file}" bs=4096 count=1 status=none >/dev/null
+
+echo "主动破坏最近使用的同长度 Chunk cache，并验证自动恢复……"
+docker exec "${container_name}" node -e '
+const fs = require("node:fs");
+const directory = "/data/file-service/chunk-cache";
+const files = fs.readdirSync(directory)
+  .filter((name) => /^[0-9a-f]{32}\.chunk$/.test(name))
+  .map((name) => ({ name, mtime: fs.statSync(`${directory}/${name}`).mtimeMs }))
+  .sort((left, right) => right.mtime - left.mtime);
+if (!files.length) throw new Error("No verified Chunk cache file exists.");
+const path = `${directory}/${files[0].name}`;
+const bytes = fs.readFileSync(path);
+if (!bytes.length) throw new Error("Cannot corrupt an empty Chunk fixture.");
+bytes[0] ^= 0xff;
+fs.writeFileSync(path, bytes);
+console.log(files[0].name);
+'
+dd if="${first_file}" bs=4096 count=1 status=none >/dev/null
+
 if touch "${mount_dir}/must-not-exist" 2>/dev/null; then
   echo "PVLogFS 意外允许写入。" >&2
   exit 1
@@ -121,8 +141,10 @@ fusermount3 -u "${mount_dir}"
 wait "${fuse_pid}" >/dev/null 2>&1 || true
 fuse_pid=""
 docker stop --time 10 "${container_name}" >/dev/null
+gateway_log="$(docker logs "${container_name}" 2>&1)"
 docker rm "${container_name}" >/dev/null
 
 trap - EXIT INT TERM
 rm -rf -- "${test_dir}"
-echo "正式 PVLogFS 固定 HEAD、目录枚举、验证缓存读取和只读保护全部通过。"
+echo "正式 PVLogFS 固定 HEAD、目录枚举、冷/热/损坏缓存恢复和只读保护全部通过。"
+echo "Gateway 测量：${gateway_log##*$'\n'}"

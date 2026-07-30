@@ -7,6 +7,7 @@ import { ImmutableObjectRepository } from "../files/immutableObjectRepository.js
 import { LocalWormObjectStore } from "../files/localWormObjectStore.js";
 import { WorkspaceContentReader } from "./workspaceContentReader.js";
 import { VerifiedChunkCache } from "./verifiedChunkCache.js";
+import { loadPvlogCore } from "../files/pvlogCore.js";
 
 const roots: string[] = [];
 
@@ -79,5 +80,53 @@ describe("WorkspaceContentReader", () => {
     await expect(
       setupResult.reader.read(content, 0, 1024 * 1024 + 1),
     ).rejects.toMatchObject({ code: "OBJECT_INVALID" });
+  });
+
+  it("randomly reads a logical 1 GiB Manifest while caching one repeated Chunk", async () => {
+    const setupResult = await setup();
+    const core = loadPvlogCore();
+    const chunkSize = 64 * 1024 * 1024;
+    const chunkBytes = Buffer.alloc(chunkSize, 0x5a);
+    chunkBytes[0] = 0x41;
+    chunkBytes[chunkSize - 1] = 0x42;
+    const chunk = await setupResult.repository.put("chunks", chunkBytes);
+    const chunkCount = 16;
+    const fids = Buffer.concat(
+      Array.from({ length: chunkCount }, () =>
+        Buffer.from(chunk.key.fidHex, "hex"),
+      ),
+    );
+    const lengths = new BigUint64Array(chunkCount);
+    lengths.fill(BigInt(chunkSize));
+    const manifestBytes = core.encodeManifest(
+      BigInt(chunkSize * chunkCount),
+      fids,
+      lengths,
+    );
+    const manifest = await setupResult.repository.put(
+      "manifests",
+      manifestBytes,
+    );
+    const content = {
+      kind: "manifest" as const,
+      fidHex: manifest.key.fidHex,
+      size: chunkSize * chunkCount,
+    };
+
+    expect(
+      Buffer.from(
+        await setupResult.reader.read(content, chunkSize * 15, 1),
+      ).toString(),
+    ).toBe("A");
+    expect(
+      Buffer.from(
+        await setupResult.reader.read(content, chunkSize * 8 - 1, 2),
+      ).toString(),
+    ).toBe("BA");
+    expect(setupResult.cache.metrics()).toMatchObject({
+      misses: 1,
+      hits: 2,
+      downloadedBytes: chunkSize,
+    });
   });
 });
