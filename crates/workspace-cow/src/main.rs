@@ -16,6 +16,9 @@ struct ScanEntry {
     kind: EntryKind,
     size: u64,
     mtime_ns: String,
+    ctime_ns: String,
+    device: String,
+    inode: String,
     opaque: bool,
 }
 
@@ -210,6 +213,9 @@ fn scan_entry(
             kind: EntryKind::Whiteout,
             size: 0,
             mtime_ns: mtime_ns(&initial).to_string(),
+            ctime_ns: ctime_ns(&initial).to_string(),
+            device: initial.st_dev.to_string(),
+            inode: initial.st_ino.to_string(),
             opaque: false,
         });
         return Ok(());
@@ -256,6 +262,9 @@ fn scan_entry(
             kind: EntryKind::File,
             size,
             mtime_ns: mtime_ns(&confirmed).to_string(),
+            ctime_ns: ctime_ns(&confirmed).to_string(),
+            device: confirmed.st_dev.to_string(),
+            inode: confirmed.st_ino.to_string(),
             opaque: false,
         });
     } else {
@@ -264,6 +273,9 @@ fn scan_entry(
             kind: EntryKind::Directory,
             size: 0,
             mtime_ns: mtime_ns(&confirmed).to_string(),
+            ctime_ns: ctime_ns(&confirmed).to_string(),
+            device: confirmed.st_dev.to_string(),
+            inode: confirmed.st_ino.to_string(),
             opaque,
         });
         scan_directory(owned.as_raw_fd(), path, depth, opaque, state)?;
@@ -386,6 +398,10 @@ fn fingerprint(value: &libc::stat) -> (u64, u64, u32, i64, i128, i128) {
 
 fn mtime_ns(value: &libc::stat) -> i128 {
     i128::from(value.st_mtime) * 1_000_000_000 + i128::from(value.st_mtime_nsec)
+}
+
+fn ctime_ns(value: &libc::stat) -> i128 {
+    i128::from(value.st_ctime) * 1_000_000_000 + i128::from(value.st_ctime_nsec)
 }
 
 fn positive(value: &str, label: &str) -> Result<usize, String> {

@@ -16,6 +16,9 @@ export interface UpperScanEntry {
   kind: "file" | "directory" | "whiteout";
   size: number;
   mtimeNs: string;
+  ctimeNs: string;
+  device: string;
+  inode: string;
   opaque: boolean;
 }
 
@@ -143,6 +146,12 @@ function validateResult(
       (entry.size as number) < 0 ||
       typeof entry.mtimeNs !== "string" ||
       !/^-?[0-9]+$/.test(entry.mtimeNs) ||
+      typeof entry.ctimeNs !== "string" ||
+      !/^-?[0-9]+$/.test(entry.ctimeNs) ||
+      typeof entry.device !== "string" ||
+      !/^[0-9]+$/.test(entry.device) ||
+      typeof entry.inode !== "string" ||
+      !/^[0-9]+$/.test(entry.inode) ||
       typeof entry.opaque !== "boolean"
     ) {
       throw invalidResult();
@@ -162,6 +171,9 @@ function validateResult(
       kind: entry.kind,
       size: entry.size,
       mtimeNs: entry.mtimeNs,
+      ctimeNs: entry.ctimeNs,
+      device: entry.device,
+      inode: entry.inode,
       opaque: entry.opaque,
     } as UpperScanEntry;
   });

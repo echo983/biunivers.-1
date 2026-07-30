@@ -127,5 +127,8 @@ function change(
     size,
     opaque,
     mtimeNs: String(mtimeMs * 1_000_000),
+    ctimeNs: String(mtimeMs * 1_000_000),
+    device: "1",
+    inode: String(mtimeMs),
   };
 }
