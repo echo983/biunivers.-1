@@ -12,6 +12,7 @@ import { WorkspaceCommitObjectBuilder } from "../workspaceCommit/workspaceCommit
 import { ComputeRuntimeCoordinator } from "./computeRuntimeCoordinator.js";
 import type { ComputeRuntimeConfig } from "./computeRuntimeConfig.js";
 import { ComputeRuntimeServer } from "./computeRuntimeServer.js";
+import { ControlRunRecovery } from "./controlRunRecovery.js";
 import { DockerOciAdapter } from "./dockerOciAdapter.js";
 import { ExecutorRegistry } from "./executorRegistry.js";
 import { InterruptedRunRecovery } from "./interruptedRunRecovery.js";
@@ -62,6 +63,16 @@ export async function startComputeRuntimeDaemon(options: {
       reconciliation.known,
     );
     await assertNoInterruptedLocalRuns(directories, reconciliation.known);
+    const controlRecovery = await new ControlRunRecovery().reconcile(
+      directories,
+      fileRuntime.refStore,
+      reconciliation.known,
+    );
+    const recoveredRunCount = new Set([
+      ...recovery.recovered,
+      ...controlRecovery.stopped,
+      ...controlRecovery.failed,
+    ]).size;
 
     const cache = new VerifiedChunkCache({
       directory: options.runtimeConfig.cachePath,
@@ -134,7 +145,7 @@ export async function startComputeRuntimeDaemon(options: {
     return new RunningComputeRuntimeDaemon({
       socketPath: options.runtimeConfig.socketPath,
       quarantinedPaths: reconciliation.quarantined.length,
-      recoveredRuns: recovery.recovered.length,
+      recoveredRuns: recoveredRunCount,
       server,
       coordinator: managedRuntime,
       fileRuntime,
