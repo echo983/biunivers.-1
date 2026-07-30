@@ -14,6 +14,7 @@ LOG_PATH="$TEST_ROOT/runtime.log"
 TOKEN_HEX="$(openssl rand -hex 32)"
 DAEMON_PID=""
 FIXTURE_FINISHED=false
+NODE_BIN="node"
 
 cleanup() {
   if [[ -n "$DAEMON_PID" ]] && kill -0 "$DAEMON_PID" 2>/dev/null; then
@@ -21,7 +22,7 @@ cleanup() {
     wait "$DAEMON_PID" || true
   fi
   if [[ -f "$FIXTURE_PATH" ]] && [[ "$FIXTURE_FINISHED" != true ]]; then
-    node scripts/compute-runtime-fixture.mjs fail "$FIXTURE_PATH" || true
+    "$NODE_BIN" scripts/compute-runtime-fixture.mjs fail "$FIXTURE_PATH" || true
   fi
 }
 trap cleanup EXIT
@@ -29,6 +30,16 @@ trap cleanup EXIT
 set -a
 source "$ENV_FILE"
 set +a
+
+NODE_BIN="$(command -v node || true)"
+if [[ "$("$NODE_BIN" --version 2>/dev/null || true)" != v24.* ]]; then
+  NODE_BIN="$HOME/.nvm/versions/node/v24.18.0/bin/node"
+fi
+if [[ ! -x "$NODE_BIN" ]] || [[ "$("$NODE_BIN" --version)" != v24.* ]]; then
+  echo "缺少 Node.js 24；Compute Runtime 要求 Node.js >=24 <25。" >&2
+  exit 1
+fi
+export PATH="$(dirname "$NODE_BIN"):$PATH"
 
 npm run build:server >/dev/null
 CARGO_BIN="$(command -v cargo || true)"
@@ -42,7 +53,7 @@ fi
 CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
   "$CARGO_BIN" build --release \
   --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
-node scripts/compute-runtime-fixture.mjs prepare "$FIXTURE_PATH" >/dev/null
+"$NODE_BIN" scripts/compute-runtime-fixture.mjs prepare "$FIXTURE_PATH" >/dev/null
 
 export BIUNIVERS_RUNTIME_ROOT="$RUN_ROOT"
 export BIUNIVERS_RUNTIME_CACHE="$TEST_ROOT/cache"
@@ -51,7 +62,7 @@ export BIUNIVERS_RUNTIME_AUTH_TOKEN="$TOKEN_HEX"
 export BIUNIVERS_PVLOGFS_BINARY="$PVLOGFS_BINARY"
 export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE="$IMAGE_ID"
 
-node dist/server/computeRuntime/computeRuntimeCli.js >"$LOG_PATH" 2>&1 &
+"$NODE_BIN" dist/server/computeRuntime/computeRuntimeCli.js >"$LOG_PATH" 2>&1 &
 DAEMON_PID="$!"
 for _ in $(seq 1 100); do
   [[ -S "$SOCKET_PATH" ]] && break
@@ -60,12 +71,12 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$SOCKET_PATH" ]]
 
-RESULT="$(node scripts/verify-compute-runtime.mjs \
+RESULT="$("$NODE_BIN" scripts/verify-compute-runtime.mjs \
   "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$RUN_ROOT")"
-RUNTIME_IDENTITY="$(node -e \
+RUNTIME_IDENTITY="$("$NODE_BIN" -e \
   'const value=JSON.parse(process.argv[1]); process.stdout.write(value.runtimeIdentity)' \
   "$RESULT")"
-node scripts/compute-runtime-fixture.mjs finish \
+"$NODE_BIN" scripts/compute-runtime-fixture.mjs finish \
   "$FIXTURE_PATH" "$RUNTIME_IDENTITY"
 FIXTURE_FINISHED=true
 
