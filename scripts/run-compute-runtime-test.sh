@@ -42,6 +42,15 @@ if [[ ! -x "$NODE_BIN" ]] || [[ "$("$NODE_BIN" --version)" != v24.* ]]; then
 fi
 export PATH="$(dirname "$NODE_BIN"):$PATH"
 
+if ! "$NODE_BIN" -e \
+  'const D=require("better-sqlite3"); const d=new D(":memory:"); d.close()' \
+  >/dev/null 2>&1; then
+  echo "为 Node.js 24 重编译 better-sqlite3……"
+  npm rebuild better-sqlite3 --foreground-scripts >/dev/null
+fi
+"$NODE_BIN" -e \
+  'const D=require("better-sqlite3"); const d=new D(":memory:"); d.close()'
+
 npm run build:server >/dev/null
 CARGO_BIN="$(command -v cargo || true)"
 if [[ -z "$CARGO_BIN" ]] && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
