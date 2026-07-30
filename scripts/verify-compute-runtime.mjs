@@ -27,7 +27,19 @@ const diagnosticPath = join(
   "merged",
   ".biunivers-runtime-diagnostic.json",
 );
-const diagnostic = await waitForJson(diagnosticPath);
+let diagnostic;
+try {
+  diagnostic = await waitForJson(diagnosticPath);
+} catch (error) {
+  const failedInspect = await exchange({
+    tokenHex,
+    operation: "inspect",
+    runIdHex: fixture.runIdHex,
+  });
+  throw new Error(
+    `${error.message} Container state: ${JSON.stringify(failedInspect.result?.container ?? failedInspect)}`,
+  );
+}
 const inspect = await exchange({
   tokenHex,
   operation: "inspect",

@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-IMAGE_ID="${1:-sha256:f3b19461c76eff06f2134be84e0d975895b115cc0025ba86f040cbfaf79aa234}"
+IMAGE_ID="${1:-}"
 ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
 HOST_CONTAINER="${BIUNIVERS_TEST_CONTAINER:-biunivers-v02-test}"
 TEST_ROOT="$(mktemp -d /tmp/biunivers-compute-runtime.XXXXXX)"
@@ -57,6 +57,19 @@ fi
   'const D=require("better-sqlite3"); const d=new D(":memory:"); d.close()'
 
 npm run build:server >/dev/null
+if [[ -z "$IMAGE_ID" ]]; then
+  echo "构建固定诊断执行器镜像……"
+  docker build --quiet \
+    --tag biunivers-runtime-diagnostic:dev \
+    runtime/diagnostic >/dev/null
+  IMAGE_ID="$(docker image inspect \
+    --format '{{.Id}}' biunivers-runtime-diagnostic:dev)"
+fi
+if [[ ! "$IMAGE_ID" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+  echo "诊断执行器镜像必须使用 sha256 内容身份。" >&2
+  exit 1
+fi
+
 CARGO_BIN="$(command -v cargo || true)"
 if [[ -z "$CARGO_BIN" ]] && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
   CARGO_BIN="$HOME/.cargo/bin/cargo"
