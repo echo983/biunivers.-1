@@ -1,5 +1,6 @@
 import {
   act,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -101,6 +102,37 @@ describe("FileManagerBrowser", () => {
     expect(localStorage.getItem("biunivers.file-manager.view-mode")).toBe(
       "icons",
     );
+
+    const grid = screen.getByRole("grid", { name: "文件" });
+    vi.spyOn(grid, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 400, 300),
+    );
+    vi.spyOn(icon, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(20, 20, 80, 80),
+    );
+    fireEvent.pointerDown(grid, {
+      button: 0,
+      pointerId: 7,
+      clientX: 5,
+      clientY: 5,
+    });
+    fireEvent.pointerMove(grid, {
+      pointerId: 7,
+      clientX: 120,
+      clientY: 120,
+    });
+    expect(icon).toHaveClass("is-selected");
+    expect(
+      document.querySelector(".file-manager-app__selection-box"),
+    ).not.toBeNull();
+    fireEvent.pointerUp(grid, {
+      pointerId: 7,
+      clientX: 120,
+      clientY: 120,
+    });
+    expect(
+      document.querySelector(".file-manager-app__selection-box"),
+    ).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "列表视图" }));
     expect(screen.getByText("photo.png").closest("tr")).toHaveClass(

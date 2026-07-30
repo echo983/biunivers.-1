@@ -1109,11 +1109,21 @@
 }
 
 .file-manager-app__icon-grid {
+  position: relative;
   display: grid;
+  min-height: 100%;
   padding: 14px;
   align-content: start;
   grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
   gap: 10px;
+}
+
+.file-manager-app__selection-box {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid #4e83c4;
+  background: rgb(84 139 202 / 20%);
+  pointer-events: none;
 }
 
 .file-manager-app__icon-grid > button {

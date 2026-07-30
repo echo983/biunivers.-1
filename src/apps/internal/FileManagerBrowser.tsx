@@ -95,6 +95,21 @@ interface TransferState {
   fileCount?: number;
 }
 
+interface IconSelectionBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface IconSelectionDrag {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  additiveEntryIds: Set<string>;
+  moved: boolean;
+}
+
 export function FileManagerBrowser({
   instanceToken,
 }: FileManagerBrowserProps) {
@@ -125,10 +140,16 @@ export function FileManagerBrowser({
       return "list";
     }
   });
+  const [iconSelectionBox, setIconSelectionBox] =
+    useState<IconSelectionBox>();
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const directoryNavigationPendingRef = useRef(false);
   const mutationPendingRef = useRef(false);
   const transferAbortRef = useRef<AbortController | undefined>(undefined);
+  const iconSelectionDragRef = useRef<IconSelectionDrag | undefined>(
+    undefined,
+  );
+  const suppressIconGridClickRef = useRef(false);
   const appRegistry = useDesktopStore((state) => state.apps);
   const defaultResourceHandlers = useDesktopStore(
     (state) => state.defaultResourceHandlers,
@@ -889,9 +910,91 @@ export function FileManagerBrowser({
             role="grid"
             aria-label="文件"
             onClick={(event) => {
+              if (suppressIconGridClickRef.current) {
+                suppressIconGridClickRef.current = false;
+                return;
+              }
               if (event.target === event.currentTarget) {
                 setSelection({ entryIds: new Set() });
               }
+            }}
+            onPointerDown={(event) => {
+              if (
+                event.button !== 0 ||
+                event.target !== event.currentTarget
+              ) {
+                return;
+              }
+              event.preventDefault();
+              const additiveEntryIds =
+                event.ctrlKey || event.metaKey
+                  ? new Set(selection.entryIds)
+                  : new Set<string>();
+              iconSelectionDragRef.current = {
+                pointerId: event.pointerId,
+                startClientX: event.clientX,
+                startClientY: event.clientY,
+                additiveEntryIds,
+                moved: false,
+              };
+              event.currentTarget.setPointerCapture?.(event.pointerId);
+              setSelection({ entryIds: additiveEntryIds });
+              setIconSelectionBox(
+                iconSelectionRectangle(
+                  event.currentTarget,
+                  event.clientX,
+                  event.clientY,
+                  event.clientX,
+                  event.clientY,
+                ),
+              );
+            }}
+            onPointerMove={(event) => {
+              const drag = iconSelectionDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              event.preventDefault();
+              if (
+                Math.abs(event.clientX - drag.startClientX) > 3 ||
+                Math.abs(event.clientY - drag.startClientY) > 3
+              ) {
+                drag.moved = true;
+              }
+              const clientRectangle = normalizedRectangle(
+                drag.startClientX,
+                drag.startClientY,
+                event.clientX,
+                event.clientY,
+              );
+              const selectedEntryIds = new Set(drag.additiveEntryIds);
+              for (const item of event.currentTarget.querySelectorAll<HTMLElement>(
+                "[data-entry-id]",
+              )) {
+                if (rectanglesIntersect(clientRectangle, item.getBoundingClientRect())) {
+                  selectedEntryIds.add(item.dataset.entryId!);
+                }
+              }
+              setSelection({ entryIds: selectedEntryIds });
+              setIconSelectionBox(
+                iconSelectionRectangle(
+                  event.currentTarget,
+                  drag.startClientX,
+                  drag.startClientY,
+                  event.clientX,
+                  event.clientY,
+                ),
+              );
+            }}
+            onPointerUp={(event) => {
+              const drag = iconSelectionDragRef.current;
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              suppressIconGridClickRef.current = drag.moved;
+              iconSelectionDragRef.current = undefined;
+              setIconSelectionBox(undefined);
+              event.currentTarget.releasePointerCapture?.(event.pointerId);
+            }}
+            onPointerCancel={() => {
+              iconSelectionDragRef.current = undefined;
+              setIconSelectionBox(undefined);
             }}
           >
             {listing.entries.map((entry) => (
@@ -899,6 +1002,7 @@ export function FileManagerBrowser({
                 key={entry.entryId}
                 type="button"
                 role="gridcell"
+                data-entry-id={entry.entryId}
                 className={
                   selection.entryIds.has(entry.entryId)
                     ? "is-selected"
@@ -938,6 +1042,13 @@ export function FileManagerBrowser({
                 </span>
               </button>
             ))}
+            {iconSelectionBox && (
+              <div
+                className="file-manager-app__selection-box"
+                aria-hidden="true"
+                style={iconSelectionBox}
+              />
+            )}
           </div>
         ) : (
           <p className="file-manager-app__empty">此文件夹为空。</p>
@@ -1447,6 +1558,54 @@ function copyName(name: string): string {
   const dot = name.lastIndexOf(".");
   if (dot <= 0) return `${name} - 副本`;
   return `${name.slice(0, dot)} - 副本${name.slice(dot)}`;
+}
+
+function normalizedRectangle(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+) {
+  return {
+    left: Math.min(startX, endX),
+    top: Math.min(startY, endY),
+    right: Math.max(startX, endX),
+    bottom: Math.max(startY, endY),
+  };
+}
+
+function iconSelectionRectangle(
+  container: HTMLElement,
+  startClientX: number,
+  startClientY: number,
+  endClientX: number,
+  endClientY: number,
+): IconSelectionBox {
+  const bounds = container.getBoundingClientRect();
+  const rectangle = normalizedRectangle(
+    startClientX,
+    startClientY,
+    endClientX,
+    endClientY,
+  );
+  return {
+    left: rectangle.left - bounds.left + container.scrollLeft,
+    top: rectangle.top - bounds.top + container.scrollTop,
+    width: rectangle.right - rectangle.left,
+    height: rectangle.bottom - rectangle.top,
+  };
+}
+
+function rectanglesIntersect(
+  left: { left: number; top: number; right: number; bottom: number },
+  right: { left: number; top: number; right: number; bottom: number },
+) {
+  return (
+    left.left < right.right &&
+    left.right > right.left &&
+    left.top < right.bottom &&
+    left.bottom > right.top
+  );
 }
 
 function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
