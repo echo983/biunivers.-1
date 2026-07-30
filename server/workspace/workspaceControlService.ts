@@ -21,6 +21,10 @@ import {
   WorkspaceDiffService,
   type WorkspaceDiff,
 } from "./workspaceDiffService.js";
+import {
+  WorkspaceTextDiffService,
+  type WorkspaceTextDiff,
+} from "./workspaceTextDiffService.js";
 
 const FILES_APP_ID = "system.files";
 const WORKSPACES_APP_ID = "system.workspaces";
@@ -36,6 +40,7 @@ interface WorkspaceControlServiceOptions {
   writerId: string;
   deriver?: WorkspaceDeriver;
   diff?: Pick<WorkspaceDiffService, "compare">;
+  textDiff?: Pick<WorkspaceTextDiffService, "compare">;
   now?: () => number;
 }
 
@@ -45,6 +50,7 @@ export class WorkspaceControlService {
   readonly #capabilities: FileCapabilityRegistry;
   readonly #deriver: WorkspaceDeriver;
   readonly #diff: Pick<WorkspaceDiffService, "compare">;
+  readonly #textDiff: Pick<WorkspaceTextDiffService, "compare">;
   readonly #now: () => number;
 
   constructor(options: WorkspaceControlServiceOptions) {
@@ -61,6 +67,12 @@ export class WorkspaceControlService {
     this.#diff =
       options.diff ??
       new WorkspaceDiffService({
+        repository: options.repository,
+        refStore: options.refStore,
+      });
+    this.#textDiff =
+      options.textDiff ??
+      new WorkspaceTextDiffService({
         repository: options.repository,
         refStore: options.refStore,
       });
@@ -163,6 +175,15 @@ export class WorkspaceControlService {
   ): Promise<WorkspaceDiff> {
     this.#authorize(instanceToken, WORKSPACES_APP_ID);
     return await this.#diff.compare(workspaceIdHex);
+  }
+
+  async textDiff(
+    instanceToken: string,
+    workspaceIdHex: string,
+    path: string,
+  ): Promise<WorkspaceTextDiff> {
+    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    return await this.#textDiff.compare(workspaceIdHex, path);
   }
 
   #authorize(instanceToken: string, requiredAppId: string): void {

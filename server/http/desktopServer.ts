@@ -64,7 +64,13 @@ type WormholeControlExecutor = Pick<
 >;
 type WorkspaceControlExecutor = Pick<
   WorkspaceControlService,
-  "create" | "list" | "setRetention" | "delete" | "listDirectory" | "diff"
+  | "create"
+  | "list"
+  | "setRetention"
+  | "delete"
+  | "listDirectory"
+  | "diff"
+  | "textDiff"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -362,6 +368,34 @@ export function createDesktopServer({
           .set("Cache-Control", "no-store")
           .json(
             await service.diff(instanceToken, request.params.workspaceId),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/internal/workspaces/:workspaceId/diff/text",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        const path = request.query.path;
+        if (typeof path !== "string") {
+          throw new AppError("REQUEST_INVALID", "path 必须是字符串");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.textDiff(
+              instanceToken,
+              request.params.workspaceId,
+              path,
+            ),
           );
       } catch (error) {
         next(error);

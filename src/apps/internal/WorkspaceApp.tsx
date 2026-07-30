@@ -7,11 +7,13 @@ import type { DirectoryListing, FileEntry } from "../../hostApi/fileHostClient";
 import {
   deleteWorkspace,
   getWorkspaceDiff,
+  getWorkspaceTextDiff,
   listWorkspaceFiles,
   listWorkspaces,
   setWorkspaceRetention,
   type WorkspaceDiff,
   type WorkspaceSummary,
+  type WorkspaceTextDiff,
 } from "../../api/workspaceClient";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
 
@@ -29,6 +31,10 @@ export function WorkspaceApp() {
   const [directoryId, setDirectoryId] = useState<string>();
   const [viewMode, setViewMode] = useState<"files" | "changes">("files");
   const [diff, setDiff] = useState<WorkspaceDiff>();
+  const [textDiffs, setTextDiffs] = useState<
+    Record<string, WorkspaceTextDiff>
+  >({});
+  const [loadingTextPath, setLoadingTextPath] = useState<string>();
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -170,6 +176,7 @@ export function WorkspaceApp() {
       setDirectoryId(undefined);
       setListing(undefined);
       setDiff(undefined);
+      setTextDiffs({});
       await refresh(state.token);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "删除失败");
@@ -208,6 +215,7 @@ export function WorkspaceApp() {
                     setDirectoryId(undefined);
                     setListing(undefined);
                     setDiff(undefined);
+                    setTextDiffs({});
                     setViewMode("files");
                     setSelectedId(workspace.workspaceIdHex);
                   }}
@@ -306,6 +314,30 @@ export function WorkspaceApp() {
               <WorkspaceChanges
                 diff={diff}
                 expectedRevision={selected.revision}
+                textDiffs={textDiffs}
+                loadingTextPath={loadingTextPath}
+                onLoadTextDiff={(path) => {
+                  setLoadingTextPath(path);
+                  void getWorkspaceTextDiff(
+                    state.token,
+                    selected.workspaceIdHex,
+                    path,
+                  )
+                    .then((value) => {
+                      setTextDiffs((current) => ({
+                        ...current,
+                        [path]: value,
+                      }));
+                    })
+                    .catch((error: unknown) => {
+                      setNotice(
+                        error instanceof Error
+                          ? error.message
+                          : "读取文本差异失败",
+                      );
+                    })
+                    .finally(() => setLoadingTextPath(undefined));
+                }}
               />
             )}
           </>
@@ -320,9 +352,15 @@ export function WorkspaceApp() {
 function WorkspaceChanges({
   diff,
   expectedRevision,
+  textDiffs,
+  loadingTextPath,
+  onLoadTextDiff,
 }: {
   diff?: WorkspaceDiff;
   expectedRevision: number;
+  textDiffs: Record<string, WorkspaceTextDiff>;
+  loadingTextPath?: string;
+  onLoadTextDiff: (path: string) => void;
 }) {
   if (!diff || diff.currentRevision !== expectedRevision) {
     return <p>正在比较固定 Head…</p>;
@@ -340,16 +378,49 @@ function WorkspaceChanges({
         <ul>
           {diff.changes.map((entry) => (
             <li key={entry.path}>
-              <span className={`workspace-app__change-kind is-${entry.change}`}>
-                {changeLabel(entry.change)}
-              </span>
-              <strong>{entry.path}</strong>
-              <small>{changeDetails(entry)}</small>
+              <div className="workspace-app__change-row">
+                <span className={`workspace-app__change-kind is-${entry.change}`}>
+                  {changeLabel(entry.change)}
+                </span>
+                <strong>{entry.path}</strong>
+                <small>{changeDetails(entry)}</small>
+                {canShowTextDiff(entry) && (
+                  <button
+                    type="button"
+                    disabled={loadingTextPath === entry.path}
+                    onClick={() => onLoadTextDiff(entry.path)}
+                  >
+                    {loadingTextPath === entry.path
+                      ? "读取中…"
+                      : textDiffs[entry.path]
+                        ? "重新读取"
+                        : "文本差异"}
+                  </button>
+                )}
+              </div>
+              {textDiffs[entry.path] && (
+                <TextDiffResult result={textDiffs[entry.path]} />
+              )}
             </li>
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function TextDiffResult({ result }: { result: WorkspaceTextDiff }) {
+  if (result.available) {
+    return <pre className="workspace-app__text-diff">{result.unifiedDiff}</pre>;
+  }
+  return (
+    <p className="workspace-app__text-unavailable">
+      {result.reason === "TOO_LARGE"
+        ? "文件超过文本差异限制。"
+        : result.reason === "NOT_TEXT"
+          ? "文件不是有效的纯文本。"
+          : "该路径没有可比较的文本修改。"}
+    </p>
   );
 }
 
@@ -419,4 +490,14 @@ function changeDetails(
   }
   if (after.kind === "directory") return "目录元数据变化";
   return `${formatSize(before.size)} → ${formatSize(after.size)}`;
+}
+
+function canShowTextDiff(
+  entry: WorkspaceDiff["changes"][number],
+): boolean {
+  return (
+    entry.change === "modified" &&
+    entry.before?.kind === "file" &&
+    entry.after?.kind === "file"
+  );
 }

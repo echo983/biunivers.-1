@@ -53,6 +53,11 @@ describe("WorkspaceControlService", () => {
       workspaceIdHex: "11".repeat(16),
       changes: [],
     });
+    const compareText = vi.fn().mockResolvedValue({
+      available: true,
+      path: "notes.txt",
+      unifiedDiff: "--- baseline/notes.txt\n",
+    });
     const service = new WorkspaceControlService({
       repository: {} as ImmutableObjectRepository,
       refStore,
@@ -60,6 +65,7 @@ describe("WorkspaceControlService", () => {
       writerId: "test",
       deriver: { derive } as unknown as WorkspaceDeriver,
       diff: { compare },
+      textDiff: { compare: compareText },
     });
 
     const created = await service.create(files.instanceToken, {
@@ -87,6 +93,21 @@ describe("WorkspaceControlService", () => {
     expect(compare).toHaveBeenCalledWith("11".repeat(16));
     await expect(
       service.diff(thirdParty.instanceToken, "11".repeat(16)),
+    ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    await expect(
+      service.textDiff(
+        workspaces.instanceToken,
+        "11".repeat(16),
+        "notes.txt",
+      ),
+    ).resolves.toMatchObject({ available: true });
+    expect(compareText).toHaveBeenCalledWith("11".repeat(16), "notes.txt");
+    await expect(
+      service.textDiff(
+        thirdParty.instanceToken,
+        "11".repeat(16),
+        "notes.txt",
+      ),
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     refStore.close();
   });

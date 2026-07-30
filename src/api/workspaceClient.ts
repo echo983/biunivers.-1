@@ -38,6 +38,20 @@ export interface WorkspaceDiff {
   summary: { added: number; modified: number; deleted: number };
 }
 
+export type WorkspaceTextDiff =
+  | {
+      available: true;
+      path: string;
+      baselineHeadFidHex: string;
+      currentHeadFidHex: string;
+      unifiedDiff: string;
+    }
+  | {
+      available: false;
+      path: string;
+      reason: "NOT_MODIFIED" | "NOT_TEXT" | "TOO_LARGE";
+    };
+
 export function createWorkspace(
   instanceToken: string,
   input: {
@@ -108,6 +122,17 @@ export function getWorkspaceDiff(
 ): Promise<WorkspaceDiff> {
   return request(
     `/api/v1/internal/workspaces/${workspaceIdHex}/diff`,
+    instanceToken,
+  );
+}
+
+export function getWorkspaceTextDiff(
+  instanceToken: string,
+  workspaceIdHex: string,
+  path: string,
+): Promise<WorkspaceTextDiff> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/diff/text?path=${encodeURIComponent(path)}`,
     instanceToken,
   );
 }

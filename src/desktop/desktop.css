@@ -698,22 +698,42 @@
 }
 
 .workspace-app__changes li {
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
   padding: 9px 10px;
   border: 1px solid var(--surface-border);
   border-radius: 7px;
   background: rgb(255 255 255 / 3%);
 }
 
-.workspace-app__changes li strong {
+.workspace-app__change-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.workspace-app__change-row strong {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.workspace-app__changes li small {
+.workspace-app__change-row small {
+  color: var(--text-secondary);
+}
+
+.workspace-app__text-diff {
+  max-height: 360px;
+  margin: 10px 0 0;
+  padding: 10px;
+  overflow: auto;
+  color: #d9e2f2;
+  border-radius: 6px;
+  background: #111722;
+  font: 0.78rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre;
+}
+
+.workspace-app__text-unavailable {
+  margin: 10px 0 0;
   color: var(--text-secondary);
 }
 
