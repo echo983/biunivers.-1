@@ -109,6 +109,9 @@ export function WormholeApp() {
         <>
           <section>
             <h2>连接信息</h2>
+            <p className="wormhole-app__warning">
+              公网连接必须使用 HTTPS；HTTP 只适合可信本机或隔离局域网测试。
+            </p>
             <dl>
               <div><dt>地址</dt><dd>{commands.url}</dd></div>
               <div><dt>用户名</dt><dd>{state.status.username}</dd></div>

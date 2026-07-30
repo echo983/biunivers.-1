@@ -12,7 +12,8 @@ export function AboutApp() {
       </div>
       <p>
         一个部署在个人服务器上、通过浏览器访问的轻量个人桌面。
-        当前版本已具备自由布局桌面、窗口、原子批量文件操作、目录 ZIP 导出和第三方静态应用闭环。
+        当前版本已具备自由布局桌面、窗口、原子批量文件操作、目录 ZIP 导出、
+        Wormhole 文件交换和第三方静态应用闭环。
       </p>
       <dl>
         <div>
@@ -21,7 +22,7 @@ export function AboutApp() {
         </div>
         <div>
           <dt>文件</dt>
-          <dd>File Service · 批量操作 · ZIP 导出 · Resource Session v1</dd>
+          <dd>File Service · 批量操作 · ZIP 导出 · Wormhole · Resource Session v1</dd>
         </div>
         <div>
           <dt>应用</dt>
