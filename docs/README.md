@@ -146,7 +146,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.13 Workspace Runtime 技术设计](<浏览器云端个人桌面 V0.13 Workspace Runtime 技术设计.md>) | 设计候选 | 选择集派生、固定 HEAD PVLogFS、COW 挂载、沙箱 Run、提交、Diff 与导回 |
 | [V0.13 Workspace Runtime 规范评审](<浏览器云端个人桌面 V0.13 Workspace Runtime 规范评审.md>) | 评审通过 | 自洽性、冗余删减、风险和挂载技术探针 Go/No-Go |
 | [V0.13 Workspace Runtime 路线图](<浏览器云端个人桌面 V0.13 Workspace Runtime 路线图.md>) | 执行中 | 挂载探针、局部设计、控制面、产品闭环和里程碑阶段出口 |
-| [V0.13 Workspace 挂载技术探针](<acceptance/V0.13 Workspace 挂载技术探针.md>) | 前两阶段通过 | 无特权只读 FUSE、COW、Docker bind mount、whiteout、opaque directory 与异常清理 |
+| [V0.13 Workspace 挂载技术探针](<acceptance/V0.13 Workspace 挂载技术探针.md>) | 挂载探针通过 | 无特权 FUSE/COW、Docker 隔离、真实固定 PVLog HEAD、按需跨分片 Range 与异常清理 |
 
 ## 第三方应用生态 V1：发布候选
 

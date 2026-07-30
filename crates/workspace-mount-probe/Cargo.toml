@@ -7,5 +7,15 @@ description = "Disposable read-only FUSE probe for Biunivers Workspace Runtime"
 publish = false
 
 [dependencies]
+base64 = "=0.22.1"
 fuser = "=0.18.0"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.149"
 
+[[bin]]
+name = "workspace-mount-probe"
+path = "src/main.rs"
+
+[[bin]]
+name = "pvlog-head-mount-probe"
+path = "src/pvlog_head.rs"
