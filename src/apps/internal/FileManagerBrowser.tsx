@@ -45,6 +45,7 @@ import {
   updateFileSelection,
   type FileSelection,
 } from "./fileSelection";
+import { EntryIdenticon } from "../../components/EntryIdenticon";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -889,9 +890,15 @@ export function FileManagerBrowser({
                   }}
                 >
                   <td>
-                    <span aria-hidden="true">
-                      {entry.kind === "directory" ? "📁" : "📄"}
-                    </span>{" "}
+                    {entry.kind === "directory" ? (
+                      <span aria-hidden="true">📁</span>
+                    ) : (
+                      <EntryIdenticon
+                        entryId={entry.entryId}
+                        size={18}
+                        className="file-manager-app__list-identicon"
+                      />
+                    )}{" "}
                     {entry.name}
                   </td>
                   <td>
@@ -1046,7 +1053,15 @@ export function FileManagerBrowser({
                   className="file-manager-app__entry-icon"
                   aria-hidden="true"
                 >
-                  {entry.kind === "directory" ? "📁" : "📄"}
+                  {entry.kind === "directory" ? (
+                    "📁"
+                  ) : (
+                    <EntryIdenticon
+                      entryId={entry.entryId}
+                      size={42}
+                      className="file-manager-app__identicon"
+                    />
+                  )}
                 </span>
                 <span className="file-manager-app__entry-name">
                   {entry.name}
