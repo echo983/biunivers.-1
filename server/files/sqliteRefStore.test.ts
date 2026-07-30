@@ -1,11 +1,13 @@
 import { writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   RefStoreError,
   SqliteRefStore,
   type FilesystemRef,
+  type CreateWorkspaceInput,
 } from "./sqliteRefStore.js";
 
 const roots: string[] = [];
@@ -16,6 +18,34 @@ const initial: FilesystemRef = {
   revision: 0,
   updatedAtMs: 1_785_320_000_000,
 };
+const workspaceIdHex = "30303030303030303030303030303030";
+
+function workspaceInput(
+  overrides: Partial<CreateWorkspaceInput> = {},
+): CreateWorkspaceInput {
+  const headFidHex = "40404040404040404040404040404040";
+  return {
+    workspaceIdHex,
+    refId: `ws-${workspaceIdHex}`,
+    name: "Probe workspace",
+    sourceRefId: "main",
+    sourceHeadFidHex: initial.headFidHex,
+    baselineHeadFidHex: headFidHex,
+    state: "READY",
+    retention: "KEPT",
+    activeWriteRunIdHex: null,
+    createdAtMs: initial.updatedAtMs + 1,
+    updatedAtMs: initial.updatedAtMs + 1,
+    ref: {
+      refId: `ws-${workspaceIdHex}`,
+      lineageIdHex: "50505050505050505050505050505050",
+      headFidHex,
+      revision: 0,
+      updatedAtMs: initial.updatedAtMs + 1,
+    },
+    ...overrides,
+  };
+}
 
 async function databasePath(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "biunivers-refstore-"));
@@ -28,6 +58,56 @@ afterEach(async () => {
 });
 
 describe("SqliteRefStore", () => {
+  it("creates schema v2 and atomically migrates an existing schema v1 database", async () => {
+    const freshPath = await databasePath();
+    const fresh = await SqliteRefStore.initialize(freshPath);
+    fresh.close();
+    expect(readSchema(freshPath)).toEqual({
+      version: 2,
+      workspaceTables: ["workspace_records", "workspace_runs"],
+    });
+
+    const legacyPath = await databasePath();
+    createLegacySchemaV1(legacyPath);
+    const migrated = await SqliteRefStore.openExisting(legacyPath);
+    expect(migrated.getRef("main")).toEqual(initial);
+    migrated.close();
+    expect(readSchema(legacyPath)).toEqual({
+      version: 2,
+      workspaceTables: ["workspace_records", "workspace_runs"],
+    });
+  });
+
+  it("rejects an unsupported future schema without changing its version", async () => {
+    const path = await databasePath();
+    const database = new Database(path);
+    database.pragma("user_version = 99");
+    database.close();
+
+    await expect(SqliteRefStore.openExisting(path)).rejects.toMatchObject({
+      code: "REFSTORE_CORRUPT",
+    });
+    const reopened = new Database(path, { readonly: true });
+    expect(reopened.pragma("user_version", { simple: true })).toBe(99);
+    reopened.close();
+  });
+
+  it("rolls back every schema change when a v1 migration fails", async () => {
+    const path = await databasePath();
+    createLegacySchemaV1(path);
+    const damaged = new Database(path);
+    damaged.exec("DROP TABLE file_service_meta");
+    damaged.close();
+
+    await expect(SqliteRefStore.openExisting(path)).rejects.toMatchObject({
+      code: "REFSTORE_CORRUPT",
+    });
+    expect(readSchema(path)).toEqual({
+      version: 1,
+      workspaceTables: [],
+    });
+  });
+
   it("requires explicit first-time initialization and refuses reinitialization", async () => {
     const path = await databasePath();
     await expect(SqliteRefStore.openExisting(path)).rejects.toMatchObject({
@@ -50,6 +130,88 @@ describe("SqliteRefStore", () => {
     const reopened = await SqliteRefStore.openExisting(path);
     expect(reopened.getRef("main")).toEqual(initial);
     reopened.close();
+  });
+
+  it("atomically creates, lists, restores, and deletes a Workspace with its Ref", async () => {
+    const path = await databasePath();
+    const backupPath = join(join(path, ".."), "backups", "workspace.sqlite");
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const input = workspaceInput();
+
+    const created = store.createWorkspace(input);
+    expect(created).toEqual(store.getWorkspace(workspaceIdHex));
+    expect(created).not.toHaveProperty("ref");
+    expect(store.listWorkspaces()).toEqual([store.getWorkspace(workspaceIdHex)]);
+    expect(store.listRefs().map((ref) => ref.refId)).toEqual([
+      "main",
+      input.refId,
+    ]);
+    await store.backupTo(backupPath);
+
+    store.deleteWorkspace(workspaceIdHex);
+    expect(store.listWorkspaces()).toEqual([]);
+    expect(store.listRefs()).toEqual([initial]);
+    expect(() => store.getWorkspace(workspaceIdHex)).toThrowError(
+      expect.objectContaining({ code: "WORKSPACE_NOT_FOUND" }) as RefStoreError,
+    );
+    expect(() => store.getRef(input.refId)).toThrowError(
+      expect.objectContaining({ code: "REF_NOT_FOUND" }) as RefStoreError,
+    );
+    store.close();
+
+    const restored = await SqliteRefStore.openExisting(backupPath);
+    expect(restored.getWorkspace(workspaceIdHex).refId).toBe(input.refId);
+    expect(restored.getRef(input.refId)).toEqual(input.ref);
+    restored.close();
+  });
+
+  it("rolls back the Workspace Ref when publication conflicts or insertion fails", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const input = workspaceInput();
+
+    expect(() =>
+      store.createWorkspace({
+        ...input,
+        sourceHeadFidHex: "60606060606060606060606060606060",
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "REF_CONFLICT" }) as RefStoreError,
+    );
+    expect(store.listRefs()).toEqual([initial]);
+
+    store.createWorkspace(input);
+    expect(() => store.createWorkspace(input)).toThrowError(
+      expect.objectContaining({ code: "REF_ALREADY_EXISTS" }) as RefStoreError,
+    );
+    expect(store.listWorkspaces()).toHaveLength(1);
+    expect(store.listRefs()).toHaveLength(2);
+    store.close();
+  });
+
+  it("validates Workspace identity, naming, baseline, and timestamps before writing", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const invalidInputs: CreateWorkspaceInput[] = [
+      workspaceInput({ name: "e\u0301" }),
+      workspaceInput({ name: " " }),
+      workspaceInput({ refId: "ws-not-derived" }),
+      workspaceInput({
+        baselineHeadFidHex: "80808080808080808080808080808080",
+      }),
+      workspaceInput({ updatedAtMs: initial.updatedAtMs }),
+    ];
+    for (const input of invalidInputs) {
+      expect(() => store.createWorkspace(input)).toThrowError(
+        expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
+      );
+    }
+    expect(store.listWorkspaces()).toEqual([]);
+    expect(store.listRefs()).toEqual([initial]);
+    store.close();
   });
 
   it("publishes a fully initialized genesis database in one create-only step", async () => {
@@ -211,3 +373,67 @@ describe("SqliteRefStore", () => {
     });
   });
 });
+
+function createLegacySchemaV1(path: string): void {
+  const database = new Database(path);
+  database.exec(`
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE filesystem_refs (
+      ref_id TEXT PRIMARY KEY,
+      lineage_id BLOB NOT NULL CHECK(length(lineage_id) = 16),
+      head_fid BLOB NOT NULL CHECK(length(head_fid) = 16),
+      revision INTEGER NOT NULL CHECK(revision >= 0),
+      updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0)
+    ) STRICT;
+    CREATE TABLE filesystem_snapshots (
+      snapshot_id BLOB PRIMARY KEY CHECK(length(snapshot_id) = 16),
+      ref_id TEXT NOT NULL REFERENCES filesystem_refs(ref_id),
+      name TEXT NOT NULL,
+      head_fid BLOB NOT NULL CHECK(length(head_fid) = 16),
+      revision INTEGER NOT NULL CHECK(revision >= 0),
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
+      pinned INTEGER NOT NULL CHECK(pinned IN (0, 1)),
+      UNIQUE(ref_id, name)
+    ) STRICT;
+    CREATE TABLE file_service_meta (
+      key TEXT PRIMARY KEY,
+      value BLOB NOT NULL
+    ) STRICT;
+    INSERT INTO file_service_meta(key, value)
+    VALUES ('schema_version', X'00000001');
+    INSERT INTO filesystem_refs
+      (ref_id, lineage_id, head_fid, revision, updated_at_ms)
+    VALUES (
+      '${initial.refId}',
+      X'${initial.lineageIdHex}',
+      X'${initial.headFidHex}',
+      ${initial.revision},
+      ${initial.updatedAtMs}
+    );
+    PRAGMA user_version = 1;
+  `);
+  database.close();
+}
+
+function readSchema(path: string): {
+  version: number;
+  workspaceTables: string[];
+} {
+  const database = new Database(path, { readonly: true });
+  try {
+    return {
+      version: database.pragma("user_version", { simple: true }) as number,
+      workspaceTables: (
+        database
+          .prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name LIKE 'workspace_%'
+             ORDER BY name`,
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name),
+    };
+  } finally {
+    database.close();
+  }
+}

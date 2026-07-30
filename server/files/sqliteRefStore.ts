@@ -3,7 +3,8 @@ import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
+const LEGACY_SCHEMA_VERSION = 1;
 const FID_HEX_PATTERN = /^[0-9a-f]{32}$/;
 const ID_HEX_PATTERN = /^[0-9a-f]{32}$/;
 
@@ -36,6 +37,29 @@ export interface FilesystemSnapshot {
   pinned: boolean;
 }
 
+export type WorkspaceState = "READY" | "DELETING";
+export type WorkspaceRetention = "TEMPORARY" | "KEPT";
+
+export interface WorkspaceRecord {
+  workspaceIdHex: string;
+  refId: string;
+  name: string;
+  sourceRefId: string;
+  sourceHeadFidHex: string;
+  baselineHeadFidHex: string;
+  state: WorkspaceState;
+  retention: WorkspaceRetention;
+  activeWriteRunIdHex: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface CreateWorkspaceInput extends WorkspaceRecord {
+  state: "READY";
+  activeWriteRunIdHex: null;
+  ref: CreateRefInput;
+}
+
 export type RefStoreErrorCode =
   | "REFSTORE_MISSING"
   | "REFSTORE_CORRUPT"
@@ -43,6 +67,9 @@ export type RefStoreErrorCode =
   | "REF_NOT_FOUND"
   | "REF_CONFLICT"
   | "SNAPSHOT_ALREADY_EXISTS"
+  | "WORKSPACE_ALREADY_EXISTS"
+  | "WORKSPACE_NOT_FOUND"
+  | "WORKSPACE_ACTIVE"
   | "INVALID_REF_VALUE";
 
 export class RefStoreError extends Error {
@@ -100,6 +127,7 @@ export class SqliteRefStore {
     }
     try {
       configureDatabase(database);
+      migrateSchema(database);
       verifyDatabase(database);
       return new SqliteRefStore(databasePath, database);
     } catch (error) {
@@ -195,6 +223,17 @@ export class SqliteRefStore {
       throw error;
     }
     return { ...input };
+  }
+
+  listRefs(): FilesystemRef[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT ref_id, lineage_id, head_fid, revision, updated_at_ms
+         FROM filesystem_refs
+         ORDER BY ref_id`,
+      )
+      .all() as RefRow[];
+    return rows.map(mapRef);
   }
 
   getRef(refId: string): FilesystemRef {
@@ -337,6 +376,127 @@ export class SqliteRefStore {
     })();
   }
 
+  createWorkspace(input: CreateWorkspaceInput): WorkspaceRecord {
+    validateWorkspace(input);
+    validateRef(input.ref);
+    if (input.refId !== input.ref.refId) {
+      throw invalid("Workspace Ref ID does not match its Ref.");
+    }
+    if (input.refId !== `ws-${input.workspaceIdHex}`) {
+      throw invalid("Workspace Ref ID is not derived from its Workspace ID.");
+    }
+    if (input.baselineHeadFidHex !== input.ref.headFidHex) {
+      throw invalid("Workspace baseline Head does not match its initial Ref.");
+    }
+    const transaction = this.#database.transaction(() => {
+      const source = this.getRef(input.sourceRefId);
+      if (source.headFidHex !== input.sourceHeadFidHex) {
+        throw new RefStoreError(
+          "REF_CONFLICT",
+          "Workspace source Ref changed before publication.",
+        );
+      }
+      this.createRef(input.ref);
+      try {
+        this.#database
+          .prepare(
+            `INSERT INTO workspace_records (
+               workspace_id, ref_id, name, source_ref_id, source_head_fid,
+               baseline_head_fid, state, retention, active_write_run_id,
+               created_at_ms, updated_at_ms
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+          )
+          .run(
+            fromHex(input.workspaceIdHex),
+            input.refId,
+            input.name,
+            input.sourceRefId,
+            fromHex(input.sourceHeadFidHex),
+            fromHex(input.baselineHeadFidHex),
+            input.state,
+            input.retention,
+            input.createdAtMs,
+            input.updatedAtMs,
+          );
+      } catch (error) {
+        if (isSqliteConstraint(error)) {
+          throw new RefStoreError(
+            "WORKSPACE_ALREADY_EXISTS",
+            "Workspace ID or Ref already belongs to a Workspace.",
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      return this.getWorkspace(input.workspaceIdHex);
+    });
+    return transaction();
+  }
+
+  getWorkspace(workspaceIdHex: string): WorkspaceRecord {
+    validateId(workspaceIdHex, "workspace ID");
+    const row = this.#database
+      .prepare(
+        `SELECT workspace_id, ref_id, name, source_ref_id, source_head_fid,
+                baseline_head_fid, state, retention, active_write_run_id,
+                created_at_ms, updated_at_ms
+         FROM workspace_records
+         WHERE workspace_id = ?`,
+      )
+      .get(fromHex(workspaceIdHex)) as WorkspaceRow | undefined;
+    if (!row) {
+      throw new RefStoreError(
+        "WORKSPACE_NOT_FOUND",
+        "Workspace was not found.",
+      );
+    }
+    return mapWorkspace(row);
+  }
+
+  listWorkspaces(): WorkspaceRecord[] {
+    const rows = this.#database
+      .prepare(
+        `SELECT workspace_id, ref_id, name, source_ref_id, source_head_fid,
+                baseline_head_fid, state, retention, active_write_run_id,
+                created_at_ms, updated_at_ms
+         FROM workspace_records
+         ORDER BY created_at_ms, workspace_id`,
+      )
+      .all() as WorkspaceRow[];
+    return rows.map(mapWorkspace);
+  }
+
+  deleteWorkspace(workspaceIdHex: string): void {
+    validateId(workspaceIdHex, "workspace ID");
+    this.#database.transaction(() => {
+      const workspace = this.getWorkspace(workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== null) {
+        throw new RefStoreError(
+          "WORKSPACE_ACTIVE",
+          "Workspace has an active write Run.",
+        );
+      }
+      this.#database
+        .prepare("DELETE FROM workspace_runs WHERE workspace_id = ?")
+        .run(fromHex(workspaceIdHex));
+      this.#database
+        .prepare("DELETE FROM filesystem_snapshots WHERE ref_id = ?")
+        .run(workspace.refId);
+      this.#database
+        .prepare("DELETE FROM workspace_records WHERE workspace_id = ?")
+        .run(fromHex(workspaceIdHex));
+      const deleted = this.#database
+        .prepare("DELETE FROM filesystem_refs WHERE ref_id = ?")
+        .run(workspace.refId);
+      if (deleted.changes !== 1) {
+        throw new RefStoreError(
+          "REFSTORE_CORRUPT",
+          "Workspace Ref disappeared during deletion.",
+        );
+      }
+    })();
+  }
+
   async backupTo(destinationPath: string): Promise<void> {
     await mkdir(dirname(destinationPath), { recursive: true });
     const temporaryPath = join(
@@ -376,6 +536,20 @@ interface SnapshotRow {
   pinned: number;
 }
 
+interface WorkspaceRow {
+  workspace_id: Buffer;
+  ref_id: string;
+  name: string;
+  source_ref_id: string;
+  source_head_fid: Buffer;
+  baseline_head_fid: Buffer;
+  state: WorkspaceState;
+  retention: WorkspaceRetention;
+  active_write_run_id: Buffer | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
 function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("synchronous = FULL");
@@ -403,15 +577,86 @@ function createSchema(database: Database.Database): void {
       pinned INTEGER NOT NULL CHECK(pinned IN (0, 1)),
       UNIQUE(ref_id, name)
     ) STRICT;
+    ${workspaceSchemaSql()}
     CREATE TABLE file_service_meta (
       key TEXT PRIMARY KEY,
       value BLOB NOT NULL
     ) STRICT;
     INSERT INTO file_service_meta(key, value)
-    VALUES ('schema_version', X'00000001');
+    VALUES ('schema_version', X'00000002');
     PRAGMA user_version = ${SCHEMA_VERSION};
     COMMIT;
   `);
+}
+
+function migrateSchema(database: Database.Database): void {
+  const version = database.pragma("user_version", { simple: true });
+  if (version === SCHEMA_VERSION) {
+    return;
+  }
+  if (version !== LEGACY_SCHEMA_VERSION) {
+    throw new RefStoreError(
+      "REFSTORE_CORRUPT",
+      `Unsupported RefStore schema version: ${String(version)}.`,
+    );
+  }
+  try {
+    database.exec(`
+      BEGIN IMMEDIATE;
+      ${workspaceSchemaSql()}
+      UPDATE file_service_meta
+      SET value = X'00000002'
+      WHERE key = 'schema_version';
+      PRAGMA user_version = ${SCHEMA_VERSION};
+      COMMIT;
+    `);
+  } catch (error) {
+    if (database.inTransaction) {
+      database.exec("ROLLBACK");
+    }
+    throw error;
+  }
+}
+
+function workspaceSchemaSql(): string {
+  return `
+    CREATE TABLE workspace_records (
+      workspace_id BLOB PRIMARY KEY CHECK(length(workspace_id) = 16),
+      ref_id TEXT UNIQUE NOT NULL
+        REFERENCES filesystem_refs(ref_id) ON DELETE RESTRICT,
+      name TEXT NOT NULL,
+      source_ref_id TEXT NOT NULL,
+      source_head_fid BLOB NOT NULL CHECK(length(source_head_fid) = 16),
+      baseline_head_fid BLOB NOT NULL CHECK(length(baseline_head_fid) = 16),
+      state TEXT NOT NULL CHECK(state IN ('READY', 'DELETING')),
+      retention TEXT NOT NULL CHECK(retention IN ('TEMPORARY', 'KEPT')),
+      active_write_run_id BLOB,
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
+      updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= 0),
+      FOREIGN KEY(active_write_run_id) REFERENCES workspace_runs(run_id)
+    ) STRICT;
+    CREATE TABLE workspace_runs (
+      run_id BLOB PRIMARY KEY CHECK(length(run_id) = 16),
+      workspace_id BLOB NOT NULL
+        REFERENCES workspace_records(workspace_id) ON DELETE RESTRICT,
+      executor_id TEXT NOT NULL,
+      input_head_fid BLOB NOT NULL CHECK(length(input_head_fid) = 16),
+      output_head_fid BLOB
+        CHECK(output_head_fid IS NULL OR length(output_head_fid) = 16),
+      state TEXT NOT NULL CHECK(state IN (
+        'PREPARING', 'RUNNING', 'STOPPED', 'COMMITTING',
+        'COMMITTED', 'CONFLICT', 'FAILED', 'DISCARDED'
+      )),
+      runtime_identity TEXT,
+      error_code TEXT,
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
+      started_at_ms INTEGER CHECK(started_at_ms IS NULL OR started_at_ms >= 0),
+      finished_at_ms INTEGER CHECK(finished_at_ms IS NULL OR finished_at_ms >= 0)
+    ) STRICT;
+    CREATE UNIQUE INDEX workspace_active_write_run
+      ON workspace_records(active_write_run_id)
+      WHERE active_write_run_id IS NOT NULL;
+  `;
 }
 
 function verifyDatabase(database: Database.Database): void {
@@ -432,12 +677,15 @@ function verifyDatabase(database: Database.Database): void {
   const requiredTables = [
     "filesystem_refs",
     "filesystem_snapshots",
+    "workspace_records",
+    "workspace_runs",
     "file_service_meta",
   ];
+  const placeholders = requiredTables.map(() => "?").join(", ");
   const rows = database
     .prepare(
       `SELECT name FROM sqlite_master
-       WHERE type = 'table' AND name IN (?, ?, ?)`,
+       WHERE type = 'table' AND name IN (${placeholders})`,
     )
     .all(...requiredTables) as Array<{ name: string }>;
   if (new Set(rows.map((row) => row.name)).size !== requiredTables.length) {
@@ -454,6 +702,25 @@ function mapRef(row: RefRow): FilesystemRef {
     lineageIdHex: toHex(row.lineage_id),
     headFidHex: toHex(row.head_fid),
     revision: row.revision,
+    updatedAtMs: row.updated_at_ms,
+  };
+}
+
+function mapWorkspace(row: WorkspaceRow): WorkspaceRecord {
+  return {
+    workspaceIdHex: toHex(row.workspace_id),
+    refId: row.ref_id,
+    name: row.name,
+    sourceRefId: row.source_ref_id,
+    sourceHeadFidHex: toHex(row.source_head_fid),
+    baselineHeadFidHex: toHex(row.baseline_head_fid),
+    state: row.state,
+    retention: row.retention,
+    activeWriteRunIdHex:
+      row.active_write_run_id === null
+        ? null
+        : toHex(row.active_write_run_id),
+    createdAtMs: row.created_at_ms,
     updatedAtMs: row.updated_at_ms,
   };
 }
@@ -485,6 +752,43 @@ function validateSnapshotName(name: string): void {
   }
 }
 
+function validateWorkspace(input: WorkspaceRecord): void {
+  validateId(input.workspaceIdHex, "workspace ID");
+  validateRefId(input.refId);
+  validateWorkspaceName(input.name);
+  validateRefId(input.sourceRefId);
+  validateFid(input.sourceHeadFidHex);
+  validateFid(input.baselineHeadFidHex);
+  if (input.state !== "READY" && input.state !== "DELETING") {
+    throw invalid("Workspace state is invalid.");
+  }
+  if (input.retention !== "TEMPORARY" && input.retention !== "KEPT") {
+    throw invalid("Workspace retention is invalid.");
+  }
+  if (input.activeWriteRunIdHex !== null) {
+    validateId(input.activeWriteRunIdHex, "active write Run ID");
+  }
+  validateTimestamp(input.createdAtMs);
+  validateTimestamp(input.updatedAtMs);
+  if (input.updatedAtMs < input.createdAtMs) {
+    throw invalid("Workspace update timestamp predates its creation.");
+  }
+}
+
+function validateWorkspaceName(name: string): void {
+  if (
+    name !== name.normalize("NFC") ||
+    name.trim().length === 0 ||
+    Buffer.byteLength(name) > 255 ||
+    [...name].some((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 0x1f || codePoint === 0x7f;
+    })
+  ) {
+    throw invalid("Workspace name is invalid.");
+  }
+}
+
 function validateFid(value: string): void {
   if (!FID_HEX_PATTERN.test(value)) {
     throw new RefStoreError("INVALID_REF_VALUE", "FID is invalid.");
@@ -508,6 +812,10 @@ function validateSafeInteger(value: number, label: string): void {
 
 function validateTimestamp(value: number): void {
   validateSafeInteger(value, "timestamp");
+}
+
+function invalid(message: string): RefStoreError {
+  return new RefStoreError("INVALID_REF_VALUE", message);
 }
 
 function fromHex(value: string): Buffer {
