@@ -119,6 +119,12 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.11 Wormhole 施工计划](<浏览器云端个人桌面 V0.11 Wormhole 施工计划.md>) | 收尾中 | 控制面、只读、写入、兼容、界面和真实验收六阶段 |
 | [V0.11 Wormhole 验收](<acceptance/V0.11 Wormhole 验收.md>) | Linux/rclone 已通过 | Docker/R2、WebDAV CRUD、Range、挂载与跨分片大文件证据；原生 Windows/macOS 待补 |
 
+## V0.12：文件视觉身份设计
+
+| 文档 | 状态 | 内容 |
+|---|---|---|
+| [V0.12 普通文件 Identicon 设计](<浏览器云端个人桌面 V0.12 普通文件 Identicon 设计.md>) | 设计基线候选 | 仅替换无专用图标普通文件的默认符号；Entry ID 稳定身份、Jdenticon 包体门槛和四处共享渲染 |
+
 ## 第三方应用生态 V1：发布候选
 
 | 文档 | 状态 | 内容 |
