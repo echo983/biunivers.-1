@@ -132,6 +132,73 @@ describe("FileSystemTransactions", () => {
     setupResult.refStore.close();
   });
 
+  it("publishes file content replacement inside one batch revision", async () => {
+    const setupResult = await setup();
+    const contentStore = new FileContentStore(setupResult.repository);
+    const firstContent = await contentStore.putBytes(Buffer.from("first"));
+    const secondContent = await contentStore.putBytes(Buffer.from("second"));
+    const fileEntryIdHex = "35".repeat(16);
+    const directoryEntryIdHex = "36".repeat(16);
+    const transactions = new FileSystemTransactions({
+      refId: "main",
+      repository: setupResult.repository,
+      refStore: setupResult.refStore,
+      writerId: "batch-test",
+      now: () => 200,
+      randomId: () => id(0x37),
+    });
+
+    await transactions.applyBatch({
+      expectedRevision: 0,
+      operations: [
+        {
+          kind: "create-file",
+          entryIdHex: fileEntryIdHex,
+          parentEntryIdHex: setupResult.rootEntryIdHex,
+          name: "notes.md",
+          content: firstContent,
+          mtimeMs: 200,
+        },
+      ],
+    });
+    const result = await transactions.applyBatch({
+      expectedRevision: 1,
+      operations: [
+        {
+          kind: "set-file-content",
+          entryIdHex: fileEntryIdHex,
+          expectedContentFidHex: firstContent.fidHex,
+          content: secondContent,
+          mtimeMs: 300,
+        },
+        {
+          kind: "create-directory",
+          entryIdHex: directoryEntryIdHex,
+          parentEntryIdHex: setupResult.rootEntryIdHex,
+          name: "output",
+          mtimeMs: 300,
+        },
+      ],
+      timestampMs: 300,
+    });
+
+    expect(result.ref.revision).toBe(2);
+    const index = await loadCurrentEntryIndex(
+      setupResult.repository,
+      setupResult.refStore,
+      "main",
+    );
+    expect(index.get(fileEntryIdHex)).toMatchObject({
+      content: secondContent,
+      mtimeMs: 300,
+    });
+    expect(index.get(directoryEntryIdHex)).toMatchObject({
+      kind: "directory",
+      name: "output",
+    });
+    setupResult.refStore.close();
+  });
+
   it("allows one concurrent publisher and returns REF_CONFLICT to the loser", async () => {
     const setupResult = await setup();
     const secondConnection = await SqliteRefStore.openExisting(

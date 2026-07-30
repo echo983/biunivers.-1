@@ -95,10 +95,9 @@ export class TargetTreeProjector {
             }),
           );
         } else {
-          byPath.set(change.path, {
-            ...existing,
-            mtimeMs: toMtimeMs(change),
-          });
+          // Existing directory metadata remains stable. PVLog V1 has no
+          // standalone directory-metadata operation; child operations carry
+          // the logical tree change without manufacturing a replacement ID.
         }
         continue;
       }
