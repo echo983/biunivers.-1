@@ -1,6 +1,10 @@
 import { createConnection } from "node:net";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 const [socketPath, tokenHex, fixturePath, runRoot] = process.argv.slice(2);
 if (!socketPath || !tokenHex || !fixturePath || !runRoot) {
@@ -36,8 +40,9 @@ try {
     operation: "inspect",
     runIdHex: fixture.runIdHex,
   });
+  const logs = await containerLogs(fixture.runIdHex);
   throw new Error(
-    `${error.message} Container state: ${JSON.stringify(failedInspect.result?.container ?? failedInspect)}`,
+    `${error.message} Container state: ${JSON.stringify(failedInspect.result?.container ?? failedInspect)} Logs: ${logs}`,
   );
 }
 const inspect = await exchange({
@@ -127,4 +132,17 @@ async function waitForJson(path) {
     }
   }
   throw new Error("Diagnostic executor did not publish its result.");
+}
+
+async function containerLogs(runIdHex) {
+  try {
+    const result = await execFileAsync(
+      "docker",
+      ["logs", `biunivers-run-${runIdHex}`],
+      { encoding: "utf8", timeout: 10_000, maxBuffer: 64 * 1024 },
+    );
+    return `${result.stdout}${result.stderr}`.trim() || "(empty)";
+  } catch (error) {
+    return error instanceof Error ? error.message : "unavailable";
+  }
 }
