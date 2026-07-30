@@ -706,9 +706,28 @@
 
 .workspace-app__change-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto auto;
+  grid-template-columns: 22px 48px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
+}
+
+.workspace-app__change-row input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.workspace-app__import-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.workspace-app__import-actions span {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
 .workspace-app__change-row strong {
@@ -1507,6 +1526,14 @@
   padding: 8px 9px;
   border: 1px solid #aeb9c9;
   border-radius: 6px;
+}
+
+.file-manager-dialog select {
+  padding: 7px 9px;
+  color: inherit;
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  background: #202632;
 }
 
 .file-manager-dialog form > div,

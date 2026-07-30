@@ -8,6 +8,7 @@ import {
   deleteWorkspace,
   getWorkspaceDiff,
   getWorkspaceTextDiff,
+  importWorkspaceEntries,
   listWorkspaceFiles,
   listWorkspaces,
   setWorkspaceRetention,
@@ -16,6 +17,7 @@ import {
   type WorkspaceTextDiff,
 } from "../../api/workspaceClient";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
+import { listFiles } from "../../hostApi/fileHostClient";
 
 type ViewState =
   | { mode: "loading" }
@@ -35,6 +37,10 @@ export function WorkspaceApp() {
     Record<string, WorkspaceTextDiff>
   >({});
   const [loadingTextPath, setLoadingTextPath] = useState<string>();
+  const [selectedChanges, setSelectedChanges] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -177,6 +183,7 @@ export function WorkspaceApp() {
       setListing(undefined);
       setDiff(undefined);
       setTextDiffs({});
+      setSelectedChanges(new Set());
       await refresh(state.token);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "删除失败");
@@ -216,6 +223,7 @@ export function WorkspaceApp() {
                     setListing(undefined);
                     setDiff(undefined);
                     setTextDiffs({});
+                    setSelectedChanges(new Set());
                     setViewMode("files");
                     setSelectedId(workspace.workspaceIdHex);
                   }}
@@ -338,6 +346,32 @@ export function WorkspaceApp() {
                     })
                     .finally(() => setLoadingTextPath(undefined));
                 }}
+                selectedEntryIds={selectedChanges}
+                onToggleEntry={(entryId) => {
+                  setSelectedChanges((current) => {
+                    const next = new Set(current);
+                    if (next.has(entryId)) next.delete(entryId);
+                    else next.add(entryId);
+                    return next;
+                  });
+                }}
+                onImport={() => setShowImportDialog(true)}
+              />
+            )}
+            {showImportDialog && (
+              <WorkspaceImportDialog
+                token={state.token}
+                workspaceIdHex={selected.workspaceIdHex}
+                workspaceRevision={selected.revision}
+                selectedEntryIds={[...selectedChanges]}
+                onCancel={() => setShowImportDialog(false)}
+                onImported={(result) => {
+                  setShowImportDialog(false);
+                  setSelectedChanges(new Set());
+                  setNotice(
+                    `已将 ${result.roots.length} 个项目导回 main（revision ${result.revision}）。`,
+                  );
+                }}
               />
             )}
           </>
@@ -355,12 +389,18 @@ function WorkspaceChanges({
   textDiffs,
   loadingTextPath,
   onLoadTextDiff,
+  selectedEntryIds,
+  onToggleEntry,
+  onImport,
 }: {
   diff?: WorkspaceDiff;
   expectedRevision: number;
   textDiffs: Record<string, WorkspaceTextDiff>;
   loadingTextPath?: string;
   onLoadTextDiff: (path: string) => void;
+  selectedEntryIds: ReadonlySet<string>;
+  onToggleEntry: (entryId: string) => void;
+  onImport: () => void;
 }) {
   if (!diff || diff.currentRevision !== expectedRevision) {
     return <p>正在比较固定 Head…</p>;
@@ -372,6 +412,16 @@ function WorkspaceChanges({
         {diff.summary.added} · 修改 {diff.summary.modified} · 删除{" "}
         {diff.summary.deleted}
       </p>
+      <div className="workspace-app__import-actions">
+        <span>已选择 {selectedEntryIds.size} 项</span>
+        <button
+          type="button"
+          disabled={selectedEntryIds.size === 0}
+          onClick={onImport}
+        >
+          导回 main…
+        </button>
+      </div>
       {diff.changes.length === 0 ? (
         <p className="workspace-app__empty">相对初始版本没有变化。</p>
       ) : (
@@ -379,6 +429,16 @@ function WorkspaceChanges({
           {diff.changes.map((entry) => (
             <li key={entry.path}>
               <div className="workspace-app__change-row">
+                {entry.after && entry.change !== "deleted" ? (
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${entry.path}`}
+                    checked={selectedEntryIds.has(entry.after.entryIdHex)}
+                    onChange={() => onToggleEntry(entry.after!.entryIdHex)}
+                  />
+                ) : (
+                  <span aria-hidden="true" />
+                )}
                 <span className={`workspace-app__change-kind is-${entry.change}`}>
                   {changeLabel(entry.change)}
                 </span>
@@ -421,6 +481,156 @@ function TextDiffResult({ result }: { result: WorkspaceTextDiff }) {
           ? "文件不是有效的纯文本。"
           : "该路径没有可比较的文本修改。"}
     </p>
+  );
+}
+
+function WorkspaceImportDialog({
+  token,
+  workspaceIdHex,
+  workspaceRevision,
+  selectedEntryIds,
+  onCancel,
+  onImported,
+}: {
+  token: string;
+  workspaceIdHex: string;
+  workspaceRevision: number;
+  selectedEntryIds: string[];
+  onCancel: () => void;
+  onImported: (result: {
+    revision: number;
+    roots: Array<{ newEntryIdHex: string; name: string }>;
+  }) => void;
+}) {
+  const [directoryId, setDirectoryId] = useState<string>();
+  const [listing, setListing] = useState<DirectoryListing>();
+  const [policy, setPolicy] = useState<"cancel" | "rename">("rename");
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void listFiles(token, directoryId)
+      .then((value) => {
+        if (active) setListing(value);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setError(cause instanceof Error ? cause.message : "读取 main 目录失败");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [directoryId, token]);
+
+  const submit = async () => {
+    if (!listing) return;
+    setWorking(true);
+    setError("");
+    try {
+      onImported(
+        await importWorkspaceEntries(token, workspaceIdHex, {
+          selectedEntryIds,
+          destinationEntryId: listing.parent.entryId,
+          workspaceRevision,
+          mainRevision: listing.revision,
+          conflictPolicy: policy,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "导回失败");
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div
+      className="file-manager-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`导回 ${selectedEntryIds.length} 项`}
+    >
+      <section>
+        <h2>导回 main</h2>
+        <p>选择 main 中的目标目录。文件内容将复用，不会覆盖已有对象。</p>
+        <nav aria-label="目标文件夹">
+          <button
+            type="button"
+            onClick={() => {
+              setListing(undefined);
+              setDirectoryId(undefined);
+            }}
+          >
+            文件
+          </button>
+          {listing?.breadcrumbs?.slice(1).map((entry) => (
+            <span key={entry.entryId}>
+              {" / "}
+              <button
+                type="button"
+                onClick={() => {
+                  setListing(undefined);
+                  setDirectoryId(entry.entryId);
+                }}
+              >
+                {entry.name}
+              </button>
+            </span>
+          ))}
+        </nav>
+        {error && <p role="alert">{error}</p>}
+        {!listing && !error && <p role="status">正在读取目标文件夹…</p>}
+        <ul className="file-manager-dialog__directories">
+          {listing?.entries
+            .filter((entry) => entry.kind === "directory")
+            .map((entry) => (
+              <li key={entry.entryId}>
+                <button
+                  type="button"
+                  disabled={working}
+                  onClick={() => {
+                    setListing(undefined);
+                    setDirectoryId(entry.entryId);
+                  }}
+                >
+                  📁 {entry.name}
+                </button>
+              </li>
+            ))}
+        </ul>
+        <label>
+          同名项目
+          <select
+            value={policy}
+            disabled={working}
+            onChange={(event) =>
+              setPolicy(event.target.value as "cancel" | "rename")
+            }
+          >
+            <option value="rename">自动改名（推荐）</option>
+            <option value="cancel">取消整批导回</option>
+          </select>
+        </label>
+        <p>
+          目标 revision：{listing?.revision ?? "…"} · 共{" "}
+          {selectedEntryIds.length} 个选择
+        </p>
+        <div>
+          <button type="button" disabled={working} onClick={onCancel}>
+            取消
+          </button>
+          <button
+            type="button"
+            disabled={working || !listing}
+            onClick={() => void submit()}
+          >
+            {working ? "正在导回…" : "导回这里"}
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
