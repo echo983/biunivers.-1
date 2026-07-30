@@ -5,8 +5,8 @@ cd "$(dirname "$0")/.."
 
 IMAGE_ID="${1:-sha256:f3b19461c76eff06f2134be84e0d975895b115cc0025ba86f040cbfaf79aa234}"
 ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
-PVLOGFS_BINARY="$(pwd)/target/release/biunivers-pvlogfs"
 TEST_ROOT="$(mktemp -d /tmp/biunivers-compute-runtime.XXXXXX)"
+PVLOGFS_BINARY="$TEST_ROOT/cargo-target/release/biunivers-pvlogfs"
 RUN_ROOT="$TEST_ROOT/runs"
 SOCKET_PATH="$TEST_ROOT/runtime.sock"
 FIXTURE_PATH="$TEST_ROOT/fixture.json"
@@ -31,7 +31,17 @@ source "$ENV_FILE"
 set +a
 
 npm run build:server >/dev/null
-cargo build --release --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
+CARGO_BIN="$(command -v cargo || true)"
+if [[ -z "$CARGO_BIN" ]] && [[ -x "$HOME/.cargo/bin/cargo" ]]; then
+  CARGO_BIN="$HOME/.cargo/bin/cargo"
+fi
+if [[ -z "$CARGO_BIN" ]]; then
+  echo "缺少 Cargo；请先安装 Rust toolchain。" >&2
+  exit 1
+fi
+CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
+  "$CARGO_BIN" build --release \
+  --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
 node scripts/compute-runtime-fixture.mjs prepare "$FIXTURE_PATH" >/dev/null
 
 export BIUNIVERS_RUNTIME_ROOT="$RUN_ROOT"
