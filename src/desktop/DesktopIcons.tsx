@@ -6,6 +6,7 @@ import {
 } from "react";
 import { useDesktopStore } from "../store/desktopStore";
 import { ContextMenu } from "../components/ContextMenu";
+import { EntryIdenticon } from "../components/EntryIdenticon";
 import { useDesktopSurfaceStore } from "../desktopSurface/store";
 import type {
   DesktopItem,
@@ -461,13 +462,22 @@ function DesktopTargetIcon({ item }: { item: DesktopItem }) {
       />
     );
   }
+  if (item.target.type === "file") {
+    return (
+      <EntryIdenticon
+        entryId={item.target.handle}
+        size={48}
+        className="desktop-entry-identicon"
+      />
+    );
+  }
   return (
     <span
       className="desktop-target-icon"
       data-kind={item.target.type}
       aria-hidden="true"
     >
-      {item.target.type === "directory" ? "📁" : "📄"}
+      📁
     </span>
   );
 }

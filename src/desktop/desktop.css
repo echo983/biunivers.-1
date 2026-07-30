@@ -104,6 +104,15 @@
   border-radius: 11px;
 }
 
+.desktop-entry-identicon {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: rgb(255 255 255 / 82%);
+  text-shadow: none;
+}
+
 .desktop-target-icon {
   font-size: 38px;
   line-height: 48px;
@@ -661,6 +670,10 @@
   white-space: nowrap;
 }
 
+.host-file-picker__entries svg {
+  display: block;
+}
+
 .host-file-picker__entries small {
   color: #748094;
 }
@@ -1158,6 +1171,18 @@
 .file-manager-app__entry-icon {
   font-size: 42px;
   line-height: 1;
+}
+
+.file-manager-app__identicon {
+  display: block;
+  border-radius: 7px;
+  background: #fff;
+}
+
+.file-manager-app__list-identicon {
+  display: inline-block;
+  margin-right: 3px;
+  vertical-align: middle;
 }
 
 .file-manager-app__entry-name {

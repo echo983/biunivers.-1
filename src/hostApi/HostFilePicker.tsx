@@ -5,6 +5,7 @@ import {
   type DirectoryListing,
   type FileEntry,
 } from "./fileHostClient";
+import { EntryIdenticon } from "../components/EntryIdenticon";
 
 interface HostFilePickerProps {
   instanceToken: string;
@@ -96,7 +97,13 @@ export function HostFilePicker({
               onClick={() => setSelected(entry)}
               onDoubleClick={() => activate(entry)}
             >
-              <span>{entry.kind === "directory" ? "📁" : "📄"}</span>
+              <span>
+                {entry.kind === "directory" ? (
+                  "📁"
+                ) : (
+                  <EntryIdenticon entryId={entry.entryId} size={24} />
+                )}
+              </span>
               <span>{entry.name}</span>
               <small>
                 {entry.kind === "file" && entry.size !== undefined
