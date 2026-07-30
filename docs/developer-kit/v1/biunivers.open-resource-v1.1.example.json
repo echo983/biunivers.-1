@@ -1,0 +1,13 @@
+{
+  "protocol": "biunivers.open-resource/1.1",
+  "handlers": [
+    {
+      "id": "image-gallery",
+      "actions": ["open"],
+      "extensions": [".png", ".jpg", ".jpeg", ".webp"],
+      "mediaTypes": ["image/png", "image/jpeg", "image/webp"],
+      "access": "read",
+      "multiple": true
+    }
+  ]
+}

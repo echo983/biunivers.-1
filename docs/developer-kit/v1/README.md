@@ -294,6 +294,21 @@ biunivers.open-resource.json
 只有维护必须兼容旧宿主的应用时，才按冻结的 Open Resource 原文使用
 `launch.getContext` 和 Host API handle。不要在同一个资源生命周期中混用两套传输。
 
+### Open Resource v1.1 草案
+
+开发包目前包含
+[`Open Resource v1.1 草案`](BIUNIVERS_OPEN_RESOURCE_PROTOCOL_V1_1.md)、
+[`v1.1 Schema`](biunivers.open-resource-v1.1.schema.json) 和
+[`v1.1 示例`](biunivers.open-resource-v1.1.example.json)，以及
+[`openMany 请求 Schema`](biunivers.open-resource-v1.1.message.schema.json)，用于评审
+一次选择或交付多个只读文件。
+
+当前稳定宿主仍只安装 `biunivers.open-resource/1`。在宿主完成 v1.1 施工和发布前：
+
+- 不要把资源应用的正式声明改成 `biunivers.open-resource/1.1`；
+- 不要把 v1.1 草案当成已经可用的运行能力；
+- 不要修改 v1 原文或用 v1 Schema 声明 `multiple`。
+
 应用负责：
 
 - iframe 内部界面；
