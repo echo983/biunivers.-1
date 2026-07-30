@@ -59,9 +59,23 @@ describe("ControlRunRecovery", () => {
     });
   });
 
-  it("fails and releases a nonterminal control Run whose local state is missing", async () => {
+  it("leaves a queued PREPARING Run without a local directory available to prepare", async () => {
     const directories = await directoryManager();
     const { refStore, transitionWorkspaceRun } = storeWithRun("PREPARING");
+
+    const report = await new ControlRunRecovery({ now: () => 200 }).reconcile(
+      directories,
+      refStore,
+      [],
+    );
+
+    expect(report).toEqual({ stopped: [], failed: [] });
+    expect(transitionWorkspaceRun).not.toHaveBeenCalled();
+  });
+
+  it("fails and releases a started control Run whose local state is missing", async () => {
+    const directories = await directoryManager();
+    const { refStore, transitionWorkspaceRun } = storeWithRun("RUNNING");
 
     const report = await new ControlRunRecovery({ now: () => 200 }).reconcile(
       directories,
@@ -72,7 +86,7 @@ describe("ControlRunRecovery", () => {
     expect(report).toEqual({ stopped: [], failed: [runIdHex] });
     expect(transitionWorkspaceRun).toHaveBeenCalledWith({
       runIdHex,
-      expectedState: "PREPARING",
+      expectedState: "RUNNING",
       newState: "FAILED",
       errorCode: "RUNTIME_STATE_MISSING",
       timestampMs: 200,

@@ -41,6 +41,7 @@ export class ControlRunRecovery {
     for (const run of runs) {
       if (TERMINAL_CONTROL_STATES.has(run.state)) continue;
       if (!local.has(run.runIdHex)) {
+        if (run.state === "PREPARING") continue;
         this.#fail(refStore, run, "RUNTIME_STATE_MISSING");
         report.failed.push(run.runIdHex);
         continue;
