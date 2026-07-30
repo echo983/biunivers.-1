@@ -46,7 +46,7 @@ Handler 声明、Resource Session 客户端、续租和释放示例。两个模�
 
 `template/resource-app` 保持最小的单资源 v1 示例。需要一次处理多个只读文件时，先完成
 模板的单资源路径，再按本页“Open Resource v1.1 多资源扩展”升级；可参考已经通过宿主验收的
-[BiuniView v0.2.0](https://github.com/echo983/biunivers-image-viewer/tree/feature/open-resource-v1.1)。
+[BiuniView v0.2.0](https://github.com/echo983/biunivers-image-viewer)。
 
 不要删除或改写：
 
