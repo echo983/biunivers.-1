@@ -25,6 +25,10 @@ import {
   WorkspaceTextDiffService,
   type WorkspaceTextDiff,
 } from "./workspaceTextDiffService.js";
+import {
+  WorkspaceImportService,
+  type WorkspaceImportResult,
+} from "./workspaceImportService.js";
 
 const FILES_APP_ID = "system.files";
 const WORKSPACES_APP_ID = "system.workspaces";
@@ -41,6 +45,7 @@ interface WorkspaceControlServiceOptions {
   deriver?: WorkspaceDeriver;
   diff?: Pick<WorkspaceDiffService, "compare">;
   textDiff?: Pick<WorkspaceTextDiffService, "compare">;
+  importer?: Pick<WorkspaceImportService, "execute">;
   now?: () => number;
 }
 
@@ -51,6 +56,7 @@ export class WorkspaceControlService {
   readonly #deriver: WorkspaceDeriver;
   readonly #diff: Pick<WorkspaceDiffService, "compare">;
   readonly #textDiff: Pick<WorkspaceTextDiffService, "compare">;
+  readonly #importer: Pick<WorkspaceImportService, "execute">;
   readonly #now: () => number;
 
   constructor(options: WorkspaceControlServiceOptions) {
@@ -75,6 +81,13 @@ export class WorkspaceControlService {
       new WorkspaceTextDiffService({
         repository: options.repository,
         refStore: options.refStore,
+      });
+    this.#importer =
+      options.importer ??
+      new WorkspaceImportService({
+        repository: options.repository,
+        refStore: options.refStore,
+        writerId: options.writerId,
       });
     this.#now = options.now ?? Date.now;
   }
@@ -184,6 +197,14 @@ export class WorkspaceControlService {
   ): Promise<WorkspaceTextDiff> {
     this.#authorize(instanceToken, WORKSPACES_APP_ID);
     return await this.#textDiff.compare(workspaceIdHex, path);
+  }
+
+  async importToMain(
+    instanceToken: string,
+    input: Parameters<WorkspaceImportService["execute"]>[0],
+  ): Promise<WorkspaceImportResult> {
+    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    return await this.#importer.execute(input);
   }
 
   #authorize(instanceToken: string, requiredAppId: string): void {

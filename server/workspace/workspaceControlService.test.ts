@@ -58,6 +58,10 @@ describe("WorkspaceControlService", () => {
       path: "notes.txt",
       unifiedDiff: "--- baseline/notes.txt\n",
     });
+    const executeImport = vi.fn().mockResolvedValue({
+      revision: 4,
+      roots: [],
+    });
     const service = new WorkspaceControlService({
       repository: {} as ImmutableObjectRepository,
       refStore,
@@ -66,6 +70,7 @@ describe("WorkspaceControlService", () => {
       deriver: { derive } as unknown as WorkspaceDeriver,
       diff: { compare },
       textDiff: { compare: compareText },
+      importer: { execute: executeImport },
     });
 
     const created = await service.create(files.instanceToken, {
@@ -108,6 +113,21 @@ describe("WorkspaceControlService", () => {
         "11".repeat(16),
         "notes.txt",
       ),
+    ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    const importInput = {
+      workspaceIdHex: "11".repeat(16),
+      selectedEntryIdsHex: ["66".repeat(16)],
+      destinationEntryIdHex: "77".repeat(16),
+      workspaceRevision: 2,
+      mainRevision: 3,
+      conflictPolicy: "rename" as const,
+    };
+    await expect(
+      service.importToMain(workspaces.instanceToken, importInput),
+    ).resolves.toMatchObject({ revision: 4 });
+    expect(executeImport).toHaveBeenCalledWith(importInput);
+    await expect(
+      service.importToMain(thirdParty.instanceToken, importInput),
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     refStore.close();
   });

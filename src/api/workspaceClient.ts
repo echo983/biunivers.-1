@@ -137,6 +137,31 @@ export function getWorkspaceTextDiff(
   );
 }
 
+export function importWorkspaceEntries(
+  instanceToken: string,
+  workspaceIdHex: string,
+  input: {
+    selectedEntryIds: string[];
+    destinationEntryId: string;
+    workspaceRevision: number;
+    mainRevision: number;
+    conflictPolicy: "cancel" | "rename";
+  },
+): Promise<{
+  revision: number;
+  roots: Array<{
+    sourceEntryIdHex: string;
+    newEntryIdHex: string;
+    name: string;
+  }>;
+}> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/import`,
+    instanceToken,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 async function request<T>(
   path: string,
   instanceToken: string,
