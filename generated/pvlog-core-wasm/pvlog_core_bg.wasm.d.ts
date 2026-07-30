@@ -10,6 +10,7 @@ export const encodeAdvancedHead: (a: number, b: number, c: number, d: number, e:
 export const encodeCreateDirectorySegment: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: bigint, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: bigint) => [number, number, number, number];
 export const encodeCreateFileSegment: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: bigint, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number, s: number, t: number, u: number, v: bigint, w: bigint) => [number, number, number, number];
 export const encodeGenesisCheckpoint: (a: number, b: number, c: number, d: number, e: bigint) => [number, number, number, number];
+export const encodeGenesisCheckpointFromPacked: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const encodeGenesisHead: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number) => [number, number, number, number];
 export const encodeManifest: (a: bigint, b: number, c: number, d: number, e: number) => [number, number, number, number];
 export const encodeMoveEntrySegment: (a: number, b: number, c: number, d: number, e: number, f: number, g: bigint, h: number, i: number, j: bigint, k: number, l: number, m: number, n: number, o: number, p: number, q: number, r: number) => [number, number, number, number];

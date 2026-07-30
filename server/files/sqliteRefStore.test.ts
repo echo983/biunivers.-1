@@ -166,6 +166,22 @@ describe("SqliteRefStore", () => {
     restored.close();
   });
 
+  it("updates Workspace retention without changing its Ref", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const created = store.createWorkspace(workspaceInput());
+    const updated = store.setWorkspaceRetention(
+      workspaceIdHex,
+      "KEPT",
+      created.updatedAtMs + 1,
+    );
+    expect(updated.retention).toBe("KEPT");
+    expect(updated.updatedAtMs).toBe(created.updatedAtMs + 1);
+    expect(store.getRef(created.refId)).toEqual(workspaceInput().ref);
+    store.close();
+  });
+
   it("rolls back the Workspace Ref when publication conflicts or insertion fails", async () => {
     const path = await databasePath();
     const store = await SqliteRefStore.initialize(path);

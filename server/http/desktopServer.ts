@@ -16,6 +16,7 @@ import type { FileServiceBackupResult } from "../files/fileServiceBackup.js";
 import type { FileServiceGcReport } from "../files/fileServiceGcScanner.js";
 import type { InternalFileManagerService } from "../files/internalFileManagerService.js";
 import type { FileHostService } from "../files/fileHostService.js";
+import { RefStoreError } from "../files/sqliteRefStore.js";
 import type { OpenResourceResolver } from "../openResource/openResourceResolver.js";
 import type { OpenResourceLaunchService } from "../openResource/openResourceLaunchService.js";
 import { OpenResourceError } from "../openResource/openResourceLaunchRegistry.js";
@@ -38,6 +39,8 @@ import {
 import { appSpecificOrigin } from "../apps/appOrigin.js";
 import type { WormholeControlService } from "../wormhole/wormholeControlService.js";
 import { WormholeRuntimeError } from "../wormhole/wormholeRuntime.js";
+import type { WorkspaceControlService } from "../workspace/workspaceControlService.js";
+import { WorkspaceDerivationError } from "../workspace/workspaceDeriver.js";
 import type { Router } from "express";
 
 type InternalFileManagerExecutor = Pick<
@@ -58,6 +61,10 @@ type InternalZipExporter = Pick<
 type WormholeControlExecutor = Pick<
   WormholeControlService,
   "status" | "enable" | "rotate" | "disable"
+>;
+type WorkspaceControlExecutor = Pick<
+  WorkspaceControlService,
+  "create" | "list" | "setRetention" | "delete" | "listDirectory"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -96,6 +103,7 @@ interface DesktopServerDependencies {
   internalFileManager?: InternalFileManagerExecutor;
   internalZipExporter?: InternalZipExporter;
   wormholeControl?: WormholeControlExecutor;
+  workspaceControl?: WorkspaceControlExecutor;
   wormholeRouter?: Router;
   openResourceResolver?: OpenResourceResolverExecutor;
   openResourceLaunchService?: OpenResourceLaunchExecutor;
@@ -122,6 +130,7 @@ export function createDesktopServer({
   internalFileManager,
   internalZipExporter,
   wormholeControl,
+  workspaceControl,
   wormholeRouter,
   openResourceResolver,
   openResourceLaunchService,
@@ -212,6 +221,133 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  app.post("/api/v1/internal/workspaces", async (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWorkspaceControl(
+        request,
+        config,
+        workspaceControl,
+      );
+      const { name, selectedEntryIds, retention } = request.body as Record<
+        string,
+        unknown
+      >;
+      if (
+        typeof name !== "string" ||
+        !Array.isArray(selectedEntryIds) ||
+        selectedEntryIds.some((value) => typeof value !== "string") ||
+        (retention !== undefined &&
+          retention !== "TEMPORARY" &&
+          retention !== "KEPT")
+      ) {
+        throw new AppError(
+          "REQUEST_INVALID",
+          "name、selectedEntryIds 或 retention 无效",
+        );
+      }
+      response
+        .status(201)
+        .set("Cache-Control", "no-store")
+        .json(
+          await service.create(instanceToken, {
+            name,
+            selectedEntryIds: selectedEntryIds as string[],
+            ...(retention ? { retention } : {}),
+          }),
+        );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get("/api/v1/internal/workspaces", (request, response, next) => {
+    try {
+      const { service, instanceToken } = requireWorkspaceControl(
+        request,
+        config,
+        workspaceControl,
+      );
+      response
+        .set("Cache-Control", "no-store")
+        .json({ workspaces: service.list(instanceToken) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch(
+    "/api/v1/internal/workspaces/:workspaceId",
+    (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        const { retention } = request.body as Record<string, unknown>;
+        if (retention !== "TEMPORARY" && retention !== "KEPT") {
+          throw new AppError("REQUEST_INVALID", "retention 无效");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            service.setRetention(
+              instanceToken,
+              request.params.workspaceId,
+              retention,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.delete(
+    "/api/v1/internal/workspaces/:workspaceId",
+    (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        service.delete(instanceToken, request.params.workspaceId);
+        response.set("Cache-Control", "no-store").status(204).end();
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.get(
+    "/api/v1/internal/workspaces/:workspaceId/files",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(
+          request,
+          config,
+          workspaceControl,
+        );
+        const parent = request.query.parent;
+        if (parent !== undefined && typeof parent !== "string") {
+          throw new AppError("REQUEST_INVALID", "parent 必须是字符串");
+        }
+        response
+          .set("Cache-Control", "no-store")
+          .json(
+            await service.listDirectory(
+              instanceToken,
+              request.params.workspaceId,
+              parent,
+            ),
+          );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.get("/api/v1/desktop-surface", async (request, response, next) => {
     try {
@@ -1628,6 +1764,39 @@ export function createDesktopServer({
           });
         return;
       }
+      if (error instanceof WorkspaceDerivationError) {
+        const status =
+          error.code === "SELECTION_NOT_FOUND"
+            ? 404
+            : error.code.endsWith("LIMIT_EXCEEDED")
+              ? 413
+              : 400;
+        response.status(status).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      if (error instanceof RefStoreError) {
+        const status = {
+          REFSTORE_MISSING: 503,
+          REFSTORE_CORRUPT: 500,
+          REF_ALREADY_EXISTS: 409,
+          REF_NOT_FOUND: 404,
+          REF_CONFLICT: 409,
+          SNAPSHOT_ALREADY_EXISTS: 409,
+          WORKSPACE_ALREADY_EXISTS: 409,
+          WORKSPACE_NOT_FOUND: 404,
+          WORKSPACE_ACTIVE: 409,
+          RUN_ALREADY_EXISTS: 409,
+          RUN_NOT_FOUND: 404,
+          RUN_STATE_CONFLICT: 409,
+          INVALID_REF_VALUE: 400,
+        }[error.code];
+        response.status(status).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
       if (error instanceof WormholeRuntimeError) {
         response.status(409).json({
           error: {
@@ -1823,6 +1992,22 @@ function requireWormholeControl(
     throw new AppError(
       "WORMHOLE_UNSUPPORTED",
       "当前宿主尚未启用 Wormhole",
+      503,
+    );
+  }
+  return { service, instanceToken: readInstanceToken(request) };
+}
+
+function requireWorkspaceControl(
+  request: express.Request,
+  config: ServerConfig,
+  service: WorkspaceControlExecutor | undefined,
+): { service: WorkspaceControlExecutor; instanceToken: string } {
+  requireDesktopOrigin(request, config.desktopOrigin);
+  if (!service) {
+    throw new AppError(
+      "HOST_API_UNSUPPORTED",
+      "当前宿主尚未启用 Workspace 能力",
       503,
     );
   }

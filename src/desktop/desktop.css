@@ -525,6 +525,142 @@
   color: #285d39;
 }
 
+.workspace-app {
+  display: grid;
+  grid-template-columns: minmax(210px, 30%) 1fr;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-primary);
+  background: #202632;
+}
+
+.workspace-app > aside {
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+  border-right: 1px solid var(--surface-border);
+  background: #1a202b;
+}
+
+.workspace-app > aside header,
+.workspace-app > main > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-app h1,
+.workspace-app h2,
+.workspace-app p {
+  margin-top: 0;
+}
+
+.workspace-app button {
+  border: 1px solid var(--surface-border);
+  border-radius: 7px;
+  color: inherit;
+  background: rgb(255 255 255 / 6%);
+  cursor: pointer;
+}
+
+.workspace-app button:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.workspace-app aside ul {
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-app aside li > button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  text-align: left;
+}
+
+.workspace-app aside li > button.is-selected {
+  border-color: #7eb8ff;
+  background: rgb(126 184 255 / 16%);
+}
+
+.workspace-app aside li span,
+.workspace-app main header p,
+.workspace-app__files small {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.workspace-app > main {
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.workspace-app > main > header > div:last-child {
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-app > main button {
+  padding: 6px 10px;
+}
+
+.workspace-app > main nav {
+  margin: 12px 0;
+}
+
+.workspace-app > main nav button {
+  padding: 2px 6px;
+  border: 0;
+  background: transparent;
+}
+
+.workspace-app__notice {
+  padding: 8px 10px;
+  border-radius: 7px;
+  background: rgb(126 184 255 / 14%);
+}
+
+.workspace-app__files {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.workspace-app__files > button {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 10px;
+  text-align: left;
+}
+
+.workspace-app__file {
+  background: rgb(255 255 255 / 3%);
+}
+
+.workspace-app__files > button > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.workspace-app__files > button small {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.workspace-app__empty {
+  color: var(--text-secondary);
+}
+
 .iframe-app {
   position: relative;
   display: grid;

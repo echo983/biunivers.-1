@@ -31,6 +31,7 @@ describe("mergeAppSources", () => {
       "system.files",
       "system.settings",
       "system.wormhole",
+      "system.workspaces",
       "system.about",
       "legacy.files",
       "io.github.example.hello",

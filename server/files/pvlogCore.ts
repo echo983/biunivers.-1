@@ -9,6 +9,10 @@ export interface PvlogCore {
     rootEntryId: Uint8Array,
     createdAtMs: bigint,
   ): Uint8Array;
+  encodeGenesisCheckpointFromPacked(
+    lineageId: Uint8Array,
+    entriesPacked: Uint8Array,
+  ): Uint8Array;
   encodeGenesisHead(
     lineageId: Uint8Array,
     rootEntryId: Uint8Array,

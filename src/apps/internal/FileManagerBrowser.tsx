@@ -49,6 +49,7 @@ import {
   type FileSelection,
 } from "./fileSelection";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
+import { createWorkspace } from "../../api/workspaceClient";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -70,6 +71,7 @@ type ToolbarIconName =
   | "download"
   | "open-with"
   | "add-desktop"
+  | "workspace"
   | "refresh"
   | "list-view"
   | "icon-view";
@@ -185,6 +187,33 @@ export function FileManagerBrowser({
     [];
   const selected =
     selectedEntries.length === 1 ? selectedEntries[0] : undefined;
+
+  const createSelectedWorkspace = async () => {
+    if (selectedEntries.length === 0 || working) return;
+    const suggested =
+      selectedEntries.length === 1
+        ? selectedEntries[0].name
+        : `${listing?.parent.name || "文件"}工作空间`;
+    const name = window.prompt("工作空间名称", suggested)?.trim();
+    if (!name) return;
+    setWorking(true);
+    setError(undefined);
+    setNotice(undefined);
+    try {
+      const result = await createWorkspace(instanceToken, {
+        name,
+        selectedEntryIds: selectedEntries.map((entry) => entry.entryId),
+      });
+      setNotice(
+        `已创建工作空间“${result.workspace.name}”，包含 ${result.entryCount} 个项目。`,
+      );
+      openApp("system.workspaces");
+    } catch (reason) {
+      setError(messageOf(reason));
+    } finally {
+      setWorking(false);
+    }
+  };
 
   useEffect(
     () => () => {
@@ -788,6 +817,15 @@ export function FileManagerBrowser({
             </button>
           </div>
           <div role="group" aria-label="打开与刷新">
+            <button
+              type="button"
+              aria-label="创建工作空间"
+              title="从选中项目创建工作空间"
+              disabled={selectedEntries.length === 0 || working}
+              onClick={() => void createSelectedWorkspace()}
+            >
+              <ToolbarIcon kind="workspace" />
+            </button>
             <button
               type="button"
               aria-label="添加到桌面"
@@ -1767,6 +1805,12 @@ function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
       "M12 17v4",
       "M12 8v6",
       "M9 11h6",
+    ],
+    workspace: [
+      "M3 7h7l2 2h9v11H3z",
+      "M7 4h10v3",
+      "M12 12v5",
+      "M9.5 14.5h5",
     ],
     refresh: [
       "M20 7v5h-5",
