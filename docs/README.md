@@ -139,6 +139,19 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Open Resource v1.1 施工计划](<浏览器云端个人桌面 Open Resource v1.1 施工计划.md>) | 已完成 | 六阶段实现、自动验证、真实应用验收和合并门槛 |
 | [Open Resource v1.1 多资源验收](<acceptance/Open Resource v1.1 多资源验收.md>) | 已通过 | 全量测试、Docker、BiuniView 主动多选与批量 Launch、旧版单资源兼容 |
 
+## V0.13：Workspace Runtime
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [V0.13 Workspace Runtime 技术设计](<浏览器云端个人桌面 V0.13 Workspace Runtime 技术设计.md>) | 总设计通过 | 选择集派生、固定 HEAD PVLogFS、COW 挂载、沙箱 Run、提交、Diff 与导回 |
+| [V0.13 Workspace Runtime 规范评审](<浏览器云端个人桌面 V0.13 Workspace Runtime 规范评审.md>) | 评审通过 | 自洽性、冗余删减、风险和挂载技术探针 Go/No-Go |
+| [V0.13 Workspace Runtime 路线图](<浏览器云端个人桌面 V0.13 Workspace Runtime 路线图.md>) | 执行中 | 挂载探针、局部设计、控制面、产品闭环和里程碑阶段出口 |
+| [V0.13 Workspace 挂载技术探针](<acceptance/V0.13 Workspace 挂载技术探针.md>) | 挂载探针通过 | 无特权 FUSE/COW、Docker 隔离、真实固定 PVLog HEAD、按需跨分片 Range 与异常清理 |
+| [V0.13 Workspace 控制面局部设计](<浏览器云端个人桌面 V0.13 Workspace 控制面局部设计.md>) | 已冻结 | Workspace/Ref/Run Schema、状态机、事务、恢复、GC root |
+| [V0.13 PVLogFS 与 Compute Runtime 局部设计](<浏览器云端个人桌面 V0.13 PVLogFS 与 Compute Runtime 局部设计.md>) | 已冻结 | 固定 Snapshot、完整 Chunk 校验缓存、挂载、窄 Runtime API 与沙箱 |
+| [V0.13 COW 提交、Diff 与导回局部设计](<浏览器云端个人桌面 V0.13 COW 提交、Diff 与导回局部设计.md>) | 已冻结 | Upper 解释、发布 CAS、Diff、原子导回与丢弃 |
+| [V0.13 Workspace Runtime 施工计划](<浏览器云端个人桌面 V0.13 Workspace Runtime 施工计划.md>) | 待施工 | RefStore、派生、系统应用、PVLogFS、Runtime、提交、导回和恢复的阶段出口 |
+
 ## 第三方应用生态 V1：发布候选
 
 | 文档 | 状态 | 内容 |
