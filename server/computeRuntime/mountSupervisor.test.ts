@@ -127,7 +127,7 @@ describe("MountSupervisor", () => {
       [
         "-f",
         "-o",
-        `lowerdir=${paths.lower},upperdir=${paths.upper},workdir=${paths.work},allow_other`,
+        `lowerdir=${paths.lower},upperdir=${paths.upper},workdir=${paths.work},allow_other,squash_to_uid=65532,squash_to_gid=65532`,
         paths.merged,
       ],
     ]);

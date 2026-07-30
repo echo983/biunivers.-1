@@ -126,6 +126,8 @@ export class MountSupervisor {
           `upperdir=${input.paths.upper}`,
           `workdir=${input.paths.work}`,
           "allow_other",
+          "squash_to_uid=65532",
+          "squash_to_gid=65532",
         ].join(","),
         input.paths.merged,
       ]);
