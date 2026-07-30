@@ -9,7 +9,7 @@ test "$(awk '/^CapEff:/ { print $2 }' /proc/self/status)" = "0000000000000000"
 test ! -e /var/run/docker.sock
 test ! -e /dev/fuse
 
-interfaces="$(find /sys/class/net -mindepth 1 -maxdepth 1 -printf '%f\n' | sort)"
+interfaces="$(ls -1 /sys/class/net)"
 test "$interfaces" = "lo"
 
 temporary="/workspace/.biunivers-runtime-diagnostic.tmp"
