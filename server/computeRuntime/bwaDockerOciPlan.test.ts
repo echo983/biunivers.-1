@@ -24,6 +24,7 @@ describe("buildBwaDockerOciPlan", () => {
     expect(plan.createArguments).toContain("MODE=safe");
     expect(plan.createArguments).toContain("API_TOKEN=secret-test-value");
     expect(plan.createArguments).toContain("BIUNIVERS_HTTP_PORT=8080");
+    expect(plan.createArguments).not.toContain("--workdir");
     expect(plan.createArguments.at(-1)).toBe(imageReference);
     expect(plan.createArguments).not.toContain("--entrypoint");
     expect(plan.createArguments).not.toContain("--privileged");

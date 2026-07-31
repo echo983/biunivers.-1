@@ -82,8 +82,6 @@ export function buildBwaDockerOciPlan(input: {
       "65532:65532",
       "--volume",
       `${input.mergedPath}:/workspace:rw`,
-      "--workdir",
-      "/workspace",
       "--tmpfs",
       `/tmp:rw,nosuid,nodev,noexec,size=${limits.temporaryBytes}`,
       ...environmentArguments,
