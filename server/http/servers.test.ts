@@ -146,6 +146,97 @@ describe("desktop and app origins", () => {
     });
   });
 
+  it("protects and routes the BWA Manager control API", async () => {
+    const dependencies = await createDependencies();
+    const bwaManager = {
+      status: vi.fn().mockReturnValue({ applications: [] }),
+      install: vi.fn().mockResolvedValue({ applicationId: "ghcr.io/example/probe" }),
+      createInstance: vi.fn().mockResolvedValue({ instanceIdHex: "11".repeat(16) }),
+      update: vi.fn().mockResolvedValue({ applicationId: "ghcr.io/example/probe" }),
+      rollback: vi.fn().mockResolvedValue({ applicationId: "ghcr.io/example/probe" }),
+      uninstall: vi.fn().mockReturnValue({ applicationId: "ghcr.io/example/probe" }),
+      deleteInstance: vi.fn().mockResolvedValue({ workspace: { workspaceIdHex: "22".repeat(16) } }),
+      replaceEnvironment: vi.fn().mockResolvedValue([]),
+      start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
+      stop: vi.fn().mockResolvedValue({ state: "COMMITTED" }),
+      saveAndRestart: vi.fn().mockResolvedValue({ state: "RUNNING" }),
+      open: vi.fn().mockReturnValue({ url: "http://bwa.localhost/open", expiresAt: "soon" }),
+      waitUntilReady: vi.fn().mockResolvedValue({ ready: true }),
+      publishFailedUpper: vi.fn().mockResolvedValue({ state: "COMMITTED" }),
+      discardFailedUpper: vi.fn().mockResolvedValue({ state: "DISCARDED" }),
+    };
+    const origin = await listen(
+      createDesktopServer({ ...dependencies, bwaManager }).listen(0, "127.0.0.1"),
+    );
+    const endpoint = `${origin}/api/v1/admin/bwa`;
+    expect((await fetch(endpoint)).status).toBe(401);
+    const headers = {
+      authorization: `Bearer ${dependencies.config.adminToken}`,
+      "content-type": "application/json",
+    };
+    await expect(fetch(endpoint, { headers }).then((response) => response.json()))
+      .resolves.toEqual({ applications: [] });
+    const installed = await fetch(`${endpoint}/applications`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ reference: "ghcr.io/example/probe:latest" }),
+    });
+    expect(installed.status).toBe(201);
+    expect(bwaManager.install).toHaveBeenCalledWith("ghcr.io/example/probe:latest");
+    const created = await fetch(`${endpoint}/instances`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        applicationId: "ghcr.io/example/probe",
+        name: "Probe",
+        startupPolicy: "ON_OPEN",
+      }),
+    });
+    expect(created.status).toBe(201);
+    expect(bwaManager.createInstance).toHaveBeenCalledWith({
+      applicationId: "ghcr.io/example/probe",
+      name: "Probe",
+      startupPolicy: "ON_OPEN",
+    });
+    const instanceId = "11".repeat(16);
+    expect(
+      (
+        await fetch(`${endpoint}/instances/${instanceId}/start`, {
+          method: "POST",
+          headers,
+        })
+      ).status,
+    ).toBe(200);
+    expect(bwaManager.start).toHaveBeenCalledWith(instanceId);
+    const opened = await fetch(`${endpoint}/instances/${instanceId}/open`, {
+      method: "POST",
+      headers,
+    });
+    expect(opened.status).toBe(200);
+    await expect(opened.json()).resolves.toEqual({
+      url: "http://bwa.localhost/open",
+      expiresAt: "soon",
+    });
+    expect(
+      (
+        await fetch(`${endpoint}/instances/${instanceId}`, {
+          method: "DELETE",
+          headers,
+        })
+      ).status,
+    ).toBe(200);
+    expect(bwaManager.deleteInstance).toHaveBeenCalledWith(instanceId);
+    expect(
+      (
+        await fetch(`${endpoint}/applications/${encodeURIComponent("ghcr.io/example/probe")}`, {
+          method: "DELETE",
+          headers,
+        })
+      ).status,
+    ).toBe(200);
+    expect(bwaManager.uninstall).toHaveBeenCalledWith("ghcr.io/example/probe");
+  });
+
   it("protects desktop surface mutations and applies revision CAS", async () => {
     const dependencies = await createDependencies();
     const store = await DesktopSurfaceStore.open(

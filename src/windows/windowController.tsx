@@ -161,6 +161,12 @@ export function openApp(appId: string, options: OpenAppOptions = {}) {
 
   const existing = windowRuntimeMap.get(appId);
   if (existing) {
+    // A BWA open URL carries a fresh, one-time browser bootstrap ticket.
+    // Reusing the WinBox must therefore also replace its rendered iframe;
+    // merely focusing it would keep a ticket/session from before a Host restart.
+    if (app.kind === "bwa") {
+      existing.reactRoot.render(<WindowContent app={app} />);
+    }
     existing.winbox.show();
     existing.winbox.focus();
     return;

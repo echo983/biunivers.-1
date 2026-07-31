@@ -35,6 +35,11 @@ export function loadComputeRuntimeConfig(
       `${dataDir}/compute-runtime/runtime.sock`,
     "BIUNIVERS_RUNTIME_SOCKET",
   );
+  validateUnixSocketPath(socketPath, "BIUNIVERS_RUNTIME_SOCKET");
+  validateUnixSocketPath(
+    `${runRoot}/${"0".repeat(32)}/gateway.sock`,
+    "BIUNIVERS_RUNTIME_ROOT 生成的 gateway socket",
+  );
   const pvlogfsBinary = absoluteFile(
     environment.BIUNIVERS_PVLOGFS_BINARY?.trim() ||
       "/opt/biunivers/bin/biunivers-pvlogfs",
@@ -62,6 +67,12 @@ export function loadComputeRuntimeConfig(
     authenticationTokenHex,
     executors: Object.freeze([loadDiagnosticExecutor(environment)]),
   });
+}
+
+function validateUnixSocketPath(value: string, key: string): void {
+  if (Buffer.byteLength(value) > 107) {
+    throw new Error(`${key} 超过 Linux Unix socket 的 107 字节路径上限。`);
+  }
 }
 
 function loadDiagnosticExecutor(

@@ -56,4 +56,14 @@ describe("loadComputeRuntimeConfig", () => {
       }),
     ).toThrow(message);
   });
+
+  it("rejects a Runtime root whose per-Run gateway socket exceeds the Linux limit", () => {
+    expect(() =>
+      loadComputeRuntimeConfig({
+        BIUNIVERS_RUNTIME_AUTH_TOKEN: TOKEN,
+        BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE: IMAGE,
+        BIUNIVERS_RUNTIME_ROOT: `/tmp/${"a".repeat(80)}`,
+      }),
+    ).toThrow("107 字节");
+  });
 });

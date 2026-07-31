@@ -32,6 +32,7 @@ describe("mergeAppSources", () => {
       "system.settings",
       "system.wormhole",
       "system.workspaces",
+      "system.bwa-manager",
       "system.about",
       "legacy.files",
       "io.github.example.hello",

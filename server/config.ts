@@ -12,6 +12,13 @@ export interface ServerConfig {
   maxAppBytes: number;
   maxAppFiles: number;
   fileService?: FileServiceConfig;
+  bwaManager?: BwaManagerConfig;
+}
+
+export interface BwaManagerConfig {
+  runtimeSocketPath: string;
+  runtimeAuthenticationTokenHex: string;
+  secretStorePath: string;
 }
 
 export interface FileServiceConfig {
@@ -177,6 +184,30 @@ export function loadServerConfig(
           environment.BIUNIVERS_FILE_WRITER_ID?.trim() || "biunivers-host",
       }
     : undefined;
+  const bwaEnabled = parseBoolean(
+    environment.BIUNIVERS_BWA_ENABLED,
+    false,
+    "BIUNIVERS_BWA_ENABLED",
+  );
+  if (bwaEnabled && !fileEnabled) {
+    throw new Error("BIUNIVERS_BWA_ENABLED 需要启用 File Service");
+  }
+  const runtimeAuthenticationTokenHex =
+    environment.BIUNIVERS_RUNTIME_AUTH_TOKEN?.trim() ?? "";
+  if (bwaEnabled && !/^[0-9a-f]{64}$/.test(runtimeAuthenticationTokenHex)) {
+    throw new Error("BIUNIVERS_RUNTIME_AUTH_TOKEN 必须是 64 位小写十六进制值");
+  }
+  const bwaManager = bwaEnabled
+    ? {
+        runtimeSocketPath: absoluteFile(
+          environment.BIUNIVERS_RUNTIME_SOCKET?.trim() ||
+            resolve(dataDir, "compute-runtime", "runtime.sock"),
+          "BIUNIVERS_RUNTIME_SOCKET",
+        ),
+        runtimeAuthenticationTokenHex,
+        secretStorePath: resolve(dataDir, "private", "bwa-secrets.json"),
+      }
+    : undefined;
 
   return {
     adminToken,
@@ -205,5 +236,14 @@ export function loadServerConfig(
       "BIUNIVERS_MAX_APP_FILES",
     ),
     fileService,
+    bwaManager,
   };
+}
+
+function absoluteFile(value: string, key: string): string {
+  const path = resolve(value);
+  if (!value.startsWith("/") || path !== value || path === "/") {
+    throw new Error(`${key} 必须是绝对、规范化的文件路径`);
+  }
+  return path;
 }

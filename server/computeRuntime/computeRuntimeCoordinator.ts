@@ -9,6 +9,16 @@ import {
 } from "./executorRegistry.js";
 import type { MountSupervisor } from "./mountSupervisor.js";
 import {
+  buildBwaDockerOciPlan,
+  bwaCommandLimits,
+  BWA_EXECUTOR_ID,
+  type BwaLaunchSpec,
+} from "./bwaDockerOciPlan.js";
+import type {
+  BwaRuntimeEndpoint,
+  DockerBwaNetworkAdapter,
+} from "./dockerBwaNetworkAdapter.js";
+import {
   RunDirectoryManager,
   type RunPaths,
   type RuntimeManifest,
@@ -36,6 +46,7 @@ type OciExecutor = Pick<
   DockerOciAdapter,
   "create" | "start" | "freeze" | "thaw" | "inspect" | "stop" | "remove"
 >;
+type BwaEndpointResolver = Pick<DockerBwaNetworkAdapter, "resolve">;
 
 export class ComputeRuntimeCoordinator {
   readonly #directories: RunDirectoryManager;
@@ -43,7 +54,9 @@ export class ComputeRuntimeCoordinator {
   readonly #mounts: MountExecutor;
   readonly #oci: OciExecutor;
   readonly #snapshots: SnapshotProvisioner;
+  readonly #bwaEndpoints?: BwaEndpointResolver;
   readonly #activeRunIds = new Set<string>();
+  readonly #bwaLaunches = new Map<string, BwaLaunchSpec>();
 
   constructor(options: {
     directories: RunDirectoryManager;
@@ -51,12 +64,14 @@ export class ComputeRuntimeCoordinator {
     mounts: MountExecutor;
     oci: OciExecutor;
     snapshots: SnapshotProvisioner;
+    bwaEndpoints?: BwaEndpointResolver;
   }) {
     this.#directories = options.directories;
     this.#executors = options.executors;
     this.#mounts = options.mounts;
     this.#oci = options.oci;
     this.#snapshots = options.snapshots;
+    this.#bwaEndpoints = options.bwaEndpoints;
   }
 
   async prepare(input: {
@@ -68,6 +83,54 @@ export class ComputeRuntimeCoordinator {
     capabilityHex: string;
   }): Promise<RuntimeManifest> {
     this.#executors.get(input.executorId);
+    return await this.#prepareFilesystem(input);
+  }
+
+  async prepareBwa(input: {
+    runIdHex: string;
+    workspaceIdHex: string;
+    inputHeadFidHex: string;
+    revision: number;
+    capabilityHex: string;
+    imageReference: string;
+    environment: Readonly<Record<string, string>>;
+  }): Promise<RuntimeManifest> {
+    if (this.#bwaLaunches.has(input.runIdHex)) {
+      throw new Error("BWA launch spec is already registered for this Run.");
+    }
+    const launch: BwaLaunchSpec = Object.freeze({
+      imageReference: input.imageReference,
+      environment: Object.freeze({ ...input.environment }),
+    });
+    buildBwaDockerOciPlan({
+      runIdHex: input.runIdHex,
+      mergedPath: this.#directories.paths(input.runIdHex).merged,
+      launch,
+    });
+    this.#bwaLaunches.set(input.runIdHex, launch);
+    try {
+      return await this.#prepareFilesystem({
+        runIdHex: input.runIdHex,
+        workspaceIdHex: input.workspaceIdHex,
+        inputHeadFidHex: input.inputHeadFidHex,
+        revision: input.revision,
+        executorId: BWA_EXECUTOR_ID,
+        capabilityHex: input.capabilityHex,
+      });
+    } catch (error) {
+      this.#bwaLaunches.delete(input.runIdHex);
+      throw error;
+    }
+  }
+
+  async #prepareFilesystem(input: {
+    runIdHex: string;
+    workspaceIdHex: string;
+    inputHeadFidHex: string;
+    revision: number;
+    executorId: string;
+    capabilityHex: string;
+  }): Promise<RuntimeManifest> {
     const prepared = await this.#directories.prepare(input);
     try {
       await this.#snapshots.provision({
@@ -87,6 +150,10 @@ export class ComputeRuntimeCoordinator {
       this.#activeRunIds.add(input.runIdHex);
       return manifest;
     } catch (error) {
+      console.error(
+        `Compute Runtime could not prepare mounts for Run ${input.runIdHex}: ` +
+          (error instanceof Error ? error.message : "unknown mount error"),
+      );
       this.#activeRunIds.delete(input.runIdHex);
       await this.#releasePreparedResources(input.runIdHex);
       await this.#markFailed(input.runIdHex, "PREPARE_FAILED");
@@ -99,9 +166,7 @@ export class ComputeRuntimeCoordinator {
     if (manifest.state !== "PREPARED") {
       throw new Error("Only a PREPARED local Run can be started.");
     }
-    const executor = this.#executors.get(manifest.executorId);
-    const plan = this.#plan(manifest, executor);
-    const limits = commandLimits(executor);
+    const { plan, limits } = this.#execution(manifest);
     let created = false;
     try {
       const runtimeIdentity = await this.#oci.create(plan, limits);
@@ -115,6 +180,7 @@ export class ComputeRuntimeCoordinator {
       });
     } catch (error) {
       this.#activeRunIds.delete(runIdHex);
+      this.#bwaLaunches.delete(runIdHex);
       if (created) await ignoreFailure(() => this.#oci.remove(plan, limits));
       await this.#releasePreparedResources(runIdHex);
       await this.#markFailed(runIdHex, "START_FAILED");
@@ -130,14 +196,27 @@ export class ComputeRuntimeCoordinator {
     ) {
       return { manifest };
     }
-    const executor = this.#executors.get(manifest.executorId);
+    const { plan, limits } = this.#execution(manifest);
     return {
       manifest,
-      container: await this.#oci.inspect(
-        this.#plan(manifest, executor),
-        commandLimits(executor),
-      ),
+      container: await this.#oci.inspect(plan, limits),
     };
+  }
+
+  async resolveBwaEndpoint(runIdHex: string): Promise<BwaRuntimeEndpoint> {
+    if (!this.#bwaEndpoints) throw new Error("BWA endpoint resolution is unavailable.");
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (
+      manifest.executorId !== BWA_EXECUTOR_ID ||
+      manifest.state !== "RUNNING" ||
+      !manifest.runtimeIdentity
+    ) {
+      throw new Error("Only a running BWA Run has a proxy endpoint.");
+    }
+    return await this.#bwaEndpoints.resolve(
+      `biunivers-run-${runIdHex}`,
+      manifest.runtimeIdentity,
+    );
   }
 
   async freeze(runIdHex: string): Promise<RuntimeManifest> {
@@ -145,9 +224,7 @@ export class ComputeRuntimeCoordinator {
     if (manifest.state !== "RUNNING") {
       throw new Error("Only a RUNNING local Run can be frozen.");
     }
-    const executor = this.#executors.get(manifest.executorId);
-    const plan = this.#plan(manifest, executor);
-    const limits = commandLimits(executor);
+    const { plan, limits } = this.#execution(manifest);
     const state = await this.#oci.inspect(plan, limits);
     if (!state.running || state.paused) {
       throw new Error("Run container is not actively running.");
@@ -170,9 +247,7 @@ export class ComputeRuntimeCoordinator {
     if (manifest.state !== "FROZEN") {
       throw new Error("Only a FROZEN local Run can be thawed.");
     }
-    const executor = this.#executors.get(manifest.executorId);
-    const plan = this.#plan(manifest, executor);
-    const limits = commandLimits(executor);
+    const { plan, limits } = this.#execution(manifest);
     const state = await this.#oci.inspect(plan, limits);
     if (!state.running || !state.paused) {
       throw new Error("Run container is not paused.");
@@ -195,9 +270,7 @@ export class ComputeRuntimeCoordinator {
     if (manifest.state !== "RUNNING" && manifest.state !== "FROZEN") {
       throw new Error("Only a RUNNING or FROZEN local Run can be stopped.");
     }
-    const executor = this.#executors.get(manifest.executorId);
-    const plan = this.#plan(manifest, executor);
-    const limits = commandLimits(executor);
+    const { plan, limits } = this.#execution(manifest);
     try {
       const state = await this.#oci.inspect(plan, limits);
       if (state.paused) await this.#oci.thaw(plan, limits);
@@ -210,11 +283,52 @@ export class ComputeRuntimeCoordinator {
         newState: "STOPPED",
       });
       this.#activeRunIds.delete(runIdHex);
+      this.#bwaLaunches.delete(runIdHex);
       return stopped;
     } catch (error) {
       await this.#markFailed(runIdHex, "STOP_FAILED");
       throw error;
     }
+  }
+
+  async finalizeExited(runIdHex: string): Promise<RuntimeManifest> {
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (manifest.state !== "RUNNING" && manifest.state !== "FROZEN") {
+      throw new Error("Only an active local Run can finalize an exited container.");
+    }
+    const { plan, limits } = this.#execution(manifest);
+    const state = await this.#oci.inspect(plan, limits);
+    if (state.running || state.paused || state.restarting) {
+      throw new Error("Run container has not exited.");
+    }
+    const normal = state.exitCode === 0 && !state.oomKilled && !state.dead;
+    try {
+      await this.#oci.remove(plan, limits);
+      await this.#releasePreparedResources(runIdHex);
+      const finalized = await this.#directories.transition({
+        runIdHex,
+        expectedState: manifest.state,
+        newState: normal ? "STOPPED" : "FAILED",
+        ...(normal
+          ? {}
+          : { errorCode: state.oomKilled ? "CONTAINER_OOM" : "CONTAINER_EXIT_FAILED" }),
+      });
+      this.#activeRunIds.delete(runIdHex);
+      this.#bwaLaunches.delete(runIdHex);
+      return finalized;
+    } catch (error) {
+      await this.#markFailed(runIdHex, "EXIT_FINALIZE_FAILED");
+      throw error;
+    }
+  }
+
+  async reopenFailed(runIdHex: string): Promise<RuntimeManifest> {
+    return await this.#directories.transition({
+      runIdHex,
+      expectedState: "FAILED",
+      newState: "STOPPED",
+      errorCode: null,
+    });
   }
 
   async destroy(runIdHex: string, preserveUpper: boolean): Promise<void> {
@@ -242,6 +356,7 @@ export class ComputeRuntimeCoordinator {
     await this.#releasePreparedResources(runIdHex);
     await this.#directories.destroy(runIdHex, preserveUpper);
     this.#activeRunIds.delete(runIdHex);
+    this.#bwaLaunches.delete(runIdHex);
   }
 
   async shutdown(): Promise<void> {
@@ -250,9 +365,7 @@ export class ComputeRuntimeCoordinator {
       try {
         const manifest = await this.#directories.inspect(runIdHex);
         if (manifest.state === "RUNNING" || manifest.state === "FROZEN") {
-          const executor = this.#executors.get(manifest.executorId);
-          const plan = this.#plan(manifest, executor);
-          const limits = commandLimits(executor);
+          const { plan, limits } = this.#execution(manifest);
           const state = await ignoreFailureWithResult(() =>
             this.#oci.inspect(plan, limits),
           );
@@ -279,6 +392,7 @@ export class ComputeRuntimeCoordinator {
         errors.push(error);
       } finally {
         this.#activeRunIds.delete(runIdHex);
+        this.#bwaLaunches.delete(runIdHex);
       }
     }
     if (errors.length > 0) {
@@ -298,6 +412,31 @@ export class ComputeRuntimeCoordinator {
       mergedPath: this.#directories.paths(manifest.runIdHex).merged,
       executor,
     });
+  }
+
+  #execution(manifest: RuntimeManifest): {
+    plan: DockerOciPlan;
+    limits: { timeoutMs: number; outputBytesLimit: number };
+  } {
+    if (manifest.executorId === BWA_EXECUTOR_ID) {
+      const launch = this.#bwaLaunches.get(manifest.runIdHex);
+      if (!launch) {
+        throw new Error("BWA launch spec is unavailable for the active Run.");
+      }
+      return {
+        plan: buildBwaDockerOciPlan({
+          runIdHex: manifest.runIdHex,
+          mergedPath: this.#directories.paths(manifest.runIdHex).merged,
+          launch,
+        }),
+        limits: bwaCommandLimits(),
+      };
+    }
+    const executor = this.#executors.get(manifest.executorId);
+    return {
+      plan: this.#plan(manifest, executor),
+      limits: commandLimits(executor),
+    };
   }
 
   async #releasePreparedResources(runIdHex: string): Promise<void> {

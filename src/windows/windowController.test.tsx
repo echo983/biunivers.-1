@@ -137,6 +137,35 @@ describe("window controller", () => {
     expect(windowRuntimeMap.has("system.about")).toBe(true);
   });
 
+  it("refreshes a reused BWA window with its newly issued bootstrap URL", async () => {
+    const appId = `bwa.${"11".repeat(16)}`;
+    const definition = {
+      id: appId,
+      name: "Probe",
+      kind: "bwa" as const,
+      icon: "/icons/workspaces.svg",
+      url: "http://bwa.localhost/__biunivers/bootstrap?t=first",
+      defaultWidth: 840,
+      defaultHeight: 600,
+      desktop: false,
+      pinned: false,
+      transient: true,
+    };
+    useDesktopStore.getState().registerRuntimeApp(definition);
+    await act(async () => openApp(appId));
+
+    useDesktopStore.getState().registerRuntimeApp({
+      ...definition,
+      url: "http://bwa.localhost/__biunivers/bootstrap?t=second",
+    });
+    await act(async () => openApp(appId));
+
+    expect(winboxMock.instances).toHaveLength(1);
+    expect(
+      windowRuntimeMap.get(appId)?.container.querySelector("iframe")?.getAttribute("src"),
+    ).toBe("http://bwa.localhost/__biunivers/bootstrap?t=second");
+  });
+
   it("focuses a covered window when its visible area is pressed", () => {
     act(() => {
       openApp("system.about");

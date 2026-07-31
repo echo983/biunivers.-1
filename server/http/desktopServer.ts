@@ -42,6 +42,12 @@ import { WormholeRuntimeError } from "../wormhole/wormholeRuntime.js";
 import type { WorkspaceControlService } from "../workspace/workspaceControlService.js";
 import { WorkspaceDerivationError } from "../workspace/workspaceDeriver.js";
 import type { Router } from "express";
+import {
+  BwaManagerControlError,
+  type BwaManagerControlService,
+} from "../bwa/bwaManagerControlService.js";
+import { BwaLifecycleError } from "../bwa/bwaLifecycleService.js";
+import { BwaRegistryError } from "../bwa/bwaRegistryService.js";
 
 type InternalFileManagerExecutor = Pick<
   InternalFileManagerService,
@@ -85,6 +91,24 @@ type OpenResourceLaunchExecutor = Pick<
   | "claimResourceSession"
   | "cancelTarget"
 >;
+type BwaManagerControlExecutor = Pick<
+  BwaManagerControlService,
+  | "status"
+  | "install"
+  | "createInstance"
+  | "update"
+  | "rollback"
+  | "deleteInstance"
+  | "uninstall"
+  | "replaceEnvironment"
+  | "start"
+  | "stop"
+  | "saveAndRestart"
+  | "open"
+  | "waitUntilReady"
+  | "publishFailedUpper"
+  | "discardFailedUpper"
+>;
 
 interface DesktopServerDependencies {
   config: ServerConfig;
@@ -115,6 +139,7 @@ interface DesktopServerDependencies {
   openResourceResolver?: OpenResourceResolverExecutor;
   openResourceLaunchService?: OpenResourceLaunchExecutor;
   desktopSurface?: DesktopSurfaceService;
+  bwaManager?: BwaManagerControlExecutor;
 }
 
 export function createDesktopServer({
@@ -142,6 +167,7 @@ export function createDesktopServer({
   openResourceResolver,
   openResourceLaunchService,
   desktopSurface,
+  bwaManager,
 }: DesktopServerDependencies) {
   const app = express();
   app.disable("x-powered-by");
@@ -1622,6 +1648,211 @@ export function createDesktopServer({
 
   app.use("/api/v1/admin", createAdminAuth(config.adminToken));
 
+  app.get("/api/v1/admin/bwa", (_request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      response.set("Cache-Control", "no-store").json(service.status());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/admin/bwa/applications", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { reference } = objectBody(request.body);
+      if (typeof reference !== "string") {
+        throw new AppError("REQUEST_INVALID", "reference 必须是字符串");
+      }
+      response.status(201).set("Cache-Control", "no-store").json(
+        await service.install(reference),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/admin/bwa/instances", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { applicationId, name, startupPolicy, sourceWorkspaceIdHex } = objectBody(request.body);
+      if (
+        typeof applicationId !== "string" ||
+        typeof name !== "string" ||
+        (startupPolicy !== undefined &&
+          startupPolicy !== "MANUAL" &&
+          startupPolicy !== "ON_OPEN" &&
+          startupPolicy !== "AUTOMATIC")
+        || (sourceWorkspaceIdHex !== undefined && typeof sourceWorkspaceIdHex !== "string")
+      ) {
+        throw new AppError("REQUEST_INVALID", "Instance 创建参数无效");
+      }
+      response.status(201).set("Cache-Control", "no-store").json(
+        await service.createInstance({
+          applicationId,
+          name,
+          ...(startupPolicy ? { startupPolicy } : {}),
+          ...(typeof sourceWorkspaceIdHex === "string" ? { sourceWorkspaceIdHex } : {}),
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/admin/bwa/applications/update", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { applicationId, reference } = objectBody(request.body);
+      if (typeof applicationId !== "string" || typeof reference !== "string") {
+        throw new AppError("REQUEST_INVALID", "applicationId 和 reference 必须是字符串");
+      }
+      response.set("Cache-Control", "no-store").json(
+        await service.update(applicationId, reference),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/admin/bwa/applications/rollback", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { applicationId } = objectBody(request.body);
+      if (typeof applicationId !== "string") {
+        throw new AppError("REQUEST_INVALID", "applicationId 必须是字符串");
+      }
+      response.set("Cache-Control", "no-store").json(
+        await service.rollback(applicationId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/admin/bwa/applications/:applicationId", (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      response.set("Cache-Control", "no-store").json(
+        service.uninstall(request.params.applicationId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/admin/bwa/instances/:instanceId", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      response.set("Cache-Control", "no-store").json(
+        await service.deleteInstance(request.params.instanceId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put(
+    "/api/v1/admin/bwa/instances/:instanceId/environment",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        const { ordinary, sensitive } = objectBody(request.body);
+        response.set("Cache-Control", "no-store").json(
+          await service.replaceEnvironment(
+            request.params.instanceId,
+            stringRecord(ordinary, "ordinary"),
+            stringRecord(sensitive, "sensitive"),
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  for (const [action, operation] of [
+    ["start", (service: BwaManagerControlExecutor, id: string) => service.start(id)],
+    ["stop", (service: BwaManagerControlExecutor, id: string) => service.stop(id)],
+    [
+      "save-restart",
+      (service: BwaManagerControlExecutor, id: string) => service.saveAndRestart(id),
+    ],
+  ] as const) {
+    app.post(
+      `/api/v1/admin/bwa/instances/:instanceId/${action}`,
+      async (request, response, next) => {
+        try {
+          const service = requireBwaManager(bwaManager);
+          response.set("Cache-Control", "no-store").json(
+            await operation(service, request.params.instanceId),
+          );
+        } catch (error) {
+          next(error);
+        }
+      },
+    );
+  }
+
+  app.post(
+    "/api/v1/admin/bwa/instances/:instanceId/open",
+    (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        response.set("Cache-Control", "no-store").json(
+          service.open(request.params.instanceId),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/admin/bwa/instances/:instanceId/ready",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        response.set("Cache-Control", "no-store").json(
+          await service.waitUntilReady(request.params.instanceId),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  for (const [action, operation] of [
+    [
+      "publish",
+      (service: BwaManagerControlExecutor, instanceId: string, runId: string) =>
+        service.publishFailedUpper(instanceId, runId),
+    ],
+    [
+      "discard",
+      (service: BwaManagerControlExecutor, instanceId: string, runId: string) =>
+        service.discardFailedUpper(instanceId, runId),
+    ],
+  ] as const) {
+    app.post(
+      `/api/v1/admin/bwa/instances/:instanceId/runs/:runId/${action}`,
+      async (request, response, next) => {
+        try {
+          const service = requireBwaManager(bwaManager);
+          response.set("Cache-Control", "no-store").json(
+            await operation(
+              service,
+              request.params.instanceId,
+              request.params.runId,
+            ),
+          );
+        } catch (error) {
+          next(error);
+        }
+      },
+    );
+  }
+
   app.get("/api/v1/admin/apps", async (_request, response, next) => {
     try {
       response.set("Cache-Control", "no-store").json(await appStore.read());
@@ -1838,6 +2069,34 @@ export function createDesktopServer({
         });
         return;
       }
+      if (error instanceof BwaManagerControlError) {
+        response.status(error.code === "INSTANCE_NOT_READY" ? 503 : 409).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      if (error instanceof BwaLifecycleError) {
+        const status = error.code === "INSTANCE_NOT_RUNNING" ? 409 : 502;
+        response.status(status).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
+      if (error instanceof BwaRegistryError) {
+        const status =
+          error.code === "APPLICATION_DISABLED" ||
+          error.code === "APPLICATION_IMAGE_MISMATCH" ||
+          error.code === "ROLLBACK_UNAVAILABLE"
+            ? 409
+            : error.code === "BWA_PROTOCOL_UNSUPPORTED" ||
+                error.code === "IMAGE_INSPECTION_INVALID"
+              ? 422
+              : 400;
+        response.status(status).json({
+          error: { code: error.code, message: error.message },
+        });
+        return;
+      }
       if (error instanceof FileCapabilityError) {
         const status = {
           HANDLE_NOT_FOUND: 404,
@@ -1882,9 +2141,17 @@ export function createDesktopServer({
           WORKSPACE_ALREADY_EXISTS: 409,
           WORKSPACE_NOT_FOUND: 404,
           WORKSPACE_ACTIVE: 409,
+          WORKSPACE_BOUND: 409,
           RUN_ALREADY_EXISTS: 409,
           RUN_NOT_FOUND: 404,
           RUN_STATE_CONFLICT: 409,
+          APPLICATION_ALREADY_EXISTS: 409,
+          APPLICATION_NOT_FOUND: 404,
+          APPLICATION_HAS_INSTANCES: 409,
+          APPLICATION_UPDATE_BLOCKED: 409,
+          INSTANCE_ALREADY_EXISTS: 409,
+          INSTANCE_NOT_FOUND: 404,
+          INSTANCE_RUN_BLOCKED: 409,
           INVALID_REF_VALUE: 400,
         }[error.code];
         response.status(status).json({
@@ -2107,6 +2374,38 @@ function requireWorkspaceControl(
     );
   }
   return { service, instanceToken: readInstanceToken(request) };
+}
+
+function requireBwaManager(
+  service: BwaManagerControlExecutor | undefined,
+): BwaManagerControlExecutor {
+  if (!service) {
+    throw new AppError(
+      "HOST_API_UNSUPPORTED",
+      "当前宿主尚未启用 Workspace Application Manager",
+      503,
+    );
+  }
+  return service;
+}
+
+function objectBody(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new AppError("REQUEST_INVALID", "请求体必须是对象");
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringRecord(value: unknown, field: string): Record<string, string> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.values(value).some((item) => typeof item !== "string")
+  ) {
+    throw new AppError("REQUEST_INVALID", `${field} 必须是字符串对象`);
+  }
+  return value as Record<string, string>;
 }
 
 function contentDisposition(fileName: string): string {

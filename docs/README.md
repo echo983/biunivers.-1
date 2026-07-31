@@ -141,7 +141,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 ## V0.13：Workspace Runtime
 
-里程碑候选：`v0.13.0`
+归档版本：`v0.13.0`
 
 | 文档 | 状态 | 说明 |
 | --- | --- | --- |
@@ -152,9 +152,27 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.13 Workspace 控制面局部设计](<浏览器云端个人桌面 V0.13 Workspace 控制面局部设计.md>) | 已冻结 | Workspace/Ref/Run Schema、状态机、事务、恢复、GC root |
 | [V0.13 PVLogFS 与 Compute Runtime 局部设计](<浏览器云端个人桌面 V0.13 PVLogFS 与 Compute Runtime 局部设计.md>) | 已冻结 | 固定 Snapshot、完整 Chunk 校验缓存、挂载、窄 Runtime API 与沙箱 |
 | [V0.13 COW 提交、Diff 与导回局部设计](<浏览器云端个人桌面 V0.13 COW 提交、Diff 与导回局部设计.md>) | 已冻结 | Upper 解释、发布 CAS、Diff、原子导回与丢弃 |
-| [V0.13 Workspace Runtime 施工计划](<浏览器云端个人桌面 V0.13 Workspace Runtime 施工计划.md>) | 里程碑收尾 | RefStore、派生、系统应用、PVLogFS、Runtime、提交、导回和恢复的阶段出口 |
+| [V0.13 Workspace Runtime 施工计划](<浏览器云端个人桌面 V0.13 Workspace Runtime 施工计划.md>) | 已完成 | RefStore、派生、系统应用、PVLogFS、Runtime、提交、导回和恢复的阶段出口 |
 | [V0.13 Workspace 控制面首轮验收](<acceptance/V0.13 Workspace 控制面首轮验收.md>) | 已通过 | Schema v2、原子迁移、Workspace/Run、单写租约、Ref-aware 与多 Ref GC roots |
 | [V0.13 Workspace Runtime 里程碑验收](<acceptance/V0.13 Workspace Runtime 里程碑验收.md>) | 已通过 | 固定 HEAD、真实 PVLogFS、隔离沙箱、COW 提交、崩溃恢复、Diff、导回与备份恢复 |
+
+## V0.14：Biunivers Workspace Application
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 第三版概念已冻结 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
+| [V0.14 Registry、Image 与持久 Schema 局部设计](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 局部设计.md>) | 实现基线 | GHCR 镜像固定、Application/Instance Schema、Workspace 独占绑定和敏感变量边界 |
+| [V0.14 Registry、Image 与持久 Schema 规范评审](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 规范评审.md>) | 评审通过 | 第一施工切片的必要性、删减项、事务闭环和风险门禁 |
+| [V0.14 Workspace Application 施工计划](<浏览器云端个人桌面 V0.14 Workspace Application 施工计划.md>) | 已完成，等待合并 | Registry/Image、Lifecycle、Proxy/UI 三段纵向闭环及 `v0.14.0` 合并门槛 |
+| [V0.14-A BWA Registry 与 Image 验收](<acceptance/V0.14-A BWA Registry 与 Image 验收.md>) | 已通过 | 公开 GHCR、真实 Runtime socket、固定 digest、持久 Schema、空白 Instance 与 secret 边界 |
+| [V0.14 Lifecycle、提交与异常恢复局部设计](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复局部设计.md>) | 实现基线 | 动态 BWA Run、结束分类、正常提交、保存重启、受控关机和异常 Upper 门禁 |
+| [V0.14 Lifecycle、提交与异常恢复规范评审](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复规范评审.md>) | 评审通过 | 必要性、过度设计删减、状态自洽性、风险和分段施工门 |
+| [V0.14 Lifecycle、提交与异常恢复阶段验收](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复阶段验收.md>) | 阶段通过 | 真实 BWA、异常 Upper、保存重启、受控/非受控恢复、更新门和回退出口 |
+| [V0.14 Runtime Proxy、网络与 iframe 局部设计](<浏览器云端个人桌面 V0.14 Runtime Proxy、网络与 iframe 局部设计.md>) | 实现基线 | 稳定 Instance origin、bootstrap 会话、bridge endpoint、HTTP/WebSocket 代理和宿主故障页 |
+| [V0.14 Runtime Proxy、网络与 iframe 规范评审](<浏览器云端个人桌面 V0.14 Runtime Proxy、网络与 iframe 规范评审.md>) | 评审通过 | 必要性、身份授权闭环、网络边界、删减项、风险与第一施工门 |
+| [V0.14-C BWA 产品闭环验收](<acceptance/V0.14-C BWA 产品闭环验收.md>) | 已通过 | 真实浏览器 iframe、分区会话、保存/停止、Fork、异常恢复、卸载与完整回归 |
+| [Biunivers Workspace Application Protocol v1](<protocols/Biunivers Workspace Application Protocol v1.md>) | V1 已冻结 | OCI label、8080 HTTP UI、健康检查、iframe、Workspace 持久性和权限边界 |
+| [BWA Host 与 Compute Runtime 部署](<runbooks/BWA Host 与 Compute Runtime 部署.md>) | 当前运行手册 | 宿主 Runtime、容器 Host、同路径 bind 数据根、Unix socket、启动停止和故障检查 |
 
 ## 第三方应用生态 V1：发布候选
 
