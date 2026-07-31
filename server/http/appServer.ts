@@ -7,6 +7,7 @@ interface AppServerDependencies {
   appStore: AppStore;
   dataDir: string;
   appOrigin: string;
+  bwaProxy?: express.RequestHandler;
 }
 
 const APP_ID_PATTERN = /^[a-z0-9.-]+$/;
@@ -33,6 +34,7 @@ export function createAppServer(dependencies?: AppServerDependencies) {
   });
 
   if (dependencies) {
+    if (dependencies.bwaProxy) app.use(dependencies.bwaProxy);
     app.use("/apps", async (request, response, next) => {
       try {
         const segments = request.path.split("/").filter(Boolean);

@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import http from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import express from "express";
+import { BwaBrowserSessionRegistry } from "../dist/server/bwa/bwaBrowserSessionRegistry.js";
 import { BwaLifecycleService } from "../dist/server/bwa/bwaLifecycleService.js";
+import { bwaOriginLabel } from "../dist/server/bwa/bwaOrigin.js";
 import { BwaRegistryService } from "../dist/server/bwa/bwaRegistryService.js";
+import { createBwaRuntimeProxy } from "../dist/server/bwa/bwaRuntimeProxy.js";
 import { BwaSecretStore } from "../dist/server/bwa/bwaSecretStore.js";
 import { ComputeRuntimeImageClient } from "../dist/server/bwa/computeRuntimeImageClient.js";
 import { ComputeRuntimeLifecycleClient } from "../dist/server/bwa/computeRuntimeLifecycleClient.js";
@@ -27,6 +32,7 @@ if (fileRuntime.status.mode !== "ready" || !fileRuntime.refStore) {
   throw new Error(`File Service is not ready: ${JSON.stringify(fileRuntime.status)}`);
 }
 
+let proxyServer;
 try {
   const secrets = new BwaSecretStore(secretPath);
   await secrets.initialize();
@@ -61,7 +67,44 @@ try {
   ) {
     throw new Error("BWA private bridge endpoint is not reachable from the host.");
   }
-  const incremented = await containerFetch(first.runIdHex, "/api/increment", "POST");
+  const sessions = new BwaBrowserSessionRegistry();
+  const proxyApp = express();
+  proxyApp.use(
+    createBwaRuntimeProxy({
+      appOrigin: "http://localhost:8081",
+      refStore: fileRuntime.refStore,
+      sessions,
+      runtime: runtimeClient,
+    }),
+  );
+  proxyServer = proxyApp.listen(0, "127.0.0.1");
+  await new Promise((resolve, reject) => {
+    proxyServer.once("listening", resolve);
+    proxyServer.once("error", reject);
+  });
+  const ticket = sessions.issueBootstrap(fixture.instanceIdHex).ticket;
+  const bootstrap = await proxyFetch(proxyServer, fixture.instanceIdHex, {
+    path: `/__biunivers/bootstrap?t=${ticket}`,
+  });
+  if (bootstrap.status !== 303 || !bootstrap.cookie) {
+    throw new Error("BWA browser bootstrap did not issue its session cookie.");
+  }
+  const health = await proxyFetch(proxyServer, fixture.instanceIdHex, {
+    path: "/health",
+    cookie: bootstrap.cookie,
+  });
+  if (health.status !== 200 || JSON.parse(health.body).status !== "ok") {
+    throw new Error("BWA Runtime Proxy GET did not reach the diagnostic application.");
+  }
+  const incrementedResponse = await proxyFetch(proxyServer, fixture.instanceIdHex, {
+    path: "/api/increment",
+    method: "POST",
+    cookie: bootstrap.cookie,
+  });
+  if (incrementedResponse.status !== 200) {
+    throw new Error("BWA Runtime Proxy POST did not reach the diagnostic application.");
+  }
+  const incremented = JSON.parse(incrementedResponse.body);
   if (incremented.count !== 1) throw new Error("Diagnostic BWA did not write count=1.");
   const second = await lifecycle.saveAndRestart(fixture.instanceIdHex);
   const firstCommitted = fileRuntime.refStore.getWorkspaceRun(first.runIdHex);
@@ -110,7 +153,46 @@ try {
     }),
   );
 } finally {
+  if (proxyServer) {
+    await new Promise((resolve, reject) =>
+      proxyServer.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
   fileRuntime.close();
+}
+
+async function proxyFetch(server, instanceIdHex, input) {
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Proxy address is invalid.");
+  const host = `${bwaOriginLabel(instanceIdHex)}.localhost:8081`;
+  return await new Promise((resolve, reject) => {
+    const request = http.request(
+      {
+        host: "127.0.0.1",
+        port: address.port,
+        path: input.path,
+        method: input.method ?? "GET",
+        headers: {
+          Host: host,
+          Accept: "application/json",
+          ...(input.cookie ? { Cookie: input.cookie } : {}),
+        },
+      },
+      (response) => {
+        const chunks = [];
+        response.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on("end", () =>
+          resolve({
+            status: response.statusCode ?? 0,
+            body: Buffer.concat(chunks).toString("utf8"),
+            cookie: response.headers["set-cookie"]?.[0]?.split(";", 1)[0],
+          }),
+        );
+      },
+    );
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 async function containerFetch(runIdHex, path, method) {
