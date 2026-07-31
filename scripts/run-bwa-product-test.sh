@@ -73,6 +73,33 @@ fi
 bash scripts/stop-bwa-product-test.sh
 trap 'exit_code=$?; trap - ERR; set +e; bash scripts/stop-bwa-product-test.sh; exit "$exit_code"' ERR
 
+# Runtime state used to live below DATA_ROOT. That path can exceed Unix socket
+# limits once a Run adds its gateway.sock, so current deployments use the short
+# RUNTIME_STATE_ROOT. Move retained failed Uppers before starting the new daemon;
+# otherwise RefStore can still name the Run while the execution plane cannot
+# inspect or discard it.
+LEGACY_RUN_ROOT="$RUNTIME_DIR/runs"
+CURRENT_RUN_ROOT="$RUNTIME_STATE_ROOT/runs"
+mkdir -p "$CURRENT_RUN_ROOT"
+if [[ "$LEGACY_RUN_ROOT" != "$CURRENT_RUN_ROOT" && -d "$LEGACY_RUN_ROOT" ]]; then
+  shopt -s nullglob
+  legacy_runs=("$LEGACY_RUN_ROOT"/*)
+  shopt -u nullglob
+  for legacy_run in "${legacy_runs[@]}"; do
+    run_id="${legacy_run##*/}"
+    if [[ ! -d "$legacy_run" || ! "$run_id" =~ ^[0-9a-f]{32}$ || ! -f "$legacy_run/runtime.json" ]]; then
+      echo "旧 Runtime 目录包含无法安全迁移的项目：$legacy_run" >&2
+      exit 1
+    fi
+    if [[ -e "$CURRENT_RUN_ROOT/$run_id" ]]; then
+      echo "新旧 Runtime 目录同时存在 Run $run_id；请人工核对后再启动。" >&2
+      exit 1
+    fi
+    echo "迁移保留的 Runtime Run：$run_id"
+    mv "$legacy_run" "$CURRENT_RUN_ROOT/$run_id"
+  done
+fi
+
 if [[ ! -f "$TOKEN_FILE" ]]; then
   umask 077
   openssl rand -hex 32 > "$TOKEN_FILE"

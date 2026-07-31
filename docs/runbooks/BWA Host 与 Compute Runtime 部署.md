@@ -52,6 +52,10 @@ Compute Runtime 创建 FUSE mount 后，宿主 Docker daemon 必须能把同一�
 bash scripts/run-bwa-product-test.sh
 ```
 
+脚本会在 Compute Runtime 停止后，将旧版
+`<data>/compute-runtime/runs/<run-id>` 中保留的失败 Upper 一次性迁移到短路径
+`/var/tmp/biunivers-bwa-<uid>/runs/<run-id>`。若新旧目录出现同一 Run，脚本会停止并要求人工核对，避免覆盖任何一侧的状态。
+
 脚本会：
 
 1. 首次运行时优先从当前 `biunivers-v02-test` 获取在线一致性 RefStore 备份；容器已正常停止时，回退到只读迁移 `biunivers-v02-test-data` 数据卷；
