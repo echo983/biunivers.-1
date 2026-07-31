@@ -6,6 +6,7 @@ import type { ImmutableObjectRepository } from "../files/immutableObjectReposito
 import type { SqliteRefStore } from "../files/sqliteRefStore.js";
 import { BlankBwaInstanceCreator } from "./blankBwaInstanceCreator.js";
 import { BwaBrowserSessionRegistry } from "./bwaBrowserSessionRegistry.js";
+import { BwaApplicationUpdateService } from "./bwaApplicationUpdateService.js";
 import { BwaLifecycleService } from "./bwaLifecycleService.js";
 import { BwaLifecycleSupervisor } from "./bwaLifecycleSupervisor.js";
 import { BwaManagerControlService } from "./bwaManagerControlService.js";
@@ -90,6 +91,11 @@ export class BwaManagerRuntime {
       runtime,
     });
     const sessions = new BwaBrowserSessionRegistry();
+    const updates = new BwaApplicationUpdateService({
+      refStore: options.refStore,
+      registry,
+      lifecycle,
+    });
     const proxyOptions = {
       appOrigin: options.appOrigin,
       refStore: options.refStore,
@@ -113,6 +119,7 @@ export class BwaManagerRuntime {
         registry,
         lifecycle,
         sessions,
+        updates,
       }),
     });
     manager.#startSupervisor();

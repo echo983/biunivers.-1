@@ -104,6 +104,7 @@ async function main() {
       "system.files",
       "system.wormhole",
       "system.workspaces",
+      "system.bwa-manager",
     ]),
   });
   const appService = new AppService({
@@ -295,6 +296,12 @@ async function main() {
       {
         id: "system.workspaces",
         name: "工作空间",
+        icon: "/icons/workspaces.svg",
+        desktop: false,
+      },
+      {
+        id: "system.bwa-manager",
+        name: "Workspace Apps",
         icon: "/icons/workspaces.svg",
         desktop: false,
       },

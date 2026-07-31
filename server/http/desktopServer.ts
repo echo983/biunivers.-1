@@ -96,6 +96,9 @@ type BwaManagerControlExecutor = Pick<
   | "status"
   | "install"
   | "createInstance"
+  | "update"
+  | "rollback"
+  | "replaceEnvironment"
   | "start"
   | "stop"
   | "saveAndRestart"
@@ -1692,6 +1695,55 @@ export function createDesktopServer({
     }
   });
 
+  app.post("/api/v1/admin/bwa/applications/update", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { applicationId, reference } = objectBody(request.body);
+      if (typeof applicationId !== "string" || typeof reference !== "string") {
+        throw new AppError("REQUEST_INVALID", "applicationId 和 reference 必须是字符串");
+      }
+      response.set("Cache-Control", "no-store").json(
+        await service.update(applicationId, reference),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/v1/admin/bwa/applications/rollback", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      const { applicationId } = objectBody(request.body);
+      if (typeof applicationId !== "string") {
+        throw new AppError("REQUEST_INVALID", "applicationId 必须是字符串");
+      }
+      response.set("Cache-Control", "no-store").json(
+        await service.rollback(applicationId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put(
+    "/api/v1/admin/bwa/instances/:instanceId/environment",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        const { ordinary, sensitive } = objectBody(request.body);
+        response.set("Cache-Control", "no-store").json(
+          await service.replaceEnvironment(
+            request.params.instanceId,
+            stringRecord(ordinary, "ordinary"),
+            stringRecord(sensitive, "sensitive"),
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   for (const [action, operation] of [
     ["start", (service: BwaManagerControlExecutor, id: string) => service.start(id)],
     ["stop", (service: BwaManagerControlExecutor, id: string) => service.stop(id)],
@@ -2300,6 +2352,18 @@ function objectBody(value: unknown): Record<string, unknown> {
     throw new AppError("REQUEST_INVALID", "请求体必须是对象");
   }
   return value as Record<string, unknown>;
+}
+
+function stringRecord(value: unknown, field: string): Record<string, string> {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    Object.values(value).some((item) => typeof item !== "string")
+  ) {
+    throw new AppError("REQUEST_INVALID", `${field} 必须是字符串对象`);
+  }
+  return value as Record<string, string>;
 }
 
 function contentDisposition(fileName: string): string {

@@ -1659,6 +1659,92 @@
   font-size: 12px;
 }
 
+.bwa-manager {
+  position: relative;
+  height: 100%;
+  overflow: auto;
+  padding: 18px;
+  color: #20242b;
+  background: #f4f6f9;
+}
+
+.bwa-manager > header,
+.bwa-manager__application > header,
+.bwa-manager__instance > header,
+.bwa-manager__viewer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.bwa-manager h1,
+.bwa-manager h2,
+.bwa-manager p { margin: 0; }
+.bwa-manager h1 { font-size: 20px; }
+.bwa-manager h2 { font-size: 17px; }
+.bwa-manager code { overflow-wrap: anywhere; color: #596273; }
+.bwa-manager button,
+.bwa-manager input,
+.bwa-manager textarea { font: inherit; }
+.bwa-manager button { min-height: 30px; padding: 5px 10px; }
+.bwa-manager button:disabled { opacity: 0.5; }
+
+.bwa-manager--locked { display: grid; place-items: center; }
+.bwa-manager--locked form {
+  display: grid;
+  gap: 12px;
+  width: min(420px, 100%);
+  padding: 24px;
+  border: 1px solid #d5dbe4;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.bwa-manager--locked input,
+.bwa-manager__install input,
+.bwa-manager__new-instance input,
+.bwa-manager__environment textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #bdc6d3;
+  border-radius: 5px;
+  padding: 7px 9px;
+  color: #20242b;
+  background: #fff;
+}
+
+.bwa-manager__install,
+.bwa-manager__new-instance {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-top: 16px;
+}
+.bwa-manager__install label { flex: 1; }
+.bwa-manager label > span { display: block; margin-bottom: 5px; }
+.bwa-manager__notice { margin-top: 12px !important; padding: 8px 10px; border-radius: 5px; background: #e9eef6; }
+.bwa-manager > main { display: grid; gap: 14px; margin-top: 16px; }
+
+.bwa-manager__application,
+.bwa-manager__instance {
+  border: 1px solid #d5dbe4;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fff;
+}
+.bwa-manager__application > header p { margin-top: 5px; color: #596273; }
+.bwa-manager__instance { margin-top: 10px; background: #fafbfd; }
+.bwa-manager__instance small { display: block; margin-top: 4px; color: #687386; }
+.bwa-manager__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.bwa-manager__recovery { display: flex; gap: 8px; margin-top: 10px; padding: 8px; border-radius: 5px; background: #fff0dd; }
+.bwa-manager__environment { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.bwa-manager__environment textarea { min-height: 90px; resize: vertical; font-family: ui-monospace, monospace; }
+.bwa-manager__environment button { align-self: end; }
+.bwa-manager__viewer { position: absolute; inset: 10px; z-index: 2; display: grid; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid #aeb8c7; border-radius: 8px; background: #fff; box-shadow: 0 10px 35px rgb(20 30 45 / 28%); }
+.bwa-manager__viewer > header { align-items: center; padding: 7px 10px; }
+.bwa-manager__viewer iframe { width: 100%; height: 100%; border: 0; }
+
 @media (width < 1024px) {
   .desktop-size-notice {
     position: absolute;

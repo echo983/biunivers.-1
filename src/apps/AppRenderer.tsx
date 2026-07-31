@@ -5,6 +5,7 @@ import { FileManagerApp } from "./internal/FileManagerApp";
 import { IframeApp } from "./IframeApp";
 import { WormholeApp } from "./internal/WormholeApp";
 import { WorkspaceApp } from "./internal/WorkspaceApp";
+import { BwaManagerApp } from "./internal/BwaManagerApp";
 
 interface AppRendererProps {
   app: AppDefinition;
@@ -29,6 +30,10 @@ export function AppRenderer({ app }: AppRendererProps) {
 
   if (app.kind === "internal" && app.id === "system.workspaces") {
     return <WorkspaceApp />;
+  }
+
+  if (app.kind === "internal" && app.id === "system.bwa-manager") {
+    return <BwaManagerApp />;
   }
 
   if (app.kind === "iframe") {

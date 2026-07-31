@@ -6,6 +6,7 @@ import type { BwaBrowserSessionRegistry } from "./bwaBrowserSessionRegistry.js";
 import type { BwaLifecycleService } from "./bwaLifecycleService.js";
 import { bwaInstanceOrigin } from "./bwaOrigin.js";
 import type { BwaRegistryService } from "./bwaRegistryService.js";
+import type { BwaApplicationUpdateService } from "./bwaApplicationUpdateService.js";
 
 export class BwaManagerControlError extends Error {
   constructor(
@@ -23,6 +24,7 @@ export class BwaManagerControlService {
   readonly #registry: BwaRegistryService;
   readonly #lifecycle: BwaLifecycleService;
   readonly #sessions: BwaBrowserSessionRegistry;
+  readonly #updates: BwaApplicationUpdateService;
 
   constructor(options: {
     appOrigin: string;
@@ -30,12 +32,14 @@ export class BwaManagerControlService {
     registry: BwaRegistryService;
     lifecycle: BwaLifecycleService;
     sessions: BwaBrowserSessionRegistry;
+    updates: BwaApplicationUpdateService;
   }) {
     this.#appOrigin = options.appOrigin;
     this.#refStore = options.refStore;
     this.#registry = options.registry;
     this.#lifecycle = options.lifecycle;
     this.#sessions = options.sessions;
+    this.#updates = options.updates;
   }
 
   status() {
@@ -63,6 +67,26 @@ export class BwaManagerControlService {
     startupPolicy?: BwaStartupPolicy;
   }) {
     return await this.#registry.createBlankInstance(input);
+  }
+
+  async update(applicationId: string, reference: string) {
+    return await this.#updates.update(applicationId, reference);
+  }
+
+  async rollback(applicationId: string) {
+    return await this.#updates.rollback(applicationId);
+  }
+
+  async replaceEnvironment(
+    instanceIdHex: string,
+    ordinary: Record<string, string>,
+    sensitive: Record<string, string>,
+  ) {
+    return await this.#registry.replaceEnvironment(
+      instanceIdHex,
+      ordinary,
+      sensitive,
+    );
   }
 
   async start(instanceIdHex: string) {

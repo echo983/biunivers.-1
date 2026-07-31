@@ -4,6 +4,7 @@ import { BwaBrowserSessionRegistry } from "./bwaBrowserSessionRegistry.js";
 import type { BwaLifecycleService } from "./bwaLifecycleService.js";
 import { BwaManagerControlService } from "./bwaManagerControlService.js";
 import type { BwaRegistryService } from "./bwaRegistryService.js";
+import type { BwaApplicationUpdateService } from "./bwaApplicationUpdateService.js";
 
 const instanceIdHex = "11".repeat(16);
 
@@ -38,6 +39,7 @@ describe("BwaManagerControlService", () => {
       registry: {} as BwaRegistryService,
       lifecycle: {} as BwaLifecycleService,
       sessions,
+      updates: {} as BwaApplicationUpdateService,
     });
     expect(service.status()).toMatchObject({
       applications: [
