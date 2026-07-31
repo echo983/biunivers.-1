@@ -141,7 +141,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 ## V0.13：Workspace Runtime
 
-里程碑候选：`v0.13.0`
+归档版本：`v0.13.0`
 
 | 文档 | 状态 | 说明 |
 | --- | --- | --- |
@@ -152,9 +152,15 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.13 Workspace 控制面局部设计](<浏览器云端个人桌面 V0.13 Workspace 控制面局部设计.md>) | 已冻结 | Workspace/Ref/Run Schema、状态机、事务、恢复、GC root |
 | [V0.13 PVLogFS 与 Compute Runtime 局部设计](<浏览器云端个人桌面 V0.13 PVLogFS 与 Compute Runtime 局部设计.md>) | 已冻结 | 固定 Snapshot、完整 Chunk 校验缓存、挂载、窄 Runtime API 与沙箱 |
 | [V0.13 COW 提交、Diff 与导回局部设计](<浏览器云端个人桌面 V0.13 COW 提交、Diff 与导回局部设计.md>) | 已冻结 | Upper 解释、发布 CAS、Diff、原子导回与丢弃 |
-| [V0.13 Workspace Runtime 施工计划](<浏览器云端个人桌面 V0.13 Workspace Runtime 施工计划.md>) | 里程碑收尾 | RefStore、派生、系统应用、PVLogFS、Runtime、提交、导回和恢复的阶段出口 |
+| [V0.13 Workspace Runtime 施工计划](<浏览器云端个人桌面 V0.13 Workspace Runtime 施工计划.md>) | 已完成 | RefStore、派生、系统应用、PVLogFS、Runtime、提交、导回和恢复的阶段出口 |
 | [V0.13 Workspace 控制面首轮验收](<acceptance/V0.13 Workspace 控制面首轮验收.md>) | 已通过 | Schema v2、原子迁移、Workspace/Run、单写租约、Ref-aware 与多 Ref GC roots |
 | [V0.13 Workspace Runtime 里程碑验收](<acceptance/V0.13 Workspace Runtime 里程碑验收.md>) | 已通过 | 固定 HEAD、真实 PVLogFS、隔离沙箱、COW 提交、崩溃恢复、Diff、导回与备份恢复 |
+
+## V0.14：Biunivers Workspace Application
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 待规范评审 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
 
 ## 第三方应用生态 V1：发布候选
 
