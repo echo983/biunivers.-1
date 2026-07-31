@@ -1686,6 +1686,7 @@
 .bwa-manager code { overflow-wrap: anywhere; color: #596273; }
 .bwa-manager button,
 .bwa-manager input,
+.bwa-manager select,
 .bwa-manager textarea { font: inherit; }
 .bwa-manager button { min-height: 30px; padding: 5px 10px; }
 .bwa-manager button:disabled { opacity: 0.5; }
@@ -1704,6 +1705,7 @@
 .bwa-manager--locked input,
 .bwa-manager__install input,
 .bwa-manager__new-instance input,
+.bwa-manager__new-instance select,
 .bwa-manager__environment textarea {
   box-sizing: border-box;
   width: 100%;
@@ -1712,6 +1714,19 @@
   padding: 7px 9px;
   color: #20242b;
   background: #fff;
+}
+
+.bwa-manager__new-instance input,
+.bwa-manager__new-instance select,
+.bwa-manager__new-instance button {
+  min-height: 36px;
+}
+
+.bwa-manager__new-instance input { flex: 1 1 180px; }
+.bwa-manager__new-instance select {
+  flex: 0 1 280px;
+  min-width: 0;
+  width: auto;
 }
 
 .bwa-manager__install,
