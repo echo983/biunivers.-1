@@ -53,7 +53,7 @@ bash scripts/run-bwa-product-test.sh
 
 脚本会：
 
-1. 首次运行时从当前 `biunivers-v02-test` 获取在线一致性 RefStore 备份；
+1. 首次运行时优先从当前 `biunivers-v02-test` 获取在线一致性 RefStore 备份；容器已正常停止时，回退到只读迁移 `biunivers-v02-test-data` 数据卷；
 2. 在 `secret/bwa-product-data` 建立宿主可见的数据根；
 3. 构建 PVLogFS、COW scanner、Host 镜像和诊断镜像；
 4. 生成并持久保存 Runtime 控制令牌；
@@ -106,4 +106,3 @@ curl -H 'Authorization: Bearer <admin-token>' \
 3. Runtime socket 的属主与 Host 容器 UID 一致；
 4. `/health` 是否在 BWA 容器内监听 `0.0.0.0:8080`；
 5. Runtime 日志是否报告 FUSE、Docker 或 RefStore 错误。
-

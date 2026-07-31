@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 ENV_FILE="${BIUNIVERS_TEST_ENV_FILE:-secret/biunivers-test.env}"
 CONTAINER_NAME="${BIUNIVERS_BWA_TEST_CONTAINER:-biunivers-v02-test}"
 IMAGE_NAME="${BIUNIVERS_BWA_TEST_IMAGE:-biunivers:bwa-product-dev}"
+SOURCE_VOLUME="${BIUNIVERS_BWA_SOURCE_VOLUME:-biunivers-v02-test-data}"
 DATA_ROOT="${BIUNIVERS_BWA_TEST_DATA:-$PWD/secret/bwa-product-data}"
 RUNTIME_DIR="$DATA_ROOT/compute-runtime"
 SOCKET_PATH="$RUNTIME_DIR/runtime.sock"
@@ -46,17 +47,26 @@ source "$ENV_FILE"
 set +a
 
 if [[ ! -f "$DATA_ROOT/file-service/file-service.sqlite" ]]; then
-  if ! docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
-    echo "本地 BWA 数据目录没有 RefStore，且未找到可迁移的 $CONTAINER_NAME。" >&2
-    echo "请先启动现有 File Service，或设置 BIUNIVERS_BWA_TEST_DATA 指向已有数据目录。" >&2
+  if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+    echo "从当前 Host 创建一致性 RefStore 备份……"
+    curl --fail --silent --show-error --request POST \
+      --header "Authorization: Bearer $BIUNIVERS_ADMIN_TOKEN" \
+      "${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}/api/v1/admin/file-service/backups" >/dev/null
+    docker cp "$CONTAINER_NAME:/data/file-service/backups/latest.sqlite" \
+      "$DATA_ROOT/file-service/file-service.sqlite" >/dev/null
+  elif docker volume inspect "$SOURCE_VOLUME" >/dev/null 2>&1; then
+    echo "从已正常关闭的 Docker 数据卷 $SOURCE_VOLUME 迁移 RefStore……"
+    docker run --rm \
+      --user "$(id -u):$(id -g)" \
+      --mount "type=volume,src=$SOURCE_VOLUME,dst=/source,readonly" \
+      --mount "type=bind,src=$DATA_ROOT/file-service,dst=/target" \
+      alpine:3.22 \
+      sh -c 'test -f /source/file-service/file-service.sqlite && cp /source/file-service/file-service.sqlite* /target/'
+  else
+    echo "本地 BWA 数据目录没有 RefStore，也未找到容器 $CONTAINER_NAME 或数据卷 $SOURCE_VOLUME。" >&2
+    echo "请设置 BIUNIVERS_BWA_TEST_DATA 或 BIUNIVERS_BWA_SOURCE_VOLUME。" >&2
     exit 1
   fi
-  echo "从当前 Host 创建一致性 RefStore 备份……"
-  curl --fail --silent --show-error --request POST \
-    --header "Authorization: Bearer $BIUNIVERS_ADMIN_TOKEN" \
-    "${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}/api/v1/admin/file-service/backups" >/dev/null
-  docker cp "$CONTAINER_NAME:/data/file-service/backups/latest.sqlite" \
-    "$DATA_ROOT/file-service/file-service.sqlite" >/dev/null
 fi
 
 bash scripts/stop-bwa-product-test.sh
