@@ -50,6 +50,11 @@ export class BwaManagerControlService {
 
   status() {
     return {
+      workspaces: this.#refStore.listWorkspaces().map((workspace) => ({
+        workspaceIdHex: workspace.workspaceIdHex,
+        name: workspace.name,
+        revision: this.#refStore.getRef(workspace.refId).revision,
+      })),
       applications: this.#refStore.listBwaApplications().map((application) => ({
         ...application,
         instances: this.#refStore
@@ -71,8 +76,16 @@ export class BwaManagerControlService {
     applicationId: string;
     name: string;
     startupPolicy?: BwaStartupPolicy;
+    sourceWorkspaceIdHex?: string;
   }) {
-    return await this.#registry.createBlankInstance(input);
+    return input.sourceWorkspaceIdHex
+      ? this.#registry.createForkedInstance({
+          applicationId: input.applicationId,
+          sourceWorkspaceIdHex: input.sourceWorkspaceIdHex,
+          name: input.name,
+          ...(input.startupPolicy ? { startupPolicy: input.startupPolicy } : {}),
+        })
+      : await this.#registry.createBlankInstance(input);
   }
 
   async update(applicationId: string, reference: string) {

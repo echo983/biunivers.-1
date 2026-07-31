@@ -29,6 +29,12 @@ export interface BwaApplicationSummary {
   instances: BwaInstanceSummary[];
 }
 
+export interface BwaWorkspaceOption {
+  workspaceIdHex: string;
+  name: string;
+  revision: number;
+}
+
 interface ErrorBody {
   error?: { code?: string; message?: string };
 }
@@ -37,7 +43,10 @@ export class BwaManagerClient {
   constructor(private readonly token: string) {}
 
   async status() {
-    return await this.request<{ applications: BwaApplicationSummary[] }>("");
+    return await this.request<{
+      applications: BwaApplicationSummary[];
+      workspaces: BwaWorkspaceOption[];
+    }>("");
   }
 
   async install(reference: string) {
@@ -64,10 +73,15 @@ export class BwaManagerClient {
     });
   }
 
-  async createInstance(applicationId: string, name: string) {
+  async createInstance(applicationId: string, name: string, sourceWorkspaceIdHex?: string) {
     return await this.request("/instances", {
       method: "POST",
-      body: { applicationId, name, startupPolicy: "MANUAL" },
+      body: {
+        applicationId,
+        name,
+        startupPolicy: "MANUAL",
+        ...(sourceWorkspaceIdHex ? { sourceWorkspaceIdHex } : {}),
+      },
     });
   }
 

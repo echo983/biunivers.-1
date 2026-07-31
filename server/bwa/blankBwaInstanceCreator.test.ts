@@ -95,6 +95,34 @@ describe("BlankBwaInstanceCreator", () => {
     );
     expect(index.listChildren(index.rootEntryIdHex)).toEqual([]);
     expect(index.rootEntryIdHex).toBe("22".repeat(16));
+
+    const forkIds = [0x30, 0x31].map((value) => Buffer.alloc(16, value));
+    const forked = new BlankBwaInstanceCreator({
+      repository,
+      refStore: genesis.store,
+      writerId: "bwa-test",
+      now: () => 300,
+      randomId: () => forkIds.shift()!,
+    }).fork({
+      applicationId: "ghcr.io/echo983/probe",
+      sourceWorkspaceIdHex: result.workspace.workspaceIdHex,
+      workspaceName: "Forked state",
+      instanceName: "Forked state",
+    });
+    const sourceRef = genesis.store.getRef(result.workspace.refId);
+    const forkRef = genesis.store.getRef(forked.workspace.refId);
+    expect(forked.workspace).toMatchObject({
+      workspaceIdHex: "30".repeat(16),
+      sourceRefId: result.workspace.refId,
+      sourceHeadFidHex: sourceRef.headFidHex,
+      baselineHeadFidHex: sourceRef.headFidHex,
+    });
+    expect(forkRef).toMatchObject({
+      lineageIdHex: sourceRef.lineageIdHex,
+      headFidHex: sourceRef.headFidHex,
+      revision: 0,
+    });
+    expect(forked.instance.instanceIdHex).toBe("31".repeat(16));
     genesis.store.close();
   });
 });

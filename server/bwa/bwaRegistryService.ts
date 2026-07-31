@@ -41,6 +41,13 @@ export interface BlankInstanceCreator {
     instanceName: string;
     startupPolicy?: BwaStartupPolicy;
   }): Promise<{ workspace: unknown; instance: BwaInstanceRecord }>;
+  fork(input: {
+    applicationId: string;
+    sourceWorkspaceIdHex: string;
+    workspaceName: string;
+    instanceName: string;
+    startupPolicy?: BwaStartupPolicy;
+  }): { workspace: unknown; instance: BwaInstanceRecord };
 }
 
 export class BwaRegistryService {
@@ -200,6 +207,22 @@ export class BwaRegistryService {
       ...(input.startupPolicy ? { startupPolicy: input.startupPolicy } : {}),
     });
     return result.instance;
+  }
+
+  createForkedInstance(input: {
+    applicationId: string;
+    sourceWorkspaceIdHex: string;
+    name: string;
+    startupPolicy?: BwaStartupPolicy;
+  }): BwaInstanceRecord {
+    if (!this.#blankCreator) throw new Error("BWA Instance creation is unavailable.");
+    return this.#blankCreator.fork({
+      applicationId: input.applicationId,
+      sourceWorkspaceIdHex: input.sourceWorkspaceIdHex,
+      workspaceName: input.name,
+      instanceName: input.name,
+      ...(input.startupPolicy ? { startupPolicy: input.startupPolicy } : {}),
+    }).instance;
   }
 
   async replaceEnvironment(

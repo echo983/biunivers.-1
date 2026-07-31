@@ -3,6 +3,7 @@ import {
   BwaManagerClient,
   type BwaApplicationSummary,
   type BwaInstanceSummary,
+  type BwaWorkspaceOption,
 } from "../../api/bwaManagerClient";
 import { useDesktopStore } from "../../store/desktopStore";
 import { closeApp, openApp } from "../../windows/windowController";
@@ -11,6 +12,7 @@ export function BwaManagerApp() {
   const [tokenInput, setTokenInput] = useState("");
   const [token, setToken] = useState<string>();
   const [applications, setApplications] = useState<BwaApplicationSummary[]>([]);
+  const [workspaces, setWorkspaces] = useState<BwaWorkspaceOption[]>([]);
   const [reference, setReference] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -21,6 +23,7 @@ export function BwaManagerApp() {
     if (!activeClient) return;
     const status = await activeClient.status();
     setApplications(status.applications);
+    setWorkspaces(status.workspaces);
   };
 
   const execute = async (operation: () => Promise<unknown>, success: string) => {
@@ -45,6 +48,7 @@ export function BwaManagerApp() {
       const candidate = new BwaManagerClient(tokenInput);
       const status = await candidate.status();
       setApplications(status.applications);
+      setWorkspaces(status.workspaces);
       setToken(tokenInput);
       setTokenInput("");
     } catch (error) {
@@ -115,6 +119,7 @@ export function BwaManagerApp() {
           <ApplicationCard
             key={application.applicationId}
             application={application}
+            workspaces={workspaces}
             client={client}
             busy={busy}
             execute={execute}
@@ -156,18 +161,21 @@ export function BwaManagerApp() {
 
 function ApplicationCard({
   application,
+  workspaces,
   client,
   busy,
   execute,
   onOpen,
 }: {
   application: BwaApplicationSummary;
+  workspaces: BwaWorkspaceOption[];
   client: BwaManagerClient;
   busy: boolean;
   execute: (operation: () => Promise<unknown>, success: string) => Promise<void>;
   onOpen: (instance: BwaInstanceSummary) => Promise<void>;
 }) {
   const [instanceName, setInstanceName] = useState("");
+  const [sourceWorkspaceIdHex, setSourceWorkspaceIdHex] = useState("");
   return (
     <section className="bwa-manager__application">
       <header>
@@ -210,8 +218,13 @@ function ApplicationCard({
         onSubmit={(event) => {
           event.preventDefault();
           void execute(async () => {
-            await client.createInstance(application.applicationId, instanceName.trim());
+            await client.createInstance(
+              application.applicationId,
+              instanceName.trim(),
+              sourceWorkspaceIdHex || undefined,
+            );
             setInstanceName("");
+            setSourceWorkspaceIdHex("");
           }, "Instance 创建完成");
         }}
       >
@@ -222,6 +235,18 @@ function ApplicationCard({
           placeholder="新 Instance 名称"
           required
         />
+        <select
+          aria-label="初始 Workspace"
+          value={sourceWorkspaceIdHex}
+          onChange={(event) => setSourceWorkspaceIdHex(event.target.value)}
+        >
+          <option value="">空白 Workspace</option>
+          {workspaces.map((workspace) => (
+            <option key={workspace.workspaceIdHex} value={workspace.workspaceIdHex}>
+              {workspace.name} · revision {workspace.revision}
+            </option>
+          ))}
+        </select>
         <button type="submit" disabled={busy}>创建 Instance</button>
       </form>
       {application.instances.map((instance) => (

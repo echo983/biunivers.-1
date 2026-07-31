@@ -1675,7 +1675,7 @@ export function createDesktopServer({
   app.post("/api/v1/admin/bwa/instances", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
-      const { applicationId, name, startupPolicy } = objectBody(request.body);
+      const { applicationId, name, startupPolicy, sourceWorkspaceIdHex } = objectBody(request.body);
       if (
         typeof applicationId !== "string" ||
         typeof name !== "string" ||
@@ -1683,6 +1683,7 @@ export function createDesktopServer({
           startupPolicy !== "MANUAL" &&
           startupPolicy !== "ON_OPEN" &&
           startupPolicy !== "AUTOMATIC")
+        || (sourceWorkspaceIdHex !== undefined && typeof sourceWorkspaceIdHex !== "string")
       ) {
         throw new AppError("REQUEST_INVALID", "Instance 创建参数无效");
       }
@@ -1691,6 +1692,7 @@ export function createDesktopServer({
           applicationId,
           name,
           ...(startupPolicy ? { startupPolicy } : {}),
+          ...(typeof sourceWorkspaceIdHex === "string" ? { sourceWorkspaceIdHex } : {}),
         }),
       );
     } catch (error) {

@@ -98,6 +98,56 @@ export class BlankBwaInstanceCreator {
     });
   }
 
+  fork(input: {
+    applicationId: string;
+    sourceWorkspaceIdHex: string;
+    workspaceName: string;
+    instanceName: string;
+    startupPolicy?: BwaStartupPolicy;
+  }): { workspace: WorkspaceRecord; instance: BwaInstanceRecord } {
+    const application = this.#refStore.getBwaApplication(input.applicationId);
+    if (!application.enabled) throw new Error("BWA Application is disabled.");
+    const sourceWorkspace = this.#refStore.getWorkspace(input.sourceWorkspaceIdHex);
+    const sourceRef = this.#refStore.getRef(sourceWorkspace.refId);
+    const createdAtMs = this.#timestamp();
+    const allocated = new Set<string>();
+    const workspaceIdHex = this.#id(allocated);
+    const instanceIdHex = this.#id(allocated);
+    const refId = `ws-${workspaceIdHex}`;
+    return this.#refStore.createWorkspaceWithBwaInstance({
+      workspace: {
+        workspaceIdHex,
+        refId,
+        name: input.workspaceName,
+        sourceRefId: sourceWorkspace.refId,
+        sourceHeadFidHex: sourceRef.headFidHex,
+        baselineHeadFidHex: sourceRef.headFidHex,
+        state: "READY",
+        retention: "KEPT",
+        activeWriteRunIdHex: null,
+        createdAtMs,
+        updatedAtMs: createdAtMs,
+        ref: {
+          refId,
+          lineageIdHex: sourceRef.lineageIdHex,
+          headFidHex: sourceRef.headFidHex,
+          revision: 0,
+          updatedAtMs: createdAtMs,
+        },
+      },
+      instance: {
+        instanceIdHex,
+        applicationId: input.applicationId,
+        workspaceIdHex,
+        desiredState: "STOPPED",
+        startupPolicy: input.startupPolicy ?? "MANUAL",
+        displayName: input.instanceName,
+        createdAtMs,
+        updatedAtMs: createdAtMs,
+      },
+    });
+  }
+
   #timestamp(): number {
     const value = this.#now();
     if (!Number.isSafeInteger(value) || value < 0) throw new Error("BWA timestamp is invalid.");

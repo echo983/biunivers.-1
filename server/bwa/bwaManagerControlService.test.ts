@@ -12,6 +12,8 @@ describe("BwaManagerControlService", () => {
   it("projects management state and issues a short-lived open URL only for a running Instance", async () => {
     const runState = { value: "STOPPED" };
     const refStore = {
+      listWorkspaces: vi.fn().mockReturnValue([]),
+      getRef: vi.fn(),
       listBwaApplications: vi.fn().mockReturnValue([
         { applicationId: "ghcr.io/example/probe", enabled: true },
       ]),
