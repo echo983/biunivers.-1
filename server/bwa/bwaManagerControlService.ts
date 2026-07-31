@@ -83,6 +83,17 @@ export class BwaManagerControlService {
     return await this.#updates.rollback(applicationId);
   }
 
+  async deleteInstance(instanceIdHex: string) {
+    const workspace = await this.#registry.deleteInstancePreservingWorkspace(instanceIdHex);
+    this.#sessions.revokeInstance(instanceIdHex);
+    return { workspace };
+  }
+
+  uninstall(applicationId: string) {
+    this.#registry.uninstall(applicationId);
+    return { applicationId };
+  }
+
   async replaceEnvironment(
     instanceIdHex: string,
     ordinary: Record<string, string>,

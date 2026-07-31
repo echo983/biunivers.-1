@@ -247,6 +247,10 @@ export class BwaRegistryService {
     return workspace;
   }
 
+  uninstall(applicationId: string): void {
+    this.#refStore.deleteBwaApplication(applicationId);
+  }
+
   async pruneOrphanSecrets(): Promise<number> {
     const reachable = new Set(
       this.#refStore

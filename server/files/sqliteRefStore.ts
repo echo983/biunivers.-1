@@ -213,6 +213,7 @@ export type RefStoreErrorCode =
   | "RUN_STATE_CONFLICT"
   | "APPLICATION_ALREADY_EXISTS"
   | "APPLICATION_NOT_FOUND"
+  | "APPLICATION_HAS_INSTANCES"
   | "APPLICATION_UPDATE_BLOCKED"
   | "INSTANCE_ALREADY_EXISTS"
   | "INSTANCE_NOT_FOUND"
@@ -1190,6 +1191,28 @@ export class SqliteRefStore {
        FROM bwa_applications ORDER BY application_id`,
     ).all() as BwaApplicationRow[];
     return rows.map(mapBwaApplication);
+  }
+
+  deleteBwaApplication(applicationId: string): void {
+    validateApplicationId(applicationId);
+    this.#database.transaction(() => {
+      this.getBwaApplication(applicationId);
+      const instance = this.#database.prepare(
+        "SELECT 1 FROM bwa_instances WHERE application_id = ? LIMIT 1",
+      ).get(applicationId);
+      if (instance) {
+        throw new RefStoreError(
+          "APPLICATION_HAS_INSTANCES",
+          "Application still has one or more Instances.",
+        );
+      }
+      const deleted = this.#database.prepare(
+        "DELETE FROM bwa_applications WHERE application_id = ?",
+      ).run(applicationId);
+      if (deleted.changes !== 1) {
+        throw new RefStoreError("REFSTORE_CORRUPT", "Application disappeared during deletion.");
+      }
+    })();
   }
 
   setBwaApplicationEnabled(

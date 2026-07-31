@@ -154,6 +154,8 @@ describe("desktop and app origins", () => {
       createInstance: vi.fn().mockResolvedValue({ instanceIdHex: "11".repeat(16) }),
       update: vi.fn().mockResolvedValue({ applicationId: "ghcr.io/example/probe" }),
       rollback: vi.fn().mockResolvedValue({ applicationId: "ghcr.io/example/probe" }),
+      uninstall: vi.fn().mockReturnValue({ applicationId: "ghcr.io/example/probe" }),
+      deleteInstance: vi.fn().mockResolvedValue({ workspace: { workspaceIdHex: "22".repeat(16) } }),
       replaceEnvironment: vi.fn().mockResolvedValue([]),
       start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       stop: vi.fn().mockResolvedValue({ state: "COMMITTED" }),
@@ -215,6 +217,24 @@ describe("desktop and app origins", () => {
       url: "http://bwa.localhost/open",
       expiresAt: "soon",
     });
+    expect(
+      (
+        await fetch(`${endpoint}/instances/${instanceId}`, {
+          method: "DELETE",
+          headers,
+        })
+      ).status,
+    ).toBe(200);
+    expect(bwaManager.deleteInstance).toHaveBeenCalledWith(instanceId);
+    expect(
+      (
+        await fetch(`${endpoint}/applications/${encodeURIComponent("ghcr.io/example/probe")}`, {
+          method: "DELETE",
+          headers,
+        })
+      ).status,
+    ).toBe(200);
+    expect(bwaManager.uninstall).toHaveBeenCalledWith("ghcr.io/example/probe");
   });
 
   it("protects desktop surface mutations and applies revision CAS", async () => {

@@ -5,7 +5,7 @@ import {
   type BwaInstanceSummary,
 } from "../../api/bwaManagerClient";
 import { useDesktopStore } from "../../store/desktopStore";
-import { openApp } from "../../windows/windowController";
+import { closeApp, openApp } from "../../windows/windowController";
 
 export function BwaManagerApp() {
   const [tokenInput, setTokenInput] = useState("");
@@ -193,6 +193,16 @@ function ApplicationCard({
             disabled={busy || !application.previousDigest}
             onClick={() => void execute(() => client.rollback(application.applicationId), "已回退到上一镜像")}
           >回退</button>
+          <button
+            type="button"
+            disabled={busy || application.instances.length > 0}
+            title={application.instances.length > 0 ? "请先移除全部 Instance" : "卸载应用注册"}
+            onClick={() => {
+              if (window.confirm(`卸载“${application.title}”？本地镜像不会自动删除。`)) {
+                void execute(() => client.uninstall(application.applicationId), "应用已卸载");
+              }
+            }}
+          >卸载</button>
         </div>
       </header>
       <form
@@ -254,6 +264,19 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           <button type="button" disabled={busy || !running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "save-restart"), "状态已保存并重启")}>保存重启</button>
           <button type="button" disabled={busy || !running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "stop"), "Instance 已停止并提交")}>停止</button>
           <button type="button" disabled={busy || running} onClick={() => setShowEnvironment((value) => !value)}>环境变量</button>
+          <button
+            type="button"
+            disabled={busy || running || Boolean(unresolved)}
+            title={running ? "请先停止 Instance" : unresolved ? "请先处置异常改动" : "移除 Instance，保留 Workspace"}
+            onClick={() => {
+              if (window.confirm(`移除“${instance.displayName}”？Workspace 将被保留。`)) {
+                void execute(async () => {
+                  await client.deleteInstance(instance.instanceIdHex);
+                  closeApp(`bwa.${instance.instanceIdHex}`);
+                }, "Instance 已移除，Workspace 已保留");
+              }
+            }}
+          >移除</button>
         </div>
       </header>
       {unresolved && (

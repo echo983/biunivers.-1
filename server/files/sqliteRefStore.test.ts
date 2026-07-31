@@ -255,6 +255,10 @@ describe("SqliteRefStore", () => {
     expect(() => store.listBwaEnvironment(instance.instanceIdHex)).toThrowError(
       expect.objectContaining({ code: "INSTANCE_NOT_FOUND" }) as RefStoreError,
     );
+    expect(() => store.deleteBwaApplication(application.applicationId)).not.toThrow();
+    expect(() => store.getBwaApplication(application.applicationId)).toThrowError(
+      expect.objectContaining({ code: "APPLICATION_NOT_FOUND" }) as RefStoreError,
+    );
     expect(() => store.deleteWorkspace(workspaceIdHex)).not.toThrow();
     store.close();
   });

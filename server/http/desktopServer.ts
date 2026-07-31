@@ -98,6 +98,8 @@ type BwaManagerControlExecutor = Pick<
   | "createInstance"
   | "update"
   | "rollback"
+  | "deleteInstance"
+  | "uninstall"
   | "replaceEnvironment"
   | "start"
   | "stop"
@@ -1726,6 +1728,28 @@ export function createDesktopServer({
     }
   });
 
+  app.delete("/api/v1/admin/bwa/applications/:applicationId", (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      response.set("Cache-Control", "no-store").json(
+        service.uninstall(request.params.applicationId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/v1/admin/bwa/instances/:instanceId", async (request, response, next) => {
+    try {
+      const service = requireBwaManager(bwaManager);
+      response.set("Cache-Control", "no-store").json(
+        await service.deleteInstance(request.params.instanceId),
+      );
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.put(
     "/api/v1/admin/bwa/instances/:instanceId/environment",
     async (request, response, next) => {
@@ -2121,6 +2145,7 @@ export function createDesktopServer({
           RUN_STATE_CONFLICT: 409,
           APPLICATION_ALREADY_EXISTS: 409,
           APPLICATION_NOT_FOUND: 404,
+          APPLICATION_HAS_INSTANCES: 409,
           APPLICATION_UPDATE_BLOCKED: 409,
           INSTANCE_ALREADY_EXISTS: 409,
           INSTANCE_NOT_FOUND: 404,

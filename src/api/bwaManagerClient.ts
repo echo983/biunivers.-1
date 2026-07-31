@@ -58,11 +58,21 @@ export class BwaManagerClient {
     });
   }
 
+  async uninstall(applicationId: string) {
+    return await this.request(`/applications/${encodeURIComponent(applicationId)}`, {
+      method: "DELETE",
+    });
+  }
+
   async createInstance(applicationId: string, name: string) {
     return await this.request("/instances", {
       method: "POST",
       body: { applicationId, name, startupPolicy: "MANUAL" },
     });
+  }
+
+  async deleteInstance(instanceIdHex: string) {
+    return await this.request(`/instances/${instanceIdHex}`, { method: "DELETE" });
   }
 
   async action(instanceIdHex: string, action: "start" | "stop" | "save-restart") {
