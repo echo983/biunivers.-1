@@ -52,10 +52,9 @@ try {
   await assertManifestHasNoSecret(runRoot, first.runIdHex);
   const incremented = await containerFetch(first.runIdHex, "/api/increment", "POST");
   if (incremented.count !== 1) throw new Error("Diagnostic BWA did not write count=1.");
-  const firstCommitted = await lifecycle.stop(fixture.instanceIdHex);
+  const second = await lifecycle.saveAndRestart(fixture.instanceIdHex);
+  const firstCommitted = fileRuntime.refStore.getWorkspaceRun(first.runIdHex);
   if (firstCommitted.state !== "COMMITTED") throw new Error("First BWA Run was not committed.");
-
-  const second = await lifecycle.start(fixture.instanceIdHex);
   if (second.runIdHex === first.runIdHex) throw new Error("BWA Run ID was reused.");
   const restored = await containerFetch(second.runIdHex, "/api/state", "GET");
   if (restored.count !== 1) throw new Error("Committed BWA state was not restored.");

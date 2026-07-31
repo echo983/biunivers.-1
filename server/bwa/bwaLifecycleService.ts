@@ -51,86 +51,20 @@ export class BwaLifecycleService {
   }
 
   async start(instanceIdHex: string): Promise<WorkspaceRunRecord> {
-    return await this.#exclusive(instanceIdHex, async () => {
-      const instance = this.#refStore.getBwaInstance(instanceIdHex);
-      const application = this.#refStore.getBwaApplication(instance.applicationId);
-      const environment = await this.#environment.resolveEnvironment(instanceIdHex);
-      const runIdHex = this.#id(16, "Run ID");
-      const capabilityHex = this.#id(32, "Runtime capability");
-      const created = this.#refStore.createBwaWorkspaceRun({
-        runIdHex,
-        instanceIdHex,
-        createdAtMs: this.#timestamp(),
-      });
-      const workspace = this.#refStore.getWorkspace(instance.workspaceIdHex);
-      const ref = this.#refStore.getRef(workspace.refId);
-      try {
-        await this.#runtime.prepareBwa({
-          runIdHex,
-          workspaceIdHex: instance.workspaceIdHex,
-          inputHeadFidHex: created.run.inputHeadFidHex,
-          revision: ref.revision,
-          capabilityHex,
-          imageReference: `${application.applicationId}@${created.binding.executorDigest}`,
-          environment,
-        });
-        await this.#runtime.start(runIdHex);
-        return this.#refStore.getWorkspaceRun(runIdHex);
-      } catch (error) {
-        await this.#runtime.destroy(runIdHex, true).catch(() => undefined);
-        this.#failRunIfActive(runIdHex, "BWA_START_FAILED");
-        this.#refStore.setBwaInstanceDesiredState(
-          instanceIdHex,
-          "STOPPED",
-          this.#timestamp(),
-        );
-        throw new BwaLifecycleError(
-          "RUNTIME_START_FAILED",
-          "BWA Instance could not be started.",
-          { cause: error },
-        );
-      }
-    });
+    return await this.#exclusive(instanceIdHex, () => this.#start(instanceIdHex, false));
   }
 
   async stop(
     instanceIdHex: string,
     reason: BwaStopReason = "USER_STOP",
   ): Promise<WorkspaceRunRecord> {
+    return await this.#exclusive(instanceIdHex, () => this.#stop(instanceIdHex, reason));
+  }
+
+  async saveAndRestart(instanceIdHex: string): Promise<WorkspaceRunRecord> {
     return await this.#exclusive(instanceIdHex, async () => {
-      const active = this.#activeRun(instanceIdHex);
-      if (!active || active.state !== "RUNNING") {
-        throw new BwaLifecycleError("INSTANCE_NOT_RUNNING", "BWA Instance is not running.");
-      }
-      if (reason === "USER_STOP") {
-        this.#refStore.setBwaInstanceDesiredState(
-          instanceIdHex,
-          "STOPPED",
-          this.#timestamp(),
-        );
-      }
-      this.#refStore.setBwaRunStopReason(active.runIdHex, reason);
-      try {
-        await this.#runtime.stop(active.runIdHex);
-      } catch (error) {
-        this.#failRunIfActive(active.runIdHex, "BWA_STOP_FAILED");
-        throw new BwaLifecycleError(
-          "RUNTIME_STOP_FAILED",
-          "BWA Instance could not be stopped safely.",
-          { cause: error },
-        );
-      }
-      try {
-        await this.#runtime.commit(active.runIdHex);
-      } catch (error) {
-        throw new BwaLifecycleError(
-          "RUNTIME_COMMIT_FAILED",
-          "BWA Workspace changes could not be committed.",
-          { cause: error },
-        );
-      }
-      await this.#runtime.destroy(active.runIdHex, false);
-      return this.#refStore.getWorkspaceRun(active.runIdHex);
+      await this.#stop(instanceIdHex, "SAVE_RESTART");
+      return await this.#start(instanceIdHex, true);
     });
   }
 
@@ -201,6 +135,85 @@ export class BwaLifecycleService {
       }
       return this.#refStore.discardFailedWorkspaceRun(runIdHex, this.#timestamp());
     });
+  }
+
+  async #start(
+    instanceIdHex: string,
+    preserveRunningIntentOnFailure: boolean,
+  ): Promise<WorkspaceRunRecord> {
+    const instance = this.#refStore.getBwaInstance(instanceIdHex);
+    const application = this.#refStore.getBwaApplication(instance.applicationId);
+    const environment = await this.#environment.resolveEnvironment(instanceIdHex);
+    const runIdHex = this.#id(16, "Run ID");
+    const capabilityHex = this.#id(32, "Runtime capability");
+    const created = this.#refStore.createBwaWorkspaceRun({
+      runIdHex,
+      instanceIdHex,
+      createdAtMs: this.#timestamp(),
+    });
+    const workspace = this.#refStore.getWorkspace(instance.workspaceIdHex);
+    const ref = this.#refStore.getRef(workspace.refId);
+    try {
+      await this.#runtime.prepareBwa({
+        runIdHex,
+        workspaceIdHex: instance.workspaceIdHex,
+        inputHeadFidHex: created.run.inputHeadFidHex,
+        revision: ref.revision,
+        capabilityHex,
+        imageReference: `${application.applicationId}@${created.binding.executorDigest}`,
+        environment,
+      });
+      await this.#runtime.start(runIdHex);
+      return this.#refStore.getWorkspaceRun(runIdHex);
+    } catch (error) {
+      await this.#runtime.destroy(runIdHex, true).catch(() => undefined);
+      this.#failRunIfActive(runIdHex, "BWA_START_FAILED");
+      this.#refStore.setBwaInstanceDesiredState(
+        instanceIdHex,
+        preserveRunningIntentOnFailure ? "RUNNING" : "STOPPED",
+        this.#timestamp(),
+      );
+      throw new BwaLifecycleError(
+        "RUNTIME_START_FAILED",
+        "BWA Instance could not be started.",
+        { cause: error },
+      );
+    }
+  }
+
+  async #stop(
+    instanceIdHex: string,
+    reason: BwaStopReason,
+  ): Promise<WorkspaceRunRecord> {
+    const active = this.#activeRun(instanceIdHex);
+    if (!active || active.state !== "RUNNING") {
+      throw new BwaLifecycleError("INSTANCE_NOT_RUNNING", "BWA Instance is not running.");
+    }
+    if (reason === "USER_STOP") {
+      this.#refStore.setBwaInstanceDesiredState(instanceIdHex, "STOPPED", this.#timestamp());
+    }
+    this.#refStore.setBwaRunStopReason(active.runIdHex, reason);
+    try {
+      await this.#runtime.stop(active.runIdHex);
+    } catch (error) {
+      this.#failRunIfActive(active.runIdHex, "BWA_STOP_FAILED");
+      throw new BwaLifecycleError(
+        "RUNTIME_STOP_FAILED",
+        "BWA Instance could not be stopped safely.",
+        { cause: error },
+      );
+    }
+    try {
+      await this.#runtime.commit(active.runIdHex);
+    } catch (error) {
+      throw new BwaLifecycleError(
+        "RUNTIME_COMMIT_FAILED",
+        "BWA Workspace changes could not be committed.",
+        { cause: error },
+      );
+    }
+    await this.#runtime.destroy(active.runIdHex, false);
+    return this.#refStore.getWorkspaceRun(active.runIdHex);
   }
 
   #activeRun(instanceIdHex: string): WorkspaceRunRecord | undefined {

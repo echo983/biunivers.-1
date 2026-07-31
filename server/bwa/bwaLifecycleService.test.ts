@@ -9,6 +9,7 @@ const roots: string[] = [];
 const workspaceIdHex = "22".repeat(16);
 const instanceIdHex = "33".repeat(16);
 const runIdHex = "44".repeat(16);
+const restartedRunIdHex = "45".repeat(16);
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
@@ -187,6 +188,144 @@ describe("BwaLifecycleService", () => {
     });
     expect(source.store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
     expect(runtime.reopenFailed).toHaveBeenCalledWith(runIdHex);
+    source.store.close();
+  });
+
+  it("commits and rebuilds a save-restart under one lifecycle lock", async () => {
+    const source = await setup();
+    const calls: string[] = [];
+    const runtime = {
+      prepareBwa: vi.fn(async ({ runIdHex: id }) => calls.push(`prepare:${id}`)),
+      start: vi.fn(async (id: string) => {
+        calls.push(`start:${id}`);
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "PREPARING",
+          newState: "RUNNING",
+          runtimeIdentity: `container-${id}`,
+          timestampMs: source.tick(),
+        });
+      }),
+      stop: vi.fn(async (id: string) => {
+        calls.push(`stop:${id}`);
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "RUNNING",
+          newState: "STOPPED",
+          timestampMs: source.tick(),
+        });
+      }),
+      commit: vi.fn(async (id: string) => {
+        calls.push(`commit:${id}`);
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "STOPPED",
+          newState: "COMMITTING",
+          timestampMs: source.tick(),
+        });
+        const ref = source.store.getRef(`ws-${workspaceIdHex}`);
+        source.store.completeUnchangedWorkspaceRun({
+          runIdHex: id,
+          expectedHeadFidHex: ref.headFidHex,
+          expectedRevision: ref.revision,
+          timestampMs: source.tick(),
+        });
+      }),
+      destroy: vi.fn(async (id: string) => calls.push(`destroy:${id}`)),
+      finalizeExited: vi.fn(),
+      reopenFailed: vi.fn(),
+    };
+    const runIds = [runIdHex, restartedRunIdHex];
+    const lifecycle = new BwaLifecycleService({
+      refStore: source.store,
+      environment: { resolveEnvironment: vi.fn().mockResolvedValue({}) },
+      runtime,
+      now: source.tick,
+      randomId: (bytes) =>
+        bytes === 16
+          ? Buffer.from(runIds.shift() ?? "00".repeat(16), "hex")
+          : Buffer.alloc(bytes, 0x55),
+    });
+
+    await lifecycle.start(instanceIdHex);
+    expect(await lifecycle.saveAndRestart(instanceIdHex)).toMatchObject({
+      runIdHex: restartedRunIdHex,
+      state: "RUNNING",
+    });
+    expect(source.store.getWorkspaceRun(runIdHex).state).toBe("COMMITTED");
+    expect(source.store.getBwaRunBinding(runIdHex).stopReason).toBe("SAVE_RESTART");
+    expect(source.store.getBwaInstance(instanceIdHex).desiredState).toBe("RUNNING");
+    expect(calls).toEqual([
+      `prepare:${runIdHex}`,
+      `start:${runIdHex}`,
+      `stop:${runIdHex}`,
+      `commit:${runIdHex}`,
+      `destroy:${runIdHex}`,
+      `prepare:${restartedRunIdHex}`,
+      `start:${restartedRunIdHex}`,
+    ]);
+    source.store.close();
+  });
+
+  it("keeps the committed Head and RUNNING intent when restart startup fails", async () => {
+    const source = await setup();
+    const runIds = [runIdHex, restartedRunIdHex];
+    const runtime = runtimeForStartedRun(source, {
+      stop: async (id: string) => {
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "RUNNING",
+          newState: "STOPPED",
+          timestampMs: source.tick(),
+        });
+      },
+      commit: async (id: string) => {
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "STOPPED",
+          newState: "COMMITTING",
+          timestampMs: source.tick(),
+        });
+        const ref = source.store.getRef(`ws-${workspaceIdHex}`);
+        source.store.completeUnchangedWorkspaceRun({
+          runIdHex: id,
+          expectedHeadFidHex: ref.headFidHex,
+          expectedRevision: ref.revision,
+          timestampMs: source.tick(),
+        });
+      },
+      start: async (id: string) => {
+        if (id === restartedRunIdHex) throw new Error("restart failed");
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "PREPARING",
+          newState: "RUNNING",
+          runtimeIdentity: "container-test",
+          timestampMs: source.tick(),
+        });
+      },
+    });
+    const lifecycle = new BwaLifecycleService({
+      refStore: source.store,
+      environment: { resolveEnvironment: vi.fn().mockResolvedValue({}) },
+      runtime,
+      now: source.tick,
+      randomId: (bytes) =>
+        bytes === 16
+          ? Buffer.from(runIds.shift() ?? "00".repeat(16), "hex")
+          : Buffer.alloc(bytes, 0x55),
+    });
+
+    await lifecycle.start(instanceIdHex);
+    await expect(lifecycle.saveAndRestart(instanceIdHex)).rejects.toMatchObject({
+      code: "RUNTIME_START_FAILED",
+    });
+    expect(source.store.getWorkspaceRun(runIdHex).state).toBe("COMMITTED");
+    expect(source.store.getWorkspaceRun(restartedRunIdHex)).toMatchObject({
+      state: "FAILED",
+      errorCode: "BWA_START_FAILED",
+    });
+    expect(source.store.getBwaInstance(instanceIdHex).desiredState).toBe("RUNNING");
     source.store.close();
   });
 });
