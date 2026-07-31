@@ -4,6 +4,8 @@ import {
   type BwaApplicationSummary,
   type BwaInstanceSummary,
 } from "../../api/bwaManagerClient";
+import { useDesktopStore } from "../../store/desktopStore";
+import { openApp } from "../../windows/windowController";
 
 export function BwaManagerApp() {
   const [tokenInput, setTokenInput] = useState("");
@@ -12,7 +14,7 @@ export function BwaManagerApp() {
   const [reference, setReference] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [openUrl, setOpenUrl] = useState<string>();
+  const registerRuntimeApp = useDesktopStore((state) => state.registerRuntimeApp);
   const client = useMemo(() => (token ? new BwaManagerClient(token) : undefined), [token]);
 
   const refresh = async (activeClient = client) => {
@@ -116,11 +118,29 @@ export function BwaManagerApp() {
             client={client}
             busy={busy}
             execute={execute}
-            onOpen={async (instanceIdHex) => {
+            onOpen={async (instance) => {
               setBusy(true);
-              setNotice("");
+              setNotice("正在等待应用就绪…");
               try {
-                setOpenUrl((await client.open(instanceIdHex)).url);
+                await client.waitUntilReady(instance.instanceIdHex);
+                const opened = await client.open(instance.instanceIdHex);
+                const appId = `bwa.${instance.instanceIdHex}`;
+                registerRuntimeApp({
+                  id: appId,
+                  name: instance.displayName,
+                  kind: "bwa",
+                  icon: "/icons/workspaces.svg",
+                  description: "Workspace Application Instance",
+                  url: opened.url,
+                  defaultWidth: 840,
+                  defaultHeight: 600,
+                  minWidth: 520,
+                  minHeight: 360,
+                  desktop: false,
+                  pinned: false,
+                  transient: true,
+                });
+                queueMicrotask(() => openApp(appId));
               } catch (error) {
                 setNotice(error instanceof Error ? error.message : "打开失败");
               } finally {
@@ -130,20 +150,6 @@ export function BwaManagerApp() {
           />
         ))}
       </main>
-      {openUrl && (
-        <section className="bwa-manager__viewer">
-          <header>
-            <strong>运行界面</strong>
-            <button type="button" onClick={() => setOpenUrl(undefined)}>关闭</button>
-          </header>
-          <iframe
-            src={openUrl}
-            title="Workspace Application"
-            allow="fullscreen"
-            allowFullScreen
-          />
-        </section>
-      )}
     </article>
   );
 }
@@ -159,7 +165,7 @@ function ApplicationCard({
   client: BwaManagerClient;
   busy: boolean;
   execute: (operation: () => Promise<unknown>, success: string) => Promise<void>;
-  onOpen: (instanceIdHex: string) => Promise<void>;
+  onOpen: (instance: BwaInstanceSummary) => Promise<void>;
 }) {
   const [instanceName, setInstanceName] = useState("");
   return (
@@ -227,7 +233,7 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
   client: BwaManagerClient;
   busy: boolean;
   execute: (operation: () => Promise<unknown>, success: string) => Promise<void>;
-  onOpen: (instanceIdHex: string) => Promise<void>;
+  onOpen: (instance: BwaInstanceSummary) => Promise<void>;
 }) {
   const running = instance.runs.some(({ run }) => run.state === "RUNNING");
   const unresolved = [...instance.runs].reverse().find(({ run }) =>
@@ -244,7 +250,7 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
         </div>
         <div className="bwa-manager__actions">
           <button type="button" disabled={busy || running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "start"), "Instance 已启动")}>启动</button>
-          <button type="button" disabled={busy || !running} onClick={() => void onOpen(instance.instanceIdHex)}>打开</button>
+          <button type="button" disabled={busy || !running} onClick={() => void onOpen(instance)}>打开</button>
           <button type="button" disabled={busy || !running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "save-restart"), "状态已保存并重启")}>保存重启</button>
           <button type="button" disabled={busy || !running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "stop"), "Instance 已停止并提交")}>停止</button>
           <button type="button" disabled={busy || running} onClick={() => setShowEnvironment((value) => !value)}>环境变量</button>

@@ -1,4 +1,4 @@
-export type AppKind = "internal" | "iframe" | "external";
+export type AppKind = "internal" | "iframe" | "external" | "bwa";
 export type ConfigStatus = "loading" | "ready" | "error";
 
 export interface AppDefinition {
@@ -15,6 +15,7 @@ export interface AppDefinition {
   desktop: boolean;
   pinned: boolean;
   trusted?: boolean;
+  transient?: boolean;
   resourceHandlers?: Array<{
     id: string;
     actions: Array<"open" | "edit">;

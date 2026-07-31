@@ -76,6 +76,12 @@ export class BwaManagerClient {
     );
   }
 
+  async waitUntilReady(instanceIdHex: string) {
+    return await this.request<{ ready: true }>(`/instances/${instanceIdHex}/ready`, {
+      method: "POST",
+    });
+  }
+
   async replaceEnvironment(
     instanceIdHex: string,
     ordinary: Record<string, string>,

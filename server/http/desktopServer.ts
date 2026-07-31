@@ -103,6 +103,7 @@ type BwaManagerControlExecutor = Pick<
   | "stop"
   | "saveAndRestart"
   | "open"
+  | "waitUntilReady"
   | "publishFailedUpper"
   | "discardFailedUpper"
 >;
@@ -1781,6 +1782,20 @@ export function createDesktopServer({
     },
   );
 
+  app.post(
+    "/api/v1/admin/bwa/instances/:instanceId/ready",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        response.set("Cache-Control", "no-store").json(
+          await service.waitUntilReady(request.params.instanceId),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   for (const [action, operation] of [
     [
       "publish",
@@ -2029,7 +2044,7 @@ export function createDesktopServer({
         return;
       }
       if (error instanceof BwaManagerControlError) {
-        response.status(409).json({
+        response.status(error.code === "INSTANCE_NOT_READY" ? 503 : 409).json({
           error: { code: error.code, message: error.message },
         });
         return;

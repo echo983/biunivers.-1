@@ -159,6 +159,7 @@ describe("desktop and app origins", () => {
       stop: vi.fn().mockResolvedValue({ state: "COMMITTED" }),
       saveAndRestart: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       open: vi.fn().mockReturnValue({ url: "http://bwa.localhost/open", expiresAt: "soon" }),
+      waitUntilReady: vi.fn().mockResolvedValue({ ready: true }),
       publishFailedUpper: vi.fn().mockResolvedValue({ state: "COMMITTED" }),
       discardFailedUpper: vi.fn().mockResolvedValue({ state: "DISCARDED" }),
     };

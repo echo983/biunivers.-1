@@ -68,9 +68,10 @@ export function AppMenu() {
     return apps
       .filter(
         (app) =>
-          !normalizedQuery ||
-          app.name.toLocaleLowerCase().includes(normalizedQuery) ||
-          app.id.toLocaleLowerCase().includes(normalizedQuery),
+          !app.transient &&
+          (!normalizedQuery ||
+            app.name.toLocaleLowerCase().includes(normalizedQuery) ||
+            app.id.toLocaleLowerCase().includes(normalizedQuery)),
       )
       .sort((left, right) => {
         const leftPinned = pinnedAppIds.includes(left.id);

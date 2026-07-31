@@ -22,6 +22,7 @@ interface DesktopState {
   selectedDesktopAppId: string | null;
   appMenuOpen: boolean;
   setApps: (apps: AppDefinition[]) => void;
+  registerRuntimeApp: (app: AppDefinition) => void;
   setConfigState: (
     status: ConfigStatus,
     warnings?: string[],
@@ -71,9 +72,18 @@ export const useDesktopStore = create<DesktopState>((set) => ({
   selectedDesktopAppId: null,
   appMenuOpen: false,
   setApps: (apps) =>
-    set({
-      apps: Object.fromEntries(apps.map((app) => [app.id, app])),
-    }),
+    set((state) => ({
+      apps: {
+        ...Object.fromEntries(
+          Object.values(state.apps)
+            .filter((app) => app.transient)
+            .map((app) => [app.id, app]),
+        ),
+        ...Object.fromEntries(apps.map((app) => [app.id, app])),
+      },
+    })),
+  registerRuntimeApp: (app) =>
+    set((state) => ({ apps: { ...state.apps, [app.id]: app } })),
   setConfigState: (configStatus, configWarnings = [], configError) =>
     set({ configStatus, configWarnings, configError }),
   initializePinnedApps: (appIds) =>

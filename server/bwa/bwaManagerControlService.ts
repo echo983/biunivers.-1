@@ -10,7 +10,7 @@ import type { BwaApplicationUpdateService } from "./bwaApplicationUpdateService.
 
 export class BwaManagerControlError extends Error {
   constructor(
-    public readonly code: "INSTANCE_NOT_RUNNING",
+    public readonly code: "INSTANCE_NOT_RUNNING" | "INSTANCE_NOT_READY",
     message: string,
   ) {
     super(message);
@@ -25,6 +25,8 @@ export class BwaManagerControlService {
   readonly #lifecycle: BwaLifecycleService;
   readonly #sessions: BwaBrowserSessionRegistry;
   readonly #updates: BwaApplicationUpdateService;
+  readonly #runtime: { resolveBwaEndpoint(runIdHex: string): Promise<unknown> };
+  readonly #fetch: typeof fetch;
 
   constructor(options: {
     appOrigin: string;
@@ -33,6 +35,8 @@ export class BwaManagerControlService {
     lifecycle: BwaLifecycleService;
     sessions: BwaBrowserSessionRegistry;
     updates: BwaApplicationUpdateService;
+    runtime: { resolveBwaEndpoint(runIdHex: string): Promise<unknown> };
+    fetch?: typeof fetch;
   }) {
     this.#appOrigin = options.appOrigin;
     this.#refStore = options.refStore;
@@ -40,6 +44,8 @@ export class BwaManagerControlService {
     this.#lifecycle = options.lifecycle;
     this.#sessions = options.sessions;
     this.#updates = options.updates;
+    this.#runtime = options.runtime;
+    this.#fetch = options.fetch ?? fetch;
   }
 
   status() {
@@ -120,6 +126,42 @@ export class BwaManagerControlService {
       url: url.toString(),
       expiresAt: new Date(bootstrap.expiresAtMs).toISOString(),
     };
+  }
+
+  async waitUntilReady(instanceIdHex: string) {
+    const running = this.#refStore
+      .listBwaRunBindings(instanceIdHex)
+      .map(({ run }) => run)
+      .find((run) => run.state === "RUNNING");
+    if (!running) {
+      throw new BwaManagerControlError(
+        "INSTANCE_NOT_RUNNING",
+        "BWA Instance is not running.",
+      );
+    }
+    const endpoint = await this.#runtime.resolveBwaEndpoint(running.runIdHex);
+    if (!endpoint || typeof endpoint !== "object") {
+      throw new Error("BWA Runtime endpoint is invalid.");
+    }
+    const value = endpoint as Record<string, unknown>;
+    if (typeof value.address !== "string" || value.port !== 8080) {
+      throw new Error("BWA Runtime endpoint is invalid.");
+    }
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      try {
+        const response = await this.#fetch(`http://${value.address}:8080/health`, {
+          signal: AbortSignal.timeout(1_000),
+        });
+        if (response.ok) return { ready: true };
+      } catch {
+        // Container start and HTTP readiness are separate states.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+    }
+    throw new BwaManagerControlError(
+      "INSTANCE_NOT_READY",
+      "BWA application did not become ready within 30 seconds.",
+    );
   }
 
   async publishFailedUpper(instanceIdHex: string, runIdHex: string) {

@@ -53,20 +53,22 @@ export function TaskbarItem({
           y={menuPosition.y}
           onClose={() => setMenuPosition(null)}
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              if (pinned) {
-                unpinApp(app.id);
-              } else {
-                pinApp(app.id);
-              }
-              setMenuPosition(null);
-            }}
-          >
-            {pinned ? "从任务栏移除" : "添加到任务栏"}
-          </button>
+          {!app.transient && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                if (pinned) {
+                  unpinApp(app.id);
+                } else {
+                  pinApp(app.id);
+                }
+                setMenuPosition(null);
+              }}
+            >
+              {pinned ? "从任务栏移除" : "添加到任务栏"}
+            </button>
+          )}
           {windowState && (
             <button
               type="button"

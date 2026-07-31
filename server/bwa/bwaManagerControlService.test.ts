@@ -9,7 +9,7 @@ import type { BwaApplicationUpdateService } from "./bwaApplicationUpdateService.
 const instanceIdHex = "11".repeat(16);
 
 describe("BwaManagerControlService", () => {
-  it("projects management state and issues a short-lived open URL only for a running Instance", () => {
+  it("projects management state and issues a short-lived open URL only for a running Instance", async () => {
     const runState = { value: "STOPPED" };
     const refStore = {
       listBwaApplications: vi.fn().mockReturnValue([
@@ -33,6 +33,13 @@ describe("BwaManagerControlService", () => {
       now: () => 1_000,
       random: (bytes) => Buffer.alloc(bytes, 9),
     });
+    const runtime = {
+      resolveBwaEndpoint: vi.fn().mockResolvedValue({
+        address: "172.30.0.8",
+        port: 8080,
+      }),
+    };
+    const fetchHealth = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     const service = new BwaManagerControlService({
       appOrigin: "http://localhost:8081",
       refStore,
@@ -40,6 +47,8 @@ describe("BwaManagerControlService", () => {
       lifecycle: {} as BwaLifecycleService,
       sessions,
       updates: {} as BwaApplicationUpdateService,
+      runtime,
+      fetch: fetchHealth,
     });
     expect(service.status()).toMatchObject({
       applications: [
@@ -61,5 +70,11 @@ describe("BwaManagerControlService", () => {
     expect(url.searchParams.get("t")).toBeTruthy();
     expect(opened).not.toHaveProperty("workspaceIdHex");
     expect(opened).not.toHaveProperty("endpoint");
+    await expect(service.waitUntilReady(instanceIdHex)).resolves.toEqual({ ready: true });
+    expect(runtime.resolveBwaEndpoint).toHaveBeenCalledWith("22".repeat(16));
+    expect(fetchHealth).toHaveBeenCalledWith(
+      "http://172.30.0.8:8080/health",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 });

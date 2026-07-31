@@ -120,6 +120,7 @@ export class BwaManagerRuntime {
         lifecycle,
         sessions,
         updates,
+        runtime,
       }),
     });
     manager.#startSupervisor();

@@ -42,4 +42,22 @@ describe("desktop store taskbar preferences", () => {
     useDesktopStore.getState().unpinApp("files");
     expect(useDesktopStore.getState().pinnedAppIds).toEqual([]);
   });
+
+  it("keeps a transient BWA window definition across registry refreshes", () => {
+    const runtime = {
+      id: `bwa.${"11".repeat(16)}`,
+      name: "Probe",
+      kind: "bwa" as const,
+      icon: "/icons/workspaces.svg",
+      url: "http://bwa.localhost/bootstrap",
+      defaultWidth: 800,
+      defaultHeight: 600,
+      desktop: false,
+      pinned: false,
+      transient: true,
+    };
+    useDesktopStore.getState().registerRuntimeApp(runtime);
+    useDesktopStore.getState().setApps([]);
+    expect(useDesktopStore.getState().apps[runtime.id]).toEqual(runtime);
+  });
 });
