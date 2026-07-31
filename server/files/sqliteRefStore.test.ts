@@ -58,13 +58,14 @@ afterEach(async () => {
 });
 
 describe("SqliteRefStore", () => {
-  it("creates schema v2 and atomically migrates an existing schema v1 database", async () => {
+  it("creates schema v3 and atomically migrates an existing schema v1 database", async () => {
     const freshPath = await databasePath();
     const fresh = await SqliteRefStore.initialize(freshPath);
     fresh.close();
     expect(readSchema(freshPath)).toEqual({
-      version: 2,
+      version: 3,
       workspaceTables: ["workspace_records", "workspace_runs"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
     });
 
     const legacyPath = await databasePath();
@@ -73,8 +74,23 @@ describe("SqliteRefStore", () => {
     expect(migrated.getRef("main")).toEqual(initial);
     migrated.close();
     expect(readSchema(legacyPath)).toEqual({
-      version: 2,
+      version: 3,
       workspaceTables: ["workspace_records", "workspace_runs"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
+    });
+
+    const v2Path = await databasePath();
+    const v2 = await SqliteRefStore.initialize(v2Path);
+    v2.createRef(initial);
+    v2.close();
+    downgradeSchemaToV2(v2Path);
+    const migratedV2 = await SqliteRefStore.openExisting(v2Path);
+    expect(migratedV2.getRef("main")).toEqual(initial);
+    migratedV2.close();
+    expect(readSchema(v2Path)).toEqual({
+      version: 3,
+      workspaceTables: ["workspace_records", "workspace_runs"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
     });
   });
 
@@ -105,6 +121,7 @@ describe("SqliteRefStore", () => {
     expect(readSchema(path)).toEqual({
       version: 1,
       workspaceTables: [],
+      bwaTables: [],
     });
   });
 
@@ -179,6 +196,80 @@ describe("SqliteRefStore", () => {
     expect(updated.retention).toBe("KEPT");
     expect(updated.updatedAtMs).toBe(created.updatedAtMs + 1);
     expect(store.getRef(created.refId)).toEqual(workspaceInput().ref);
+    store.close();
+  });
+
+  it("persists BWA applications, binds one Instance per Workspace, and protects bound state", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    store.createWorkspace(workspaceInput());
+    const application = store.createBwaApplication(bwaApplication());
+    expect(application.defaultInstanceIdHex).toBeNull();
+
+    const instance = store.createBwaInstance(bwaInstance());
+    expect(store.getBwaApplication(application.applicationId).defaultInstanceIdHex).toBe(
+      instance.instanceIdHex,
+    );
+    expect(store.listBwaInstances(application.applicationId)).toEqual([instance]);
+    expect(() => store.deleteWorkspace(workspaceIdHex)).toThrowError(
+      expect.objectContaining({ code: "WORKSPACE_BOUND" }) as RefStoreError,
+    );
+    expect(() =>
+      store.createBwaInstance({
+        ...bwaInstance(),
+        instanceIdHex: "62626262626262626262626262626262",
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INSTANCE_ALREADY_EXISTS" }) as RefStoreError,
+    );
+
+    expect(
+      store.replaceBwaEnvironment(instance.instanceIdHex, [
+        { name: "MODE", value: "safe", sensitive: false },
+        { name: "API_TOKEN", value: null, sensitive: true },
+      ]),
+    ).toEqual([
+      { name: "API_TOKEN", value: null, sensitive: true },
+      { name: "MODE", value: "safe", sensitive: false },
+    ]);
+
+    expect(store.deleteBwaInstancePreservingWorkspace(instance.instanceIdHex)).toMatchObject({
+      workspaceIdHex,
+    });
+    expect(store.getBwaApplication(application.applicationId).defaultInstanceIdHex).toBeNull();
+    expect(() => store.listBwaEnvironment(instance.instanceIdHex)).toThrowError(
+      expect.objectContaining({ code: "INSTANCE_NOT_FOUND" }) as RefStoreError,
+    );
+    expect(() => store.deleteWorkspace(workspaceIdHex)).not.toThrow();
+    store.close();
+  });
+
+  it("rejects unsafe BWA metadata and environment variables before persistence", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    store.createWorkspace(workspaceInput());
+    expect(() =>
+      store.createBwaApplication({
+        ...bwaApplication(),
+        sourceUrl: "http://example.test/source",
+      }),
+    ).toThrowError(expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError);
+    store.createBwaApplication(bwaApplication());
+    store.createBwaInstance(bwaInstance());
+    for (const variables of [
+      [{ name: "BIUNIVERS_HTTP_PORT", value: "9", sensitive: false }],
+      [{ name: "TOKEN", value: "visible", sensitive: true }],
+      [
+        { name: "DUP", value: "one", sensitive: false },
+        { name: "DUP", value: "two", sensitive: false },
+      ],
+    ]) {
+      expect(() => store.replaceBwaEnvironment(bwaInstance().instanceIdHex, variables)).toThrowError(
+        expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
+      );
+    }
     store.close();
   });
 
@@ -727,6 +818,51 @@ function createLegacySchemaV1(path: string): void {
   database.close();
 }
 
+function downgradeSchemaToV2(path: string): void {
+  const database = new Database(path);
+  database.pragma("foreign_keys = OFF");
+  database.exec(`
+    DROP TABLE bwa_environment;
+    DROP TABLE bwa_instances;
+    DROP TABLE bwa_applications;
+    UPDATE file_service_meta SET value = X'00000002' WHERE key = 'schema_version';
+    PRAGMA user_version = 2;
+  `);
+  database.close();
+}
+
+function bwaApplication() {
+  return {
+    applicationId: "ghcr.io/echo983/probe",
+    installedDigest: `sha256:${"a".repeat(64)}`,
+    previousDigest: null,
+    protocolVersion: 1 as const,
+    title: "Probe",
+    description: "BWA registry probe",
+    sourceUrl: "https://github.com/echo983/probe",
+    imageVersion: "1.0.0",
+    imageRevision: null,
+    imageLicenses: "MIT",
+    enabled: true,
+    defaultInstanceIdHex: null,
+    createdAtMs: initial.updatedAtMs + 2,
+    updatedAtMs: initial.updatedAtMs + 2,
+  };
+}
+
+function bwaInstance() {
+  return {
+    instanceIdHex: "61616161616161616161616161616161",
+    applicationId: bwaApplication().applicationId,
+    workspaceIdHex,
+    desiredState: "STOPPED" as const,
+    startupPolicy: "MANUAL" as const,
+    displayName: "Probe state",
+    createdAtMs: initial.updatedAtMs + 3,
+    updatedAtMs: initial.updatedAtMs + 3,
+  };
+}
+
 function prepareCommittingRun(
   store: SqliteRefStore,
   workspace: ReturnType<SqliteRefStore["getWorkspace"]>,
@@ -763,6 +899,7 @@ function prepareCommittingRun(
 function readSchema(path: string): {
   version: number;
   workspaceTables: string[];
+  bwaTables: string[];
 } {
   const database = new Database(path, { readonly: true });
   try {
@@ -773,6 +910,15 @@ function readSchema(path: string): {
           .prepare(
             `SELECT name FROM sqlite_master
              WHERE type = 'table' AND name LIKE 'workspace_%'
+             ORDER BY name`,
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name),
+      bwaTables: (
+        database
+          .prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name LIKE 'bwa_%'
              ORDER BY name`,
           )
           .all() as Array<{ name: string }>

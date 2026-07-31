@@ -14,6 +14,7 @@ import type { ComputeRuntimeConfig } from "./computeRuntimeConfig.js";
 import { ComputeRuntimeServer } from "./computeRuntimeServer.js";
 import { ControlRunRecovery } from "./controlRunRecovery.js";
 import { DockerOciAdapter } from "./dockerOciAdapter.js";
+import { DockerImageAdapter } from "./dockerImageAdapter.js";
 import { ExecutorRegistry } from "./executorRegistry.js";
 import { InterruptedRunRecovery } from "./interruptedRunRecovery.js";
 import { MountSupervisor } from "./mountSupervisor.js";
@@ -135,6 +136,7 @@ export async function startComputeRuntimeDaemon(options: {
           maxTotalBytes: maximumUpperBytes,
         },
       }),
+      images: new DockerImageAdapter(),
     });
     const server = new ComputeRuntimeServer({
       socketPath: options.runtimeConfig.socketPath,

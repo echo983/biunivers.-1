@@ -3,7 +3,8 @@ import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+const WORKSPACE_SCHEMA_VERSION = 2;
 const LEGACY_SCHEMA_VERSION = 1;
 const FID_HEX_PATTERN = /^[0-9a-f]{32}$/;
 const ID_HEX_PATTERN = /^[0-9a-f]{32}$/;
@@ -118,6 +119,43 @@ export interface CompleteUnchangedWorkspaceRunInput {
   timestampMs: number;
 }
 
+export type BwaStartupPolicy = "MANUAL" | "ON_OPEN" | "AUTOMATIC";
+export type BwaDesiredState = "STOPPED" | "RUNNING";
+
+export interface BwaApplicationRecord {
+  applicationId: string;
+  installedDigest: string;
+  previousDigest: string | null;
+  protocolVersion: 1;
+  title: string;
+  description: string;
+  sourceUrl: string;
+  imageVersion: string | null;
+  imageRevision: string | null;
+  imageLicenses: string | null;
+  enabled: boolean;
+  defaultInstanceIdHex: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface BwaInstanceRecord {
+  instanceIdHex: string;
+  applicationId: string;
+  workspaceIdHex: string;
+  desiredState: BwaDesiredState;
+  startupPolicy: BwaStartupPolicy;
+  displayName: string;
+  createdAtMs: number;
+  updatedAtMs: number;
+}
+
+export interface BwaEnvironmentVariable {
+  name: string;
+  value: string | null;
+  sensitive: boolean;
+}
+
 export interface CommitWorkspaceRunResult {
   outcome: "committed" | "conflict";
   run: WorkspaceRunRecord;
@@ -134,9 +172,14 @@ export type RefStoreErrorCode =
   | "WORKSPACE_ALREADY_EXISTS"
   | "WORKSPACE_NOT_FOUND"
   | "WORKSPACE_ACTIVE"
+  | "WORKSPACE_BOUND"
   | "RUN_ALREADY_EXISTS"
   | "RUN_NOT_FOUND"
   | "RUN_STATE_CONFLICT"
+  | "APPLICATION_ALREADY_EXISTS"
+  | "APPLICATION_NOT_FOUND"
+  | "INSTANCE_ALREADY_EXISTS"
+  | "INSTANCE_NOT_FOUND"
   | "INVALID_REF_VALUE";
 
 export class RefStoreError extends Error {
@@ -516,6 +559,20 @@ export class SqliteRefStore {
     return transaction();
   }
 
+  createWorkspaceWithBwaInstance(input: {
+    workspace: CreateWorkspaceInput;
+    instance: BwaInstanceRecord;
+  }): { workspace: WorkspaceRecord; instance: BwaInstanceRecord } {
+    if (input.workspace.workspaceIdHex !== input.instance.workspaceIdHex) {
+      throw invalid("BWA Instance does not target its new Workspace.");
+    }
+    return this.#database.transaction(() => {
+      const workspace = this.createWorkspace(input.workspace);
+      const instance = this.createBwaInstance(input.instance);
+      return { workspace, instance };
+    })();
+  }
+
   getWorkspace(workspaceIdHex: string): WorkspaceRecord {
     validateId(workspaceIdHex, "workspace ID");
     const row = this.#database
@@ -583,6 +640,15 @@ export class SqliteRefStore {
         throw new RefStoreError(
           "WORKSPACE_ACTIVE",
           "Workspace has an active write Run.",
+        );
+      }
+      const binding = this.#database
+        .prepare("SELECT 1 FROM bwa_instances WHERE workspace_id = ?")
+        .get(fromHex(workspaceIdHex));
+      if (binding) {
+        throw new RefStoreError(
+          "WORKSPACE_BOUND",
+          "Workspace is bound to a BWA Instance and must be detached first.",
         );
       }
       this.#database
@@ -965,6 +1031,230 @@ export class SqliteRefStore {
     })();
   }
 
+  createBwaApplication(input: BwaApplicationRecord): BwaApplicationRecord {
+    validateBwaApplication(input);
+    try {
+      this.#database.prepare(
+        `INSERT INTO bwa_applications (
+           application_id, installed_digest, previous_digest, protocol_version,
+           title, description, source_url, image_version, image_revision,
+           image_licenses, enabled, default_instance_id, created_at_ms, updated_at_ms
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+      ).run(
+        input.applicationId,
+        input.installedDigest,
+        input.previousDigest,
+        input.protocolVersion,
+        input.title,
+        input.description,
+        input.sourceUrl,
+        input.imageVersion,
+        input.imageRevision,
+        input.imageLicenses,
+        input.enabled ? 1 : 0,
+        input.createdAtMs,
+        input.updatedAtMs,
+      );
+    } catch (error) {
+      if (isSqliteConstraint(error)) {
+        throw new RefStoreError(
+          "APPLICATION_ALREADY_EXISTS",
+          `Application ${input.applicationId} is already registered.`,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
+    return this.getBwaApplication(input.applicationId);
+  }
+
+  getBwaApplication(applicationId: string): BwaApplicationRecord {
+    validateApplicationId(applicationId);
+    const row = this.#database.prepare(
+      `SELECT application_id, installed_digest, previous_digest, protocol_version,
+              title, description, source_url, image_version, image_revision,
+              image_licenses, enabled, default_instance_id, created_at_ms, updated_at_ms
+       FROM bwa_applications WHERE application_id = ?`,
+    ).get(applicationId) as BwaApplicationRow | undefined;
+    if (!row) {
+      throw new RefStoreError(
+        "APPLICATION_NOT_FOUND",
+        `Application ${applicationId} was not found.`,
+      );
+    }
+    return mapBwaApplication(row);
+  }
+
+  listBwaApplications(): BwaApplicationRecord[] {
+    const rows = this.#database.prepare(
+      `SELECT application_id, installed_digest, previous_digest, protocol_version,
+              title, description, source_url, image_version, image_revision,
+              image_licenses, enabled, default_instance_id, created_at_ms, updated_at_ms
+       FROM bwa_applications ORDER BY application_id`,
+    ).all() as BwaApplicationRow[];
+    return rows.map(mapBwaApplication);
+  }
+
+  setBwaApplicationEnabled(
+    applicationId: string,
+    enabled: boolean,
+    updatedAtMs: number,
+  ): BwaApplicationRecord {
+    validateApplicationId(applicationId);
+    validateTimestamp(updatedAtMs);
+    return this.#database.transaction(() => {
+      const current = this.getBwaApplication(applicationId);
+      if (updatedAtMs < current.updatedAtMs) {
+        throw invalid("Application update timestamp predates its current state.");
+      }
+      this.#database.prepare(
+        `UPDATE bwa_applications SET enabled = ?, updated_at_ms = ?
+         WHERE application_id = ?`,
+      ).run(enabled ? 1 : 0, updatedAtMs, applicationId);
+      return this.getBwaApplication(applicationId);
+    })();
+  }
+
+  createBwaInstance(input: BwaInstanceRecord): BwaInstanceRecord {
+    validateBwaInstance(input);
+    return this.#database.transaction(() => {
+      const application = this.getBwaApplication(input.applicationId);
+      this.getWorkspace(input.workspaceIdHex);
+      try {
+        this.#database.prepare(
+          `INSERT INTO bwa_instances (
+             instance_id, application_id, workspace_id, desired_state,
+             startup_policy, display_name, created_at_ms, updated_at_ms
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(
+          fromHex(input.instanceIdHex),
+          input.applicationId,
+          fromHex(input.workspaceIdHex),
+          input.desiredState,
+          input.startupPolicy,
+          input.displayName,
+          input.createdAtMs,
+          input.updatedAtMs,
+        );
+      } catch (error) {
+        if (isSqliteConstraint(error)) {
+          throw new RefStoreError(
+            "INSTANCE_ALREADY_EXISTS",
+            "Instance ID or Workspace binding is already in use.",
+            { cause: error },
+          );
+        }
+        throw error;
+      }
+      if (application.defaultInstanceIdHex === null) {
+        this.#database.prepare(
+          `UPDATE bwa_applications
+           SET default_instance_id = ?, updated_at_ms = MAX(updated_at_ms, ?)
+           WHERE application_id = ? AND default_instance_id IS NULL`,
+        ).run(fromHex(input.instanceIdHex), input.updatedAtMs, input.applicationId);
+      }
+      return this.getBwaInstance(input.instanceIdHex);
+    })();
+  }
+
+  getBwaInstance(instanceIdHex: string): BwaInstanceRecord {
+    validateId(instanceIdHex, "BWA instance ID");
+    const row = this.#database.prepare(
+      `SELECT instance_id, application_id, workspace_id, desired_state,
+              startup_policy, display_name, created_at_ms, updated_at_ms
+       FROM bwa_instances WHERE instance_id = ?`,
+    ).get(fromHex(instanceIdHex)) as BwaInstanceRow | undefined;
+    if (!row) {
+      throw new RefStoreError("INSTANCE_NOT_FOUND", "BWA Instance was not found.");
+    }
+    return mapBwaInstance(row);
+  }
+
+  listBwaInstances(applicationId: string): BwaInstanceRecord[] {
+    validateApplicationId(applicationId);
+    this.getBwaApplication(applicationId);
+    const rows = this.#database.prepare(
+      `SELECT instance_id, application_id, workspace_id, desired_state,
+              startup_policy, display_name, created_at_ms, updated_at_ms
+       FROM bwa_instances WHERE application_id = ?
+       ORDER BY created_at_ms, instance_id`,
+    ).all(applicationId) as BwaInstanceRow[];
+    return rows.map(mapBwaInstance);
+  }
+
+  replaceBwaEnvironment(
+    instanceIdHex: string,
+    variables: readonly BwaEnvironmentVariable[],
+  ): BwaEnvironmentVariable[] {
+    validateId(instanceIdHex, "BWA instance ID");
+    validateBwaEnvironment(variables);
+    return this.#database.transaction(() => {
+      this.getBwaInstance(instanceIdHex);
+      this.#database.prepare(
+        "DELETE FROM bwa_environment WHERE instance_id = ?",
+      ).run(fromHex(instanceIdHex));
+      const insert = this.#database.prepare(
+        `INSERT INTO bwa_environment (instance_id, name, value, sensitive)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const variable of variables) {
+        insert.run(
+          fromHex(instanceIdHex),
+          variable.name,
+          variable.value,
+          variable.sensitive ? 1 : 0,
+        );
+      }
+      return this.listBwaEnvironment(instanceIdHex);
+    })();
+  }
+
+  listBwaEnvironment(instanceIdHex: string): BwaEnvironmentVariable[] {
+    validateId(instanceIdHex, "BWA instance ID");
+    this.getBwaInstance(instanceIdHex);
+    const rows = this.#database.prepare(
+      `SELECT name, value, sensitive FROM bwa_environment
+       WHERE instance_id = ? ORDER BY name`,
+    ).all(fromHex(instanceIdHex)) as BwaEnvironmentRow[];
+    return rows.map((row) => ({
+      name: row.name,
+      value: row.value,
+      sensitive: row.sensitive === 1,
+    }));
+  }
+
+  deleteBwaInstancePreservingWorkspace(instanceIdHex: string): WorkspaceRecord {
+    validateId(instanceIdHex, "BWA instance ID");
+    return this.#database.transaction(() => {
+      const instance = this.getBwaInstance(instanceIdHex);
+      const workspace = this.getWorkspace(instance.workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== null) {
+        throw new RefStoreError(
+          "WORKSPACE_ACTIVE",
+          "A running Workspace cannot be detached from its BWA Instance.",
+        );
+      }
+      const application = this.getBwaApplication(instance.applicationId);
+      if (application.defaultInstanceIdHex === instanceIdHex) {
+        const replacement = this.#database.prepare(
+          `SELECT instance_id FROM bwa_instances
+           WHERE application_id = ? AND instance_id <> ?
+           ORDER BY created_at_ms, instance_id LIMIT 1`,
+        ).get(instance.applicationId, fromHex(instanceIdHex)) as
+          | { instance_id: Buffer }
+          | undefined;
+        this.#database.prepare(
+          `UPDATE bwa_applications SET default_instance_id = ?
+           WHERE application_id = ?`,
+        ).run(replacement?.instance_id ?? null, instance.applicationId);
+      }
+      this.#database.prepare(
+        "DELETE FROM bwa_instances WHERE instance_id = ?",
+      ).run(fromHex(instanceIdHex));
+      return workspace;
+    })();
+  }
+
   async backupTo(destinationPath: string): Promise<void> {
     await mkdir(dirname(destinationPath), { recursive: true });
     const temporaryPath = join(
@@ -1032,6 +1322,40 @@ interface WorkspaceRunRow {
   finished_at_ms: number | null;
 }
 
+interface BwaApplicationRow {
+  application_id: string;
+  installed_digest: string;
+  previous_digest: string | null;
+  protocol_version: number;
+  title: string;
+  description: string;
+  source_url: string;
+  image_version: string | null;
+  image_revision: string | null;
+  image_licenses: string | null;
+  enabled: number;
+  default_instance_id: Buffer | null;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+interface BwaInstanceRow {
+  instance_id: Buffer;
+  application_id: string;
+  workspace_id: Buffer;
+  desired_state: BwaDesiredState;
+  startup_policy: BwaStartupPolicy;
+  display_name: string;
+  created_at_ms: number;
+  updated_at_ms: number;
+}
+
+interface BwaEnvironmentRow {
+  name: string;
+  value: string | null;
+  sensitive: number;
+}
+
 function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("synchronous = FULL");
@@ -1060,12 +1384,13 @@ function createSchema(database: Database.Database): void {
       UNIQUE(ref_id, name)
     ) STRICT;
     ${workspaceSchemaSql()}
+    ${bwaSchemaSql()}
     CREATE TABLE file_service_meta (
       key TEXT PRIMARY KEY,
       value BLOB NOT NULL
     ) STRICT;
     INSERT INTO file_service_meta(key, value)
-    VALUES ('schema_version', X'00000002');
+    VALUES ('schema_version', X'00000003');
     PRAGMA user_version = ${SCHEMA_VERSION};
     COMMIT;
   `);
@@ -1076,7 +1401,7 @@ function migrateSchema(database: Database.Database): void {
   if (version === SCHEMA_VERSION) {
     return;
   }
-  if (version !== LEGACY_SCHEMA_VERSION) {
+  if (version !== LEGACY_SCHEMA_VERSION && version !== WORKSPACE_SCHEMA_VERSION) {
     throw new RefStoreError(
       "REFSTORE_CORRUPT",
       `Unsupported RefStore schema version: ${String(version)}.`,
@@ -1085,9 +1410,10 @@ function migrateSchema(database: Database.Database): void {
   try {
     database.exec(`
       BEGIN IMMEDIATE;
-      ${workspaceSchemaSql()}
+      ${version === LEGACY_SCHEMA_VERSION ? workspaceSchemaSql() : ""}
+      ${bwaSchemaSql()}
       UPDATE file_service_meta
-      SET value = X'00000002'
+      SET value = X'00000003'
       WHERE key = 'schema_version';
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
@@ -1141,6 +1467,54 @@ function workspaceSchemaSql(): string {
   `;
 }
 
+function bwaSchemaSql(): string {
+  return `
+    CREATE TABLE bwa_applications (
+      application_id TEXT PRIMARY KEY,
+      installed_digest TEXT NOT NULL,
+      previous_digest TEXT,
+      protocol_version INTEGER NOT NULL CHECK(protocol_version = 1),
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      image_version TEXT,
+      image_revision TEXT,
+      image_licenses TEXT,
+      enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+      default_instance_id BLOB,
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
+      updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= created_at_ms),
+      FOREIGN KEY(default_instance_id) REFERENCES bwa_instances(instance_id)
+        DEFERRABLE INITIALLY DEFERRED
+    ) STRICT;
+    CREATE TABLE bwa_instances (
+      instance_id BLOB PRIMARY KEY CHECK(length(instance_id) = 16),
+      application_id TEXT NOT NULL
+        REFERENCES bwa_applications(application_id) ON DELETE RESTRICT,
+      workspace_id BLOB UNIQUE NOT NULL
+        REFERENCES workspace_records(workspace_id) ON DELETE RESTRICT,
+      desired_state TEXT NOT NULL CHECK(desired_state IN ('STOPPED', 'RUNNING')),
+      startup_policy TEXT NOT NULL
+        CHECK(startup_policy IN ('MANUAL', 'ON_OPEN', 'AUTOMATIC')),
+      display_name TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0),
+      updated_at_ms INTEGER NOT NULL CHECK(updated_at_ms >= created_at_ms)
+    ) STRICT;
+    CREATE TABLE bwa_environment (
+      instance_id BLOB NOT NULL
+        REFERENCES bwa_instances(instance_id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      value TEXT,
+      sensitive INTEGER NOT NULL CHECK(sensitive IN (0, 1)),
+      PRIMARY KEY(instance_id, name),
+      CHECK(
+        (sensitive = 0 AND value IS NOT NULL) OR
+        (sensitive = 1 AND value IS NULL)
+      )
+    ) STRICT;
+  `;
+}
+
 function verifyDatabase(database: Database.Database): void {
   const integrity = database.pragma("quick_check", { simple: true });
   if (integrity !== "ok") {
@@ -1161,6 +1535,9 @@ function verifyDatabase(database: Database.Database): void {
     "filesystem_snapshots",
     "workspace_records",
     "workspace_runs",
+    "bwa_applications",
+    "bwa_instances",
+    "bwa_environment",
     "file_service_meta",
   ];
   const placeholders = requiredTables.map(() => "?").join(", ");
@@ -1222,6 +1599,160 @@ function mapWorkspaceRun(row: WorkspaceRunRow): WorkspaceRunRecord {
     startedAtMs: row.started_at_ms,
     finishedAtMs: row.finished_at_ms,
   };
+}
+
+function mapBwaApplication(row: BwaApplicationRow): BwaApplicationRecord {
+  return {
+    applicationId: row.application_id,
+    installedDigest: row.installed_digest,
+    previousDigest: row.previous_digest,
+    protocolVersion: row.protocol_version as 1,
+    title: row.title,
+    description: row.description,
+    sourceUrl: row.source_url,
+    imageVersion: row.image_version,
+    imageRevision: row.image_revision,
+    imageLicenses: row.image_licenses,
+    enabled: row.enabled === 1,
+    defaultInstanceIdHex:
+      row.default_instance_id === null ? null : toHex(row.default_instance_id),
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+  };
+}
+
+function mapBwaInstance(row: BwaInstanceRow): BwaInstanceRecord {
+  return {
+    instanceIdHex: toHex(row.instance_id),
+    applicationId: row.application_id,
+    workspaceIdHex: toHex(row.workspace_id),
+    desiredState: row.desired_state,
+    startupPolicy: row.startup_policy,
+    displayName: row.display_name,
+    createdAtMs: row.created_at_ms,
+    updatedAtMs: row.updated_at_ms,
+  };
+}
+
+function validateBwaApplication(input: BwaApplicationRecord): void {
+  validateApplicationId(input.applicationId);
+  validateDigest(input.installedDigest);
+  if (input.previousDigest !== null) validateDigest(input.previousDigest);
+  if (input.protocolVersion !== 1 || input.defaultInstanceIdHex !== null) {
+    throw invalid("New BWA Application state is invalid.");
+  }
+  validateBoundedText(input.title, "application title", 256, false);
+  validateBoundedText(input.description, "application description", 2048, false);
+  validateHttpsUrl(input.sourceUrl);
+  for (const [value, label] of [
+    [input.imageVersion, "image version"],
+    [input.imageRevision, "image revision"],
+    [input.imageLicenses, "image licenses"],
+  ] as const) {
+    if (value !== null) validateBoundedText(value, label, 512, false);
+  }
+  validateTimestamp(input.createdAtMs);
+  validateTimestamp(input.updatedAtMs);
+  if (input.updatedAtMs < input.createdAtMs) {
+    throw invalid("Application update timestamp predates its creation.");
+  }
+}
+
+function validateBwaInstance(input: BwaInstanceRecord): void {
+  validateId(input.instanceIdHex, "BWA instance ID");
+  validateApplicationId(input.applicationId);
+  validateId(input.workspaceIdHex, "workspace ID");
+  if (!(["STOPPED", "RUNNING"] as const).includes(input.desiredState)) {
+    throw invalid("BWA desired state is invalid.");
+  }
+  if (!(["MANUAL", "ON_OPEN", "AUTOMATIC"] as const).includes(input.startupPolicy)) {
+    throw invalid("BWA startup policy is invalid.");
+  }
+  validateBoundedText(input.displayName, "BWA instance name", 256, false);
+  validateTimestamp(input.createdAtMs);
+  validateTimestamp(input.updatedAtMs);
+  if (input.updatedAtMs < input.createdAtMs) {
+    throw invalid("Instance update timestamp predates its creation.");
+  }
+}
+
+function validateBwaEnvironment(
+  variables: readonly BwaEnvironmentVariable[],
+): void {
+  if (variables.length > 256) throw invalid("Too many environment variables.");
+  const names = new Set<string>();
+  let totalBytes = 0;
+  for (const variable of variables) {
+    if (
+      !/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(variable.name) ||
+      variable.name.startsWith("BIUNIVERS_") ||
+      names.has(variable.name) ||
+      variable.sensitive !== (variable.value === null)
+    ) {
+      throw invalid("BWA environment is invalid.");
+    }
+    names.add(variable.name);
+    totalBytes += Buffer.byteLength(variable.name);
+    if (variable.value !== null) {
+      const bytes = Buffer.byteLength(variable.value);
+      if (bytes > 64 * 1024 || variable.value.includes("\0")) {
+        throw invalid("BWA environment value is invalid.");
+      }
+      totalBytes += bytes;
+    }
+  }
+  if (totalBytes > 256 * 1024) {
+    throw invalid("BWA environment exceeds its size limit.");
+  }
+}
+
+function validateApplicationId(value: string): void {
+  if (!/^ghcr\.io\/[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._/-][a-z0-9]+)*$/.test(value)) {
+    throw invalid("BWA Application repository is invalid.");
+  }
+}
+
+function validateDigest(value: string): void {
+  if (!/^sha256:[0-9a-f]{64}$/.test(value)) {
+    throw invalid("OCI digest is invalid.");
+  }
+}
+
+function validateHttpsUrl(value: string): void {
+  if (Buffer.byteLength(value) > 2048) throw invalid("OCI source URL is invalid.");
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw invalid("OCI source URL is invalid.");
+  }
+  if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    throw invalid("OCI source URL is invalid.");
+  }
+}
+
+function validateBoundedText(
+  value: string,
+  label: string,
+  maximumBytes: number,
+  allowEmpty: boolean,
+): void {
+  if (
+    (!allowEmpty && value.length === 0) ||
+    value !== value.normalize("NFC") ||
+    Buffer.byteLength(value) > maximumBytes ||
+    hasUnsafeControl(value)
+  ) {
+    throw invalid(`${label} is invalid.`);
+  }
+}
+
+function hasUnsafeControl(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.codePointAt(0)!;
+    return (code >= 0 && code <= 8) || code === 11 || code === 12 ||
+      (code >= 14 && code <= 31) || code === 127;
+  });
 }
 
 function validateRef(input: CreateRefInput): void {

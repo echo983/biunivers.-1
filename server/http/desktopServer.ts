@@ -1882,9 +1882,14 @@ export function createDesktopServer({
           WORKSPACE_ALREADY_EXISTS: 409,
           WORKSPACE_NOT_FOUND: 404,
           WORKSPACE_ACTIVE: 409,
+          WORKSPACE_BOUND: 409,
           RUN_ALREADY_EXISTS: 409,
           RUN_NOT_FOUND: 404,
           RUN_STATE_CONFLICT: 409,
+          APPLICATION_ALREADY_EXISTS: 409,
+          APPLICATION_NOT_FOUND: 404,
+          INSTANCE_ALREADY_EXISTS: 409,
+          INSTANCE_NOT_FOUND: 404,
           INVALID_REF_VALUE: 400,
         }[error.code];
         response.status(status).json({

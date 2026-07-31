@@ -2,12 +2,14 @@ import type { SqliteRefStore } from "../files/sqliteRefStore.js";
 import type { WorkspaceCommitCoordinator } from "../workspaceCommit/workspaceCommitCoordinator.js";
 import type { ComputeRuntimeCoordinator } from "./computeRuntimeCoordinator.js";
 import type { RunDirectoryManager } from "./runDirectoryManager.js";
+import type { DockerImageAdapter } from "./dockerImageAdapter.js";
 
 export class ManagedComputeRuntime {
   readonly #runtime: ComputeRuntimeCoordinator;
   readonly #directories: RunDirectoryManager;
   readonly #refStore: SqliteRefStore;
   readonly #committer: WorkspaceCommitCoordinator;
+  readonly #images: Pick<DockerImageAdapter, "pullAndInspect" | "inspectInstalled">;
   readonly #now: () => number;
 
   constructor(options: {
@@ -15,12 +17,14 @@ export class ManagedComputeRuntime {
     directories: RunDirectoryManager;
     refStore: SqliteRefStore;
     committer: WorkspaceCommitCoordinator;
+    images: Pick<DockerImageAdapter, "pullAndInspect" | "inspectInstalled">;
     now?: () => number;
   }) {
     this.#runtime = options.runtime;
     this.#directories = options.directories;
     this.#refStore = options.refStore;
     this.#committer = options.committer;
+    this.#images = options.images;
     this.#now = options.now ?? Date.now;
   }
 
@@ -35,6 +39,14 @@ export class ManagedComputeRuntime {
       throw new Error("Runtime preparation does not match its control Run.");
     }
     return await this.#runtime.prepare(input);
+  }
+
+  async pullAndInspect(reference: string) {
+    return await this.#images.pullAndInspect(reference);
+  }
+
+  async inspectInstalled(imageReference: string) {
+    return await this.#images.inspectInstalled(imageReference);
   }
 
   async start(runIdHex: string) {

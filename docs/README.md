@@ -161,6 +161,9 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | 文档 | 状态 | 说明 |
 | --- | --- | --- |
 | [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 第三版概念已冻结 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
+| [V0.14 Registry、Image 与持久 Schema 局部设计](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 局部设计.md>) | 实现基线 | GHCR 镜像固定、Application/Instance Schema、Workspace 独占绑定和敏感变量边界 |
+| [V0.14 Registry、Image 与持久 Schema 规范评审](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 规范评审.md>) | 评审通过 | 第一施工切片的必要性、删减项、事务闭环和风险门禁 |
+| [V0.14 Workspace Application 施工计划](<浏览器云端个人桌面 V0.14 Workspace Application 施工计划.md>) | 施工中 | Registry/Image、Lifecycle、Proxy/UI 三段纵向闭环及 `v0.14.0` 合并门槛 |
 
 ## 第三方应用生态 V1：发布候选
 

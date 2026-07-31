@@ -18,6 +18,8 @@ describe("ComputeRuntimeServer", () => {
     const socketPath = join(root, "runtime.sock");
     const tokenHex = "11".repeat(32);
     const runtime = {
+      pullAndInspect: vi.fn().mockResolvedValue({ digest: "sha256:test" }),
+      inspectInstalled: vi.fn().mockResolvedValue({ digest: "sha256:test" }),
       prepare: vi.fn().mockResolvedValue({ state: "PREPARED" }),
       start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       inspect: vi.fn().mockResolvedValue({ manifest: { state: "RUNNING" } }),
@@ -49,6 +51,24 @@ describe("ComputeRuntimeServer", () => {
     });
     expect(prepared).toEqual({ ok: true, result: { state: "PREPARED" } });
     expect(runtime.prepare).toHaveBeenCalledOnce();
+
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "pullAndInspect",
+        reference: "ghcr.io/echo983/probe:latest",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(runtime.pullAndInspect).toHaveBeenCalledWith(
+      "ghcr.io/echo983/probe:latest",
+    );
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "inspectInstalled",
+        imageReference: `ghcr.io/echo983/probe@sha256:${"a".repeat(64)}`,
+      }),
+    ).toMatchObject({ ok: true });
 
     expect(
       await exchange(socketPath, {
@@ -125,6 +145,8 @@ describe("ComputeRuntimeServer", () => {
     const socketPath = join(root, "runtime.sock");
     await writeFile(socketPath, "preserve me");
     const runtime = {
+      pullAndInspect: vi.fn(),
+      inspectInstalled: vi.fn(),
       prepare: vi.fn(),
       start: vi.fn(),
       inspect: vi.fn(),

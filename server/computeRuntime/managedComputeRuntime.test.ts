@@ -108,6 +108,10 @@ function createManaged(
     directories: directories as unknown as RunDirectoryManager,
     refStore: refStore as unknown as SqliteRefStore,
     committer: committer as unknown as WorkspaceCommitCoordinator,
+    images: {
+      pullAndInspect: vi.fn(),
+      inspectInstalled: vi.fn(),
+    },
     now: () => 200,
   });
 }

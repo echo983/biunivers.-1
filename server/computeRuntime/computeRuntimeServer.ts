@@ -12,6 +12,8 @@ type RuntimeExecutor = Pick<
   "prepare" | "start" | "inspect" | "freeze" | "thaw" | "stop" | "destroy"
 > & {
   commit(runIdHex: string): Promise<unknown>;
+  pullAndInspect(reference: string): Promise<unknown>;
+  inspectInstalled(imageReference: string): Promise<unknown>;
 };
 
 export class ComputeRuntimeServer {
@@ -99,7 +101,11 @@ export class ComputeRuntimeServer {
         throw new Error("Runtime authentication failed.");
       }
       let result: unknown;
-      if (request.operation === "prepare") {
+      if (request.operation === "pullAndInspect") {
+        result = await this.#runtime.pullAndInspect(request.reference);
+      } else if (request.operation === "inspectInstalled") {
+        result = await this.#runtime.inspectInstalled(request.imageReference);
+      } else if (request.operation === "prepare") {
         result = await this.#runtime.prepare(request.input);
       } else if (request.operation === "start") {
         result = await this.#runtime.start(request.runIdHex);
@@ -132,6 +138,16 @@ export class ComputeRuntimeServer {
 }
 
 type RuntimeRequest =
+  | {
+      tokenHex: string;
+      operation: "pullAndInspect";
+      reference: string;
+    }
+  | {
+      tokenHex: string;
+      operation: "inspectInstalled";
+      imageReference: string;
+    }
   | {
       tokenHex: string;
       operation: "prepare";
@@ -170,6 +186,16 @@ function parseRequest(value: unknown): RuntimeRequest {
     !TOKEN_PATTERN.test(request.tokenHex)
   ) {
     throw invalidRequest();
+  }
+  if (request.operation === "pullAndInspect") {
+    requireExactKeys(request, ["tokenHex", "operation", "reference"]);
+    if (typeof request.reference !== "string") throw invalidRequest();
+    return request as RuntimeRequest;
+  }
+  if (request.operation === "inspectInstalled") {
+    requireExactKeys(request, ["tokenHex", "operation", "imageReference"]);
+    if (typeof request.imageReference !== "string") throw invalidRequest();
+    return request as RuntimeRequest;
   }
   if (request.operation === "prepare") {
     requireExactKeys(request, ["tokenHex", "operation", "input"]);
