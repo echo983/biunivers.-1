@@ -174,6 +174,25 @@ curl -X POST \
 详细恢复步骤与内容校验命令见
 [`File Service RefStore 备份与恢复`](<docs/runbooks/File Service RefStore 备份恢复.md>)。
 
+### Workspace Application 产品测试
+
+BWA 需要宿主 Docker、FUSE 和同路径 Workspace mount。第一版让 Compute Runtime 运行在
+Linux 宿主，Desktop/Manager 仍运行在无 Docker socket、无 privileged 权限的容器中：
+
+```bash
+bash scripts/run-bwa-product-test.sh
+```
+
+停止并受控提交运行中的 BWA：
+
+```bash
+bash scripts/stop-bwa-product-test.sh
+```
+
+脚本默认使用已忽略的 `secret/bwa-product-data`，并在首次运行时从现有测试 Host 的一致性
+RefStore 备份建立本地数据根。详细拓扑、前置依赖和故障处理见
+[`BWA Host 与 Compute Runtime 部署`](<docs/runbooks/BWA Host 与 Compute Runtime 部署.md>)。
+
 公网部署必须为两个 origin 分配不同的主机名。例如 Nginx：
 
 ```nginx

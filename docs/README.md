@@ -171,6 +171,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.14 Runtime Proxy、网络与 iframe 局部设计](<浏览器云端个人桌面 V0.14 Runtime Proxy、网络与 iframe 局部设计.md>) | 实现基线 | 稳定 Instance origin、bootstrap 会话、bridge endpoint、HTTP/WebSocket 代理和宿主故障页 |
 | [V0.14 Runtime Proxy、网络与 iframe 规范评审](<浏览器云端个人桌面 V0.14 Runtime Proxy、网络与 iframe 规范评审.md>) | 评审通过 | 必要性、身份授权闭环、网络边界、删减项、风险与第一施工门 |
 | [Biunivers Workspace Application Protocol v1](<protocols/Biunivers Workspace Application Protocol v1.md>) | V1 冻结候选 | OCI label、8080 HTTP UI、健康检查、iframe、Workspace 持久性和权限边界 |
+| [BWA Host 与 Compute Runtime 部署](<runbooks/BWA Host 与 Compute Runtime 部署.md>) | 当前运行手册 | 宿主 Runtime、容器 Host、同路径 bind 数据根、Unix socket、启动停止和故障检查 |
 
 ## 第三方应用生态 V1：发布候选
 
