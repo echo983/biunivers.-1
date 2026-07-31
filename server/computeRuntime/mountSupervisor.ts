@@ -11,6 +11,7 @@ export interface ManagedProcess {
   readonly pid: number;
   readonly exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
   terminate(signal: NodeJS.Signals): void;
+  diagnostic?(): string;
 }
 
 export interface CommandLauncher {
@@ -193,11 +194,17 @@ export class MountSupervisor {
     const deadline = Date.now() + this.#mountTimeoutMs;
     while (Date.now() < deadline) {
       if (await this.#mounts.isMounted(path)) return;
-      const exited = await Promise.race([
-        process.exited.then(() => true),
-        delay(this.#pollIntervalMs).then(() => false),
+      const outcome = await Promise.race([
+        process.exited.then((result) => ({ exited: true as const, result })),
+        delay(this.#pollIntervalMs).then(() => ({ exited: false as const })),
       ]);
-      if (exited) throw new Error("Mount process exited before readiness.");
+      if (outcome.exited) {
+        const diagnostic = process.diagnostic?.().trim();
+        throw new Error(
+          `Mount process exited before readiness (code ${outcome.result.code ?? "signal"})` +
+            (diagnostic ? `: ${diagnostic}` : "."),
+        );
+      }
     }
     throw new Error("Mount readiness timed out.");
   }
@@ -237,7 +244,13 @@ export class MountSupervisor {
 export class SystemCommandLauncher implements CommandLauncher {
   start(executable: string, arguments_: readonly string[]): ManagedProcess {
     const child = spawn(executable, [...arguments_], {
-      stdio: ["ignore", "ignore", "ignore"],
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let diagnostic = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      if (diagnostic.length < 4_096) {
+        diagnostic += chunk.toString("utf8").slice(0, 4_096 - diagnostic.length);
+      }
     });
     if (!child.pid) throw new Error("Mount process did not receive a PID.");
     const exited = new Promise<{
@@ -251,6 +264,7 @@ export class SystemCommandLauncher implements CommandLauncher {
       pid: child.pid,
       exited,
       terminate: (signal) => child.kill(signal),
+      diagnostic: () => diagnostic,
     };
   }
 }

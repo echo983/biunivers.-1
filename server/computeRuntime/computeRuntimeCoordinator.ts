@@ -150,6 +150,10 @@ export class ComputeRuntimeCoordinator {
       this.#activeRunIds.add(input.runIdHex);
       return manifest;
     } catch (error) {
+      console.error(
+        `Compute Runtime could not prepare mounts for Run ${input.runIdHex}: ` +
+          (error instanceof Error ? error.message : "unknown mount error"),
+      );
       this.#activeRunIds.delete(input.runIdHex);
       await this.#releasePreparedResources(input.runIdHex);
       await this.#markFailed(input.runIdHex, "PREPARE_FAILED");
