@@ -14,7 +14,8 @@ export function AboutApp() {
         一个部署在个人服务器上、通过浏览器访问的轻量个人桌面。
         当前版本已具备自由布局桌面、窗口、原子批量文件操作、目录 ZIP 导出、
         Wormhole 文件交换、固定快照 Workspace、隔离计算与 COW 提交、
-        变更审阅和原子导回，以及 Open Resource v1.1 多资源交付与第三方静态应用闭环。
+        变更审阅和原子导回、Workspace Application 容器应用与平行状态，
+        以及 Open Resource v1.1 多资源交付与第三方静态应用闭环。
       </p>
       <dl>
         <div>
@@ -30,11 +31,11 @@ export function AboutApp() {
         </div>
         <div>
           <dt>工作空间</dt>
-          <dd>PVLogFS · 隔离 Run · COW 提交 · Diff · 原子导回</dd>
+          <dd>PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 原子导回</dd>
         </div>
         <div>
           <dt>应用</dt>
-          <dd>Static App v1 · Open Resource v1/v1.1</dd>
+          <dd>Static App v1 · Workspace Application v1 · Open Resource v1/v1.1</dd>
         </div>
         <div>
           <dt>窗口</dt>

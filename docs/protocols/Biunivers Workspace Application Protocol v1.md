@@ -1,6 +1,6 @@
 # Biunivers Workspace Application Protocol v1
 
-状态：V1 冻结候选
+状态：V1 已冻结
 
 协议标识：`io.biunivers.workspace-application.protocol=1`
 
@@ -151,4 +151,3 @@ V1 不定义：
 - 自动提交、自动合并异常 Upper 或透明内存恢复。
 
 这些能力如确有必要，应通过独立、版本化且可审查的扩展增加，不修改已冻结的 V1 语义。
-
