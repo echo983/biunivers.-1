@@ -19,7 +19,7 @@ describe("buildBwaDockerOciPlan", () => {
     });
     expect(BWA_EXECUTOR_ID).toBe("bwa.workspace-application.v1");
     expect(plan.createArguments).toContain("65532:65532");
-    expect(plan.createArguments).toContain("none");
+    expect(plan.createArguments).toContain("biunivers-bwa");
     expect(plan.createArguments).toContain("ALL");
     expect(plan.createArguments).toContain("MODE=safe");
     expect(plan.createArguments).toContain("API_TOKEN=secret-test-value");

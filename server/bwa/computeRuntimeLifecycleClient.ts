@@ -15,6 +15,7 @@ export interface BwaRuntimeClient {
   }): Promise<unknown>;
   start(runIdHex: string): Promise<unknown>;
   inspect(runIdHex: string): Promise<unknown>;
+  resolveBwaEndpoint(runIdHex: string): Promise<unknown>;
   stop(runIdHex: string): Promise<unknown>;
   finalizeExited(runIdHex: string): Promise<unknown>;
   reopenFailed(runIdHex: string): Promise<unknown>;
@@ -44,6 +45,10 @@ export class ComputeRuntimeLifecycleClient implements BwaRuntimeClient {
 
   async inspect(runIdHex: string) {
     return await this.#run("inspect", runIdHex);
+  }
+
+  async resolveBwaEndpoint(runIdHex: string) {
+    return await this.#run("resolveBwaEndpoint", runIdHex);
   }
 
   async stop(runIdHex: string) {
@@ -78,7 +83,8 @@ export class ComputeRuntimeLifecycleClient implements BwaRuntimeClient {
       | "stop"
       | "commit"
       | "finalizeExited"
-      | "reopenFailed",
+      | "reopenFailed"
+      | "resolveBwaEndpoint",
     runIdHex: string,
   ) {
     return await this.#exchange({ tokenHex: this.#tokenHex, operation, runIdHex });

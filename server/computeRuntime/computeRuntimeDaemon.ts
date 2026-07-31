@@ -24,6 +24,7 @@ import { RunDirectoryManager } from "./runDirectoryManager.js";
 import { BwaHostRecovery } from "../bwa/bwaHostRecovery.js";
 import { BwaControlledShutdown } from "../bwa/bwaControlledShutdown.js";
 import { BwaLifecycleService } from "../bwa/bwaLifecycleService.js";
+import { DockerBwaNetworkAdapter } from "./dockerBwaNetworkAdapter.js";
 
 export interface ComputeRuntimeDaemon {
   readonly socketPath: string;
@@ -97,6 +98,8 @@ export async function startComputeRuntimeDaemon(options: {
         cache,
       }),
     });
+    const bwaNetwork = new DockerBwaNetworkAdapter();
+    await bwaNetwork.ensure();
     const coordinator = new ComputeRuntimeCoordinator({
       directories,
       executors: new ExecutorRegistry(options.runtimeConfig.executors),
@@ -105,6 +108,7 @@ export async function startComputeRuntimeDaemon(options: {
       }),
       oci: new DockerOciAdapter(),
       snapshots,
+      bwaEndpoints: bwaNetwork,
     });
     const maximumUpperBytes = Math.max(
       ...options.runtimeConfig.executors.map(

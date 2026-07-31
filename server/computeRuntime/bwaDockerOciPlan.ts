@@ -1,6 +1,7 @@
 import { basename, resolve } from "node:path";
 import type { DockerOciPlan } from "./dockerOciPlan.js";
 import { parseInstalledReference } from "./dockerImageAdapter.js";
+import { BWA_DOCKER_NETWORK } from "./dockerBwaNetworkAdapter.js";
 
 const RUN_ID_PATTERN = /^[0-9a-f]{32}$/;
 const ENVIRONMENT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
@@ -66,7 +67,7 @@ export function buildBwaDockerOciPlan(input: {
       "--name",
       containerName,
       "--network",
-      "none",
+      BWA_DOCKER_NETWORK,
       "--read-only",
       "--cap-drop",
       "ALL",

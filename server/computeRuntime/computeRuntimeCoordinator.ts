@@ -14,6 +14,10 @@ import {
   BWA_EXECUTOR_ID,
   type BwaLaunchSpec,
 } from "./bwaDockerOciPlan.js";
+import type {
+  BwaRuntimeEndpoint,
+  DockerBwaNetworkAdapter,
+} from "./dockerBwaNetworkAdapter.js";
 import {
   RunDirectoryManager,
   type RunPaths,
@@ -42,6 +46,7 @@ type OciExecutor = Pick<
   DockerOciAdapter,
   "create" | "start" | "freeze" | "thaw" | "inspect" | "stop" | "remove"
 >;
+type BwaEndpointResolver = Pick<DockerBwaNetworkAdapter, "resolve">;
 
 export class ComputeRuntimeCoordinator {
   readonly #directories: RunDirectoryManager;
@@ -49,6 +54,7 @@ export class ComputeRuntimeCoordinator {
   readonly #mounts: MountExecutor;
   readonly #oci: OciExecutor;
   readonly #snapshots: SnapshotProvisioner;
+  readonly #bwaEndpoints?: BwaEndpointResolver;
   readonly #activeRunIds = new Set<string>();
   readonly #bwaLaunches = new Map<string, BwaLaunchSpec>();
 
@@ -58,12 +64,14 @@ export class ComputeRuntimeCoordinator {
     mounts: MountExecutor;
     oci: OciExecutor;
     snapshots: SnapshotProvisioner;
+    bwaEndpoints?: BwaEndpointResolver;
   }) {
     this.#directories = options.directories;
     this.#executors = options.executors;
     this.#mounts = options.mounts;
     this.#oci = options.oci;
     this.#snapshots = options.snapshots;
+    this.#bwaEndpoints = options.bwaEndpoints;
   }
 
   async prepare(input: {
@@ -189,6 +197,22 @@ export class ComputeRuntimeCoordinator {
       manifest,
       container: await this.#oci.inspect(plan, limits),
     };
+  }
+
+  async resolveBwaEndpoint(runIdHex: string): Promise<BwaRuntimeEndpoint> {
+    if (!this.#bwaEndpoints) throw new Error("BWA endpoint resolution is unavailable.");
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (
+      manifest.executorId !== BWA_EXECUTOR_ID ||
+      manifest.state !== "RUNNING" ||
+      !manifest.runtimeIdentity
+    ) {
+      throw new Error("Only a running BWA Run has a proxy endpoint.");
+    }
+    return await this.#bwaEndpoints.resolve(
+      `biunivers-run-${runIdHex}`,
+      manifest.runtimeIdentity,
+    );
   }
 
   async freeze(runIdHex: string): Promise<RuntimeManifest> {

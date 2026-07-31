@@ -19,6 +19,7 @@ type RuntimeExecutor = Pick<
   | "destroy"
   | "finalizeExited"
   | "reopenFailed"
+  | "resolveBwaEndpoint"
 > & {
   commit(runIdHex: string): Promise<unknown>;
   pullAndInspect(reference: string): Promise<unknown>;
@@ -137,6 +138,8 @@ export class ComputeRuntimeServer {
         result = await this.#runtime.finalizeExited(request.runIdHex);
       } else if (request.operation === "reopenFailed") {
         result = await this.#runtime.reopenFailed(request.runIdHex);
+      } else if (request.operation === "resolveBwaEndpoint") {
+        result = await this.#runtime.resolveBwaEndpoint(request.runIdHex);
       } else {
         result = await this.#runtime.stop(request.runIdHex);
       }
@@ -198,7 +201,8 @@ type RuntimeRequest =
         | "stop"
         | "commit"
         | "finalizeExited"
-        | "reopenFailed";
+        | "reopenFailed"
+        | "resolveBwaEndpoint";
       runIdHex: string;
     }
   | {
@@ -329,6 +333,7 @@ function parseRequest(value: unknown): RuntimeRequest {
       "commit",
       "finalizeExited",
       "reopenFailed",
+      "resolveBwaEndpoint",
     ].includes(
       request.operation as string,
     ) ||

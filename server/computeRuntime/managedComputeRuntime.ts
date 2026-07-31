@@ -89,6 +89,24 @@ export class ManagedComputeRuntime {
     return await this.#runtime.inspect(runIdHex);
   }
 
+  async resolveBwaEndpoint(runIdHex: string) {
+    const run = this.#refStore.getWorkspaceRun(runIdHex);
+    if (run.state !== "RUNNING" || run.executorId !== "bwa.workspace-application.v1") {
+      throw new Error("Control Run is not an active BWA.");
+    }
+    const binding = this.#refStore.getBwaRunBinding(runIdHex);
+    const instance = this.#refStore.getBwaInstance(binding.instanceIdHex);
+    const application = this.#refStore.getBwaApplication(instance.applicationId);
+    if (binding.executorDigest !== application.installedDigest) {
+      throw new Error("Active BWA Run no longer matches its Application digest.");
+    }
+    const endpoint = await this.#runtime.resolveBwaEndpoint(runIdHex);
+    if (endpoint.runtimeIdentity !== run.runtimeIdentity) {
+      throw new Error("BWA endpoint does not match its control Runtime identity.");
+    }
+    return endpoint;
+  }
+
   async freeze(runIdHex: string) {
     return await this.#runtime.freeze(runIdHex);
   }

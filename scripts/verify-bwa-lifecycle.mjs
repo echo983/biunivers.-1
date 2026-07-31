@@ -39,17 +39,28 @@ try {
     secrets,
     images: imageClient,
   });
+  const runtimeClient = new ComputeRuntimeLifecycleClient({
+    socketPath,
+    authenticationTokenHex: tokenHex,
+  });
   const lifecycle = new BwaLifecycleService({
     refStore: fileRuntime.refStore,
     environment: registry,
-    runtime: new ComputeRuntimeLifecycleClient({
-      socketPath,
-      authenticationTokenHex: tokenHex,
-    }),
+    runtime: runtimeClient,
   });
 
   const first = await lifecycle.start(fixture.instanceIdHex);
   await assertManifestHasNoSecret(runRoot, first.runIdHex);
+  const endpoint = await runtimeClient.resolveBwaEndpoint(first.runIdHex);
+  if (
+    !endpoint ||
+    typeof endpoint !== "object" ||
+    endpoint.port !== 8080 ||
+    typeof endpoint.address !== "string" ||
+    !(await endpointBecomesHealthy(endpoint.address))
+  ) {
+    throw new Error("BWA private bridge endpoint is not reachable from the host.");
+  }
   const incremented = await containerFetch(first.runIdHex, "/api/increment", "POST");
   if (incremented.count !== 1) throw new Error("Diagnostic BWA did not write count=1.");
   const second = await lifecycle.saveAndRestart(fixture.instanceIdHex);
@@ -121,6 +132,22 @@ async function containerFetch(runIdHex, path, method) {
     }
   }
   throw new Error("Diagnostic BWA HTTP service did not become ready.", { cause: lastError });
+}
+
+async function endpointBecomesHealthy(address) {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`http://${address}:8080/health`, {
+        signal: AbortSignal.timeout(1_000),
+      });
+      if (response.ok) return true;
+    } catch {
+      // Container start and HTTP readiness are distinct lifecycle states.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return false;
 }
 
 async function assertManifestHasNoSecret(root, runIdHex) {
