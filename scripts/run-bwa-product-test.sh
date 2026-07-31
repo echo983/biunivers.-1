@@ -86,6 +86,12 @@ echo "构建 Host、Runtime 二进制和诊断镜像……"
 PATH="$(dirname "$NODE_BIN"):$PATH" npm run build:server >/dev/null
 "$CARGO_BIN" build --release --manifest-path crates/pvlogfs/Cargo.toml >/dev/null
 "$CARGO_BIN" build --release --manifest-path crates/workspace-cow/Cargo.toml >/dev/null
+PVLOGFS_BINARY="$PWD/crates/pvlogfs/target/release/biunivers-pvlogfs"
+COW_SCANNER_BINARY="$PWD/crates/workspace-cow/target/release/biunivers-workspace-cow-scan"
+if [[ ! -x "$PVLOGFS_BINARY" ]] || [[ ! -x "$COW_SCANNER_BINARY" ]]; then
+  echo "Runtime 二进制构建产物缺失。" >&2
+  exit 1
+fi
 docker build --quiet --tag "$IMAGE_NAME" . >/dev/null
 docker build --quiet --tag biunivers-runtime-diagnostic:dev runtime/diagnostic >/dev/null
 DIAGNOSTIC_IMAGE_ID="$(docker image inspect --format '{{.Id}}' biunivers-runtime-diagnostic:dev)"
@@ -97,8 +103,8 @@ export BIUNIVERS_RUNTIME_ROOT="$RUNTIME_DIR/runs"
 export BIUNIVERS_RUNTIME_CACHE="$RUNTIME_DIR/chunk-cache"
 export BIUNIVERS_RUNTIME_SOCKET="$SOCKET_PATH"
 export BIUNIVERS_RUNTIME_AUTH_TOKEN="$TOKEN_HEX"
-export BIUNIVERS_PVLOGFS_BINARY="$PWD/target/release/biunivers-pvlogfs"
-export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$PWD/target/release/biunivers-workspace-cow-scan"
+export BIUNIVERS_PVLOGFS_BINARY="$PVLOGFS_BINARY"
+export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$COW_SCANNER_BINARY"
 export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE="$DIAGNOSTIC_IMAGE_ID"
 
 echo "启动宿主 Compute Runtime……"
