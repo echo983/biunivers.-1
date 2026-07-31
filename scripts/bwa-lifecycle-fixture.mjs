@@ -80,8 +80,8 @@ try {
     const runs = runtime.refStore.listBwaRunBindings(fixture.instanceIdHex);
     if (
       instance.desiredState !== "STOPPED" ||
-      ref.revision !== 1 ||
-      runs.length !== 2 ||
+      ref.revision !== 2 ||
+      runs.length !== 4 ||
       runs.some(({ run }) => run.state !== "COMMITTED")
     ) {
       throw new Error("BWA lifecycle committed state is invalid.");

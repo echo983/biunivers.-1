@@ -108,6 +108,31 @@ export class ManagedComputeRuntime {
     return manifest;
   }
 
+  async finalizeExited(runIdHex: string) {
+    const manifest = await this.#runtime.finalizeExited(runIdHex);
+    if (manifest.state === "STOPPED") {
+      this.#refStore.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "RUNNING",
+        newState: "STOPPED",
+        timestampMs: this.#timestamp(),
+      });
+    } else {
+      this.#refStore.transitionWorkspaceRun({
+        runIdHex,
+        expectedState: "RUNNING",
+        newState: "FAILED",
+        errorCode: manifest.errorCode ?? "CONTAINER_EXIT_FAILED",
+        timestampMs: this.#timestamp(),
+      });
+    }
+    return manifest;
+  }
+
+  async reopenFailed(runIdHex: string) {
+    return await this.#runtime.reopenFailed(runIdHex);
+  }
+
   async commit(runIdHex: string) {
     const manifest = await this.#directories.inspect(runIdHex);
     if (manifest.state !== "STOPPED") {

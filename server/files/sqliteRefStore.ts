@@ -885,6 +885,66 @@ export class SqliteRefStore {
     })();
   }
 
+  reopenFailedWorkspaceRun(runIdHex: string, timestampMs: number): WorkspaceRunRecord {
+    validateId(runIdHex, "Run ID");
+    validateTimestamp(timestampMs);
+    return this.#database.transaction(() => {
+      const run = this.getWorkspaceRun(runIdHex);
+      if (run.state !== "FAILED") {
+        throw new RefStoreError("RUN_STATE_CONFLICT", "Only a FAILED Run can be reopened.");
+      }
+      const workspace = this.getWorkspace(run.workspaceIdHex);
+      const ref = this.getRef(workspace.refId);
+      if (
+        workspace.activeWriteRunIdHex !== null ||
+        ref.headFidHex !== run.inputHeadFidHex
+      ) {
+        throw new RefStoreError(
+          "REF_CONFLICT",
+          "Failed Run input is no longer the current Workspace Head.",
+        );
+      }
+      const leased = this.#database.prepare(
+        `UPDATE workspace_records
+         SET active_write_run_id = ?, updated_at_ms = ?
+         WHERE workspace_id = ? AND active_write_run_id IS NULL`,
+      ).run(fromHex(runIdHex), timestampMs, fromHex(run.workspaceIdHex));
+      if (leased.changes !== 1) {
+        throw new RefStoreError("WORKSPACE_ACTIVE", "Workspace write lease is unavailable.");
+      }
+      const reopened = this.#database.prepare(
+        `UPDATE workspace_runs
+         SET state = 'STOPPED', error_code = NULL, finished_at_ms = NULL
+         WHERE run_id = ? AND state = 'FAILED'`,
+      ).run(fromHex(runIdHex));
+      if (reopened.changes !== 1) {
+        throw new RefStoreError("RUN_STATE_CONFLICT", "Failed Run changed before reopening.");
+      }
+      return this.getWorkspaceRun(runIdHex);
+    })();
+  }
+
+  discardFailedWorkspaceRun(runIdHex: string, timestampMs: number): WorkspaceRunRecord {
+    validateId(runIdHex, "Run ID");
+    validateTimestamp(timestampMs);
+    return this.#database.transaction(() => {
+      const run = this.getWorkspaceRun(runIdHex);
+      if (run.state !== "FAILED") {
+        throw new RefStoreError("RUN_STATE_CONFLICT", "Only a FAILED Run can be discarded.");
+      }
+      const workspace = this.getWorkspace(run.workspaceIdHex);
+      if (workspace.activeWriteRunIdHex !== null) {
+        throw new RefStoreError("WORKSPACE_ACTIVE", "Workspace has an active write Run.");
+      }
+      this.#database.prepare(
+        `UPDATE workspace_runs
+         SET state = 'DISCARDED', error_code = NULL, finished_at_ms = ?
+         WHERE run_id = ? AND state = 'FAILED'`,
+      ).run(timestampMs, fromHex(runIdHex));
+      return this.getWorkspaceRun(runIdHex);
+    })();
+  }
+
   commitWorkspaceRun(
     input: CommitWorkspaceRunInput,
   ): CommitWorkspaceRunResult {

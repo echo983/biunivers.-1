@@ -263,6 +263,46 @@ export class ComputeRuntimeCoordinator {
     }
   }
 
+  async finalizeExited(runIdHex: string): Promise<RuntimeManifest> {
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (manifest.state !== "RUNNING" && manifest.state !== "FROZEN") {
+      throw new Error("Only an active local Run can finalize an exited container.");
+    }
+    const { plan, limits } = this.#execution(manifest);
+    const state = await this.#oci.inspect(plan, limits);
+    if (state.running || state.paused || state.restarting) {
+      throw new Error("Run container has not exited.");
+    }
+    const normal = state.exitCode === 0 && !state.oomKilled && !state.dead;
+    try {
+      await this.#oci.remove(plan, limits);
+      await this.#releasePreparedResources(runIdHex);
+      const finalized = await this.#directories.transition({
+        runIdHex,
+        expectedState: manifest.state,
+        newState: normal ? "STOPPED" : "FAILED",
+        ...(normal
+          ? {}
+          : { errorCode: state.oomKilled ? "CONTAINER_OOM" : "CONTAINER_EXIT_FAILED" }),
+      });
+      this.#activeRunIds.delete(runIdHex);
+      this.#bwaLaunches.delete(runIdHex);
+      return finalized;
+    } catch (error) {
+      await this.#markFailed(runIdHex, "EXIT_FINALIZE_FAILED");
+      throw error;
+    }
+  }
+
+  async reopenFailed(runIdHex: string): Promise<RuntimeManifest> {
+    return await this.#directories.transition({
+      runIdHex,
+      expectedState: "FAILED",
+      newState: "STOPPED",
+      errorCode: null,
+    });
+  }
+
   async destroy(runIdHex: string, preserveUpper: boolean): Promise<void> {
     if (typeof preserveUpper !== "boolean") {
       throw new Error("Destroy requires an explicit Upper preservation policy.");

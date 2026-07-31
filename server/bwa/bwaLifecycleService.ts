@@ -17,7 +17,9 @@ export class BwaLifecycleError extends Error {
       | "INSTANCE_LIFECYCLE_CONFLICT"
       | "RUNTIME_START_FAILED"
       | "RUNTIME_STOP_FAILED"
-      | "RUNTIME_COMMIT_FAILED",
+      | "RUNTIME_COMMIT_FAILED"
+      | "FAILED_RUN_REQUIRED"
+      | "FAILED_RUN_DISCARD_FAILED",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -132,6 +134,75 @@ export class BwaLifecycleService {
     });
   }
 
+  async finalizeExited(instanceIdHex: string): Promise<WorkspaceRunRecord> {
+    return await this.#exclusive(instanceIdHex, async () => {
+      const active = this.#activeRun(instanceIdHex);
+      if (!active || active.state !== "RUNNING") {
+        throw new BwaLifecycleError("INSTANCE_NOT_RUNNING", "BWA Instance is not running.");
+      }
+      this.#refStore.setBwaRunStopReason(active.runIdHex, "EXITED");
+      this.#refStore.setBwaInstanceDesiredState(instanceIdHex, "STOPPED", this.#timestamp());
+      await this.#runtime.finalizeExited(active.runIdHex);
+      const finalized = this.#refStore.getWorkspaceRun(active.runIdHex);
+      if (finalized.state === "FAILED") return finalized;
+      try {
+        await this.#runtime.commit(active.runIdHex);
+      } catch (error) {
+        throw new BwaLifecycleError(
+          "RUNTIME_COMMIT_FAILED",
+          "Normally exited BWA changes could not be committed.",
+          { cause: error },
+        );
+      }
+      await this.#runtime.destroy(active.runIdHex, false);
+      return this.#refStore.getWorkspaceRun(active.runIdHex);
+    });
+  }
+
+  async publishFailedUpper(instanceIdHex: string, runIdHex: string): Promise<WorkspaceRunRecord> {
+    return await this.#exclusive(instanceIdHex, async () => {
+      this.#requireFailedRun(instanceIdHex, runIdHex);
+      this.#refStore.reopenFailedWorkspaceRun(runIdHex, this.#timestamp());
+      try {
+        await this.#runtime.reopenFailed(runIdHex);
+      } catch (error) {
+        this.#failRunIfActive(runIdHex, "FAILED_UPPER_REOPEN_FAILED");
+        throw new BwaLifecycleError(
+          "RUNTIME_COMMIT_FAILED",
+          "Failed BWA Upper could not be prepared for commit.",
+          { cause: error },
+        );
+      }
+      try {
+        await this.#runtime.commit(runIdHex);
+      } catch (error) {
+        throw new BwaLifecycleError(
+          "RUNTIME_COMMIT_FAILED",
+          "Failed BWA Upper could not be committed.",
+          { cause: error },
+        );
+      }
+      await this.#runtime.destroy(runIdHex, false);
+      return this.#refStore.getWorkspaceRun(runIdHex);
+    });
+  }
+
+  async discardFailedUpper(instanceIdHex: string, runIdHex: string): Promise<WorkspaceRunRecord> {
+    return await this.#exclusive(instanceIdHex, async () => {
+      this.#requireFailedRun(instanceIdHex, runIdHex);
+      try {
+        await this.#runtime.destroy(runIdHex, false);
+      } catch (error) {
+        throw new BwaLifecycleError(
+          "FAILED_RUN_DISCARD_FAILED",
+          "Failed BWA Upper could not be deleted.",
+          { cause: error },
+        );
+      }
+      return this.#refStore.discardFailedWorkspaceRun(runIdHex, this.#timestamp());
+    });
+  }
+
   #activeRun(instanceIdHex: string): WorkspaceRunRecord | undefined {
     const active = this.#refStore
       .listBwaRunBindings(instanceIdHex)
@@ -144,6 +215,16 @@ export class BwaLifecycleService {
       );
     }
     return active[0];
+  }
+
+  #requireFailedRun(instanceIdHex: string, runIdHex: string): WorkspaceRunRecord {
+    const item = this.#refStore
+      .listBwaRunBindings(instanceIdHex)
+      .find(({ run }) => run.runIdHex === runIdHex);
+    if (!item || item.run.state !== "FAILED") {
+      throw new BwaLifecycleError("FAILED_RUN_REQUIRED", "A FAILED BWA Run is required.");
+    }
+    return item.run;
   }
 
   #failRunIfActive(runIdHex: string, errorCode: string): void {

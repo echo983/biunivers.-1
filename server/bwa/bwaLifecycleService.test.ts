@@ -119,7 +119,114 @@ describe("BwaLifecycleService", () => {
     });
     source.store.close();
   });
+
+  it("keeps an abnormal exited Upper blocked until it is explicitly discarded", async () => {
+    const source = await setup();
+    const runtime = runtimeForStartedRun(source, {
+      finalizeExited: async (id: string) => {
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "RUNNING",
+          newState: "FAILED",
+          errorCode: "CONTAINER_EXIT_FAILED",
+          timestampMs: source.tick(),
+        });
+      },
+    });
+    const lifecycle = lifecycleFor(source, runtime);
+
+    await lifecycle.start(instanceIdHex);
+    expect(await lifecycle.finalizeExited(instanceIdHex)).toMatchObject({
+      state: "FAILED",
+      errorCode: "CONTAINER_EXIT_FAILED",
+    });
+    await expect(lifecycle.start(instanceIdHex)).rejects.toMatchObject({
+      code: "INSTANCE_RUN_BLOCKED",
+    });
+    expect(await lifecycle.discardFailedUpper(instanceIdHex, runIdHex)).toMatchObject({
+      state: "DISCARDED",
+    });
+    expect(runtime.destroy).toHaveBeenCalledWith(runIdHex, false);
+    source.store.close();
+  });
+
+  it("reacquires the lease and publishes an explicitly accepted failed Upper", async () => {
+    const source = await setup();
+    const runtime = runtimeForStartedRun(source, {
+      finalizeExited: async (id: string) => {
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "RUNNING",
+          newState: "FAILED",
+          errorCode: "CONTAINER_EXIT_FAILED",
+          timestampMs: source.tick(),
+        });
+      },
+      commit: async (id: string) => {
+        source.store.transitionWorkspaceRun({
+          runIdHex: id,
+          expectedState: "STOPPED",
+          newState: "COMMITTING",
+          timestampMs: source.tick(),
+        });
+        const ref = source.store.getRef(`ws-${workspaceIdHex}`);
+        source.store.completeUnchangedWorkspaceRun({
+          runIdHex: id,
+          expectedHeadFidHex: ref.headFidHex,
+          expectedRevision: ref.revision,
+          timestampMs: source.tick(),
+        });
+      },
+    });
+    const lifecycle = lifecycleFor(source, runtime);
+
+    await lifecycle.start(instanceIdHex);
+    await lifecycle.finalizeExited(instanceIdHex);
+    expect(await lifecycle.publishFailedUpper(instanceIdHex, runIdHex)).toMatchObject({
+      state: "COMMITTED",
+    });
+    expect(source.store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    expect(runtime.reopenFailed).toHaveBeenCalledWith(runIdHex);
+    source.store.close();
+  });
 });
+
+function lifecycleFor(source: Awaited<ReturnType<typeof setup>>, runtime: ReturnType<typeof runtimeForStartedRun>) {
+  return new BwaLifecycleService({
+    refStore: source.store,
+    environment: { resolveEnvironment: vi.fn().mockResolvedValue({}) },
+    runtime,
+    now: source.tick,
+    randomId: (bytes) =>
+      bytes === 16 ? Buffer.from(runIdHex, "hex") : Buffer.alloc(bytes, 0x55),
+  });
+}
+
+function runtimeForStartedRun(
+  source: Awaited<ReturnType<typeof setup>>,
+  overrides: Record<string, (id: string) => Promise<unknown>>,
+) {
+  return {
+    prepareBwa: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn(async (id: string) => {
+      source.store.transitionWorkspaceRun({
+        runIdHex: id,
+        expectedState: "PREPARING",
+        newState: "RUNNING",
+        runtimeIdentity: "container-test",
+        timestampMs: source.tick(),
+      });
+    }),
+    stop: vi.fn(),
+    finalizeExited: vi.fn(),
+    reopenFailed: vi.fn().mockResolvedValue(undefined),
+    commit: vi.fn(),
+    destroy: vi.fn().mockResolvedValue(undefined),
+    ...Object.fromEntries(
+      Object.entries(overrides).map(([name, implementation]) => [name, vi.fn(implementation)]),
+    ),
+  };
+}
 
 async function setup() {
   const root = await mkdtemp(join(tmpdir(), "biunivers-bwa-lifecycle-"));

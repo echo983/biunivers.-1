@@ -17,6 +17,8 @@ type RuntimeExecutor = Pick<
   | "thaw"
   | "stop"
   | "destroy"
+  | "finalizeExited"
+  | "reopenFailed"
 > & {
   commit(runIdHex: string): Promise<unknown>;
   pullAndInspect(reference: string): Promise<unknown>;
@@ -131,6 +133,10 @@ export class ComputeRuntimeServer {
         );
       } else if (request.operation === "commit") {
         result = await this.#runtime.commit(request.runIdHex);
+      } else if (request.operation === "finalizeExited") {
+        result = await this.#runtime.finalizeExited(request.runIdHex);
+      } else if (request.operation === "reopenFailed") {
+        result = await this.#runtime.reopenFailed(request.runIdHex);
       } else {
         result = await this.#runtime.stop(request.runIdHex);
       }
@@ -190,7 +196,9 @@ type RuntimeRequest =
         | "freeze"
         | "thaw"
         | "stop"
-        | "commit";
+        | "commit"
+        | "finalizeExited"
+        | "reopenFailed";
       runIdHex: string;
     }
   | {
@@ -312,7 +320,16 @@ function parseRequest(value: unknown): RuntimeRequest {
     return request as RuntimeRequest;
   }
   if (
-    !["start", "inspect", "freeze", "thaw", "stop", "commit"].includes(
+    ![
+      "start",
+      "inspect",
+      "freeze",
+      "thaw",
+      "stop",
+      "commit",
+      "finalizeExited",
+      "reopenFailed",
+    ].includes(
       request.operation as string,
     ) ||
     typeof request.runIdHex !== "string"

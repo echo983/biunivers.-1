@@ -62,14 +62,36 @@ try {
   const secondCommitted = await lifecycle.stop(fixture.instanceIdHex);
   if (secondCommitted.state !== "COMMITTED") throw new Error("Second BWA Run was not committed.");
 
+  const third = await lifecycle.start(fixture.instanceIdHex);
+  const incrementedAgain = await containerFetch(third.runIdHex, "/api/increment", "POST");
+  if (incrementedAgain.count !== 2) throw new Error("Diagnostic BWA did not write count=2.");
+  await execFileAsync("docker", ["kill", `biunivers-run-${third.runIdHex}`]);
+  const failed = await lifecycle.finalizeExited(fixture.instanceIdHex);
+  if (failed.state !== "FAILED") throw new Error("Abnormal BWA exit was not preserved.");
+  const beforeRecovery = fileRuntime.refStore.getRef(fixture.workspaceRefId);
+  if (beforeRecovery.revision !== 1) throw new Error("Abnormal exit advanced the Workspace Ref.");
+  const recovered = await lifecycle.publishFailedUpper(fixture.instanceIdHex, third.runIdHex);
+  if (recovered.state !== "COMMITTED") throw new Error("Failed BWA Upper was not committed.");
+
+  const fourth = await lifecycle.start(fixture.instanceIdHex);
+  const restoredAfterFailure = await containerFetch(fourth.runIdHex, "/api/state", "GET");
+  if (restoredAfterFailure.count !== 2) {
+    throw new Error("Explicitly committed failed Upper was not restored.");
+  }
+  const fourthCommitted = await lifecycle.stop(fixture.instanceIdHex);
+  if (fourthCommitted.state !== "COMMITTED") throw new Error("Fourth BWA Run was not committed.");
+
   console.log(
     JSON.stringify({
       instanceIdHex: fixture.instanceIdHex,
       firstRunIdHex: first.runIdHex,
       secondRunIdHex: second.runIdHex,
       restoredCount: restored.count,
+      restoredAfterFailureCount: restoredAfterFailure.count,
       firstState: firstCommitted.state,
       secondState: secondCommitted.state,
+      thirdState: recovered.state,
+      fourthState: fourthCommitted.state,
     }),
   );
 } finally {

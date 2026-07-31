@@ -33,7 +33,10 @@ afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
 });
 
-async function setup(options: { failStart?: boolean } = {}) {
+async function setup(options: {
+  failStart?: boolean;
+  exitImmediately?: { exitCode: number; oomKilled?: boolean };
+} = {}) {
   const root = await mkdtemp(join(tmpdir(), "biunivers-coordinator-"));
   roots.push(root);
   let now = 100;
@@ -81,7 +84,7 @@ async function setup(options: { failStart?: boolean } = {}) {
     async start() {
       events.push("oci:start");
       if (options.failStart) throw new Error("start failed");
-      containerRunning = true;
+      containerRunning = !options.exitImmediately;
     },
     async freeze() {
       events.push("oci:freeze");
@@ -98,10 +101,10 @@ async function setup(options: { failStart?: boolean } = {}) {
         running: containerRunning,
         paused: containerPaused,
         restarting: false,
-        oomKilled: false,
+        oomKilled: options.exitImmediately?.oomKilled ?? false,
         dead: false,
         pid: containerRunning ? 123 : 0,
-        exitCode: 0,
+        exitCode: options.exitImmediately?.exitCode ?? 0,
         startedAt: "",
         finishedAt: "",
       };
@@ -202,6 +205,59 @@ describe("ComputeRuntimeCoordinator", () => {
       "mount:cleanup",
       "snapshot:release",
     ]);
+  });
+
+  it("finalizes a self-exit zero as locally STOPPED and releases mounts", async () => {
+    const setupResult = await setup({ exitImmediately: { exitCode: 0 } });
+    await setupResult.coordinator.prepare({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "44".repeat(16),
+      revision: 0,
+      executorId: executor.executorId,
+      capabilityHex: "55".repeat(32),
+    });
+    await setupResult.coordinator.start(runIdHex);
+    expect(await setupResult.coordinator.finalizeExited(runIdHex)).toMatchObject({
+      state: "STOPPED",
+      errorCode: null,
+    });
+    expect(setupResult.events).toEqual([
+      "snapshot:provision",
+      "mount:prepare",
+      "oci:create",
+      "oci:start",
+      "oci:inspect",
+      "oci:remove",
+      "mount:cleanup",
+      "snapshot:release",
+    ]);
+  });
+
+  it("preserves an abnormal self-exit Upper as locally FAILED", async () => {
+    const setupResult = await setup({
+      exitImmediately: { exitCode: 137, oomKilled: true },
+    });
+    await setupResult.coordinator.prepare({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "44".repeat(16),
+      revision: 0,
+      executorId: executor.executorId,
+      capabilityHex: "55".repeat(32),
+    });
+    await setupResult.coordinator.start(runIdHex);
+    const upperFile = join(setupResult.directories.paths(runIdHex).upper, "partial.txt");
+    await writeFile(upperFile, "keep");
+    expect(await setupResult.coordinator.finalizeExited(runIdHex)).toMatchObject({
+      state: "FAILED",
+      errorCode: "CONTAINER_OOM",
+    });
+    expect(await readFile(upperFile, "utf8")).toBe("keep");
+    expect(await setupResult.coordinator.reopenFailed(runIdHex)).toMatchObject({
+      state: "STOPPED",
+      errorCode: null,
+    });
   });
 
   it("marks a failed start, removes the container, cleans mounts, and preserves Upper", async () => {
