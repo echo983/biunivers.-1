@@ -177,6 +177,20 @@ export interface CreateBwaWorkspaceRunInput {
   createdAtMs: number;
 }
 
+export interface UpdateBwaApplicationImageInput {
+  applicationId: string;
+  expectedDigest: string;
+  installedDigest: string;
+  previousDigest: string | null;
+  title: string;
+  description: string;
+  sourceUrl: string;
+  imageVersion: string | null;
+  imageRevision: string | null;
+  imageLicenses: string | null;
+  updatedAtMs: number;
+}
+
 export interface CommitWorkspaceRunResult {
   outcome: "committed" | "conflict";
   run: WorkspaceRunRecord;
@@ -199,6 +213,7 @@ export type RefStoreErrorCode =
   | "RUN_STATE_CONFLICT"
   | "APPLICATION_ALREADY_EXISTS"
   | "APPLICATION_NOT_FOUND"
+  | "APPLICATION_UPDATE_BLOCKED"
   | "INSTANCE_ALREADY_EXISTS"
   | "INSTANCE_NOT_FOUND"
   | "INSTANCE_RUN_BLOCKED"
@@ -1194,6 +1209,76 @@ export class SqliteRefStore {
          WHERE application_id = ?`,
       ).run(enabled ? 1 : 0, updatedAtMs, applicationId);
       return this.getBwaApplication(applicationId);
+    })();
+  }
+
+  updateBwaApplicationImage(
+    input: UpdateBwaApplicationImageInput,
+  ): BwaApplicationRecord {
+    const current = this.getBwaApplication(input.applicationId);
+    validateBwaApplication({
+      ...current,
+      installedDigest: input.installedDigest,
+      previousDigest: input.previousDigest,
+      title: input.title,
+      description: input.description,
+      sourceUrl: input.sourceUrl,
+      imageVersion: input.imageVersion,
+      imageRevision: input.imageRevision,
+      imageLicenses: input.imageLicenses,
+      defaultInstanceIdHex: null,
+      updatedAtMs: input.updatedAtMs,
+    });
+    validateDigest(input.expectedDigest);
+    return this.#database.transaction(() => {
+      const fresh = this.getBwaApplication(input.applicationId);
+      if (
+        fresh.installedDigest !== input.expectedDigest ||
+        input.updatedAtMs < fresh.updatedAtMs
+      ) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Application image changed before the update was published.",
+        );
+      }
+      const instances = this.listBwaInstances(input.applicationId);
+      for (const instance of instances) {
+        const unsafe = this.listBwaRunBindings(instance.instanceIdHex).some(
+          ({ run }) => run.state !== "COMMITTED" && run.state !== "DISCARDED",
+        );
+        if (unsafe) {
+          throw new RefStoreError(
+            "APPLICATION_UPDATE_BLOCKED",
+            "A BWA Instance has an unresolved Run.",
+          );
+        }
+      }
+      const result = this.#database.prepare(
+        `UPDATE bwa_applications
+         SET installed_digest = ?, previous_digest = ?, title = ?,
+             description = ?, source_url = ?, image_version = ?,
+             image_revision = ?, image_licenses = ?, updated_at_ms = ?
+         WHERE application_id = ? AND installed_digest = ?`,
+      ).run(
+        input.installedDigest,
+        input.previousDigest,
+        input.title,
+        input.description,
+        input.sourceUrl,
+        input.imageVersion,
+        input.imageRevision,
+        input.imageLicenses,
+        input.updatedAtMs,
+        input.applicationId,
+        input.expectedDigest,
+      );
+      if (result.changes !== 1) {
+        throw new RefStoreError(
+          "RUN_STATE_CONFLICT",
+          "Application image changed concurrently.",
+        );
+      }
+      return this.getBwaApplication(input.applicationId);
     })();
   }
 

@@ -94,6 +94,20 @@ done
 
 RESULT="$("$NODE_BIN" scripts/verify-bwa-lifecycle.mjs \
   "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$SECRET_PATH" "$RUN_ROOT")"
+
+kill -KILL "$DAEMON_PID"
+wait "$DAEMON_PID" 2>/dev/null || true
+DAEMON_PID=""
+rm -f "$SOCKET_PATH"
+"$NODE_BIN" dist/server/computeRuntime/computeRuntimeCli.js >>"$LOG_PATH" 2>&1 &
+DAEMON_PID="$!"
+for _ in $(seq 1 100); do
+  [[ -S "$SOCKET_PATH" ]] && break
+  kill -0 "$DAEMON_PID"
+  sleep 0.1
+done
+[[ -S "$SOCKET_PATH" ]]
+
 "$NODE_BIN" scripts/bwa-lifecycle-fixture.mjs \
   verify "$FIXTURE_PATH" "$SECRET_PATH" >/dev/null
 
@@ -101,4 +115,4 @@ kill -TERM "$DAEMON_PID"
 wait "$DAEMON_PID"
 DAEMON_PID=""
 echo "$RESULT"
-echo "BWA 保存重启、状态恢复、异常退出隔离、显式 Upper 提交和 no-op 提交全部通过。"
+echo "BWA 保存重启、异常 Upper、daemon 中断恢复、Ref 不变和单次回退基础全部通过。"

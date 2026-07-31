@@ -81,8 +81,9 @@ try {
     if (
       instance.desiredState !== "STOPPED" ||
       ref.revision !== 2 ||
-      runs.length !== 4 ||
-      runs.some(({ run }) => run.state !== "COMMITTED")
+      runs.length !== 5 ||
+      runs.filter(({ run }) => run.state === "COMMITTED").length !== 4 ||
+      runs.filter(({ run }) => run.state === "FAILED").length !== 1
     ) {
       throw new Error("BWA lifecycle committed state is invalid.");
     }
@@ -92,6 +93,7 @@ try {
         headFidHex: ref.headFidHex,
         runIds: runs.map(({ run }) => run.runIdHex),
         states: runs.map(({ run }) => run.state),
+        desiredState: instance.desiredState,
       }),
     );
   }

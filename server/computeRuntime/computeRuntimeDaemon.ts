@@ -21,6 +21,7 @@ import { MountSupervisor } from "./mountSupervisor.js";
 import { ManagedComputeRuntime } from "./managedComputeRuntime.js";
 import { PvlogSnapshotProvisioner } from "./pvlogSnapshotProvisioner.js";
 import { RunDirectoryManager } from "./runDirectoryManager.js";
+import { BwaHostRecovery } from "../bwa/bwaHostRecovery.js";
 
 export interface ComputeRuntimeDaemon {
   readonly socketPath: string;
@@ -69,10 +70,15 @@ export async function startComputeRuntimeDaemon(options: {
       fileRuntime.refStore,
       reconciliation.known,
     );
+    const bwaRecovery = await new BwaHostRecovery().reconcile(
+      directories,
+      fileRuntime.refStore,
+    );
     const recoveredRunCount = new Set([
       ...recovery.recovered,
       ...controlRecovery.stopped,
       ...controlRecovery.failed,
+      ...bwaRecovery.failed,
     ]).size;
 
     const cache = new VerifiedChunkCache({

@@ -12,6 +12,7 @@ const now = 1_785_400_000_000;
 const workspaceIdHex = "22".repeat(16);
 const instanceIdHex = "33".repeat(16);
 const digest = `sha256:${"a".repeat(64)}`;
+const nextDigest = `sha256:${"b".repeat(64)}`;
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
@@ -101,6 +102,59 @@ describe("BwaRegistryService", () => {
     });
     refStore.close();
   });
+
+  it("updates and rolls back one digest only while every Instance is safely stopped", async () => {
+    const root = await mkdtemp(join(tmpdir(), "biunivers-bwa-registry-"));
+    roots.push(root);
+    const refStore = await SqliteRefStore.initialize(join(root, "refstore.sqlite"));
+    seedWorkspace(refStore);
+    const secrets = new BwaSecretStore(join(root, "private", "bwa-secrets.json"));
+    await secrets.initialize();
+    const images = {
+      pullAndInspect: vi.fn()
+        .mockResolvedValueOnce(imageInspection())
+        .mockResolvedValueOnce(imageInspection(nextDigest, "2.0.0"))
+        .mockResolvedValueOnce(imageInspection(nextDigest, "2.0.0")),
+      inspectInstalled: vi.fn().mockResolvedValue(imageInspection()),
+    };
+    let timestamp = now;
+    const registry = new BwaRegistryService({
+      refStore,
+      secrets,
+      images,
+      now: () => timestamp++,
+      randomId: () => Buffer.from(instanceIdHex, "hex"),
+    });
+    const application = await registry.install("ghcr.io/echo983/probe:latest");
+    registry.createInstance({
+      applicationId: application.applicationId,
+      workspaceIdHex,
+      displayName: "Probe state",
+    });
+
+    expect(await registry.update(application.applicationId, "ghcr.io/echo983/probe:next"))
+      .toMatchObject({
+        installedDigest: nextDigest,
+        previousDigest: digest,
+        imageVersion: "2.0.0",
+      });
+    expect(await registry.rollback(application.applicationId)).toMatchObject({
+      installedDigest: digest,
+      previousDigest: nextDigest,
+      imageVersion: "1.0.0",
+    });
+
+    refStore.createBwaWorkspaceRun({
+      runIdHex: "44".repeat(16),
+      instanceIdHex,
+      createdAtMs: timestamp++,
+    });
+    await expect(
+      registry.update(application.applicationId, "ghcr.io/echo983/probe:next"),
+    ).rejects.toMatchObject({ code: "APPLICATION_UPDATE_BLOCKED" });
+    expect(refStore.getBwaApplication(application.applicationId).installedDigest).toBe(digest);
+    refStore.close();
+  });
 });
 
 function seedWorkspace(store: SqliteRefStore): void {
@@ -135,17 +189,20 @@ function seedWorkspace(store: SqliteRefStore): void {
   store.createWorkspace(input);
 }
 
-function imageInspection(): BwaImageInspection {
+function imageInspection(
+  selectedDigest = digest,
+  version = "1.0.0",
+): BwaImageInspection {
   return {
     canonicalRepository: "ghcr.io/echo983/probe",
-    digest,
-    imageReference: `ghcr.io/echo983/probe@${digest}`,
+    digest: selectedDigest,
+    imageReference: `ghcr.io/echo983/probe@${selectedDigest}`,
     labels: {
       "io.biunivers.workspace-application.protocol": "1",
       "org.opencontainers.image.title": "Probe",
       "org.opencontainers.image.description": "Probe application",
       "org.opencontainers.image.source": "https://github.com/echo983/probe",
-      "org.opencontainers.image.version": "1.0.0",
+      "org.opencontainers.image.version": version,
     },
     entrypoint: ["/app/start"],
     cmd: [],

@@ -80,6 +80,10 @@ try {
   const fourthCommitted = await lifecycle.stop(fixture.instanceIdHex);
   if (fourthCommitted.state !== "COMMITTED") throw new Error("Fourth BWA Run was not committed.");
 
+  const interrupted = await lifecycle.start(fixture.instanceIdHex);
+  const interruptedWrite = await containerFetch(interrupted.runIdHex, "/api/increment", "POST");
+  if (interruptedWrite.count !== 3) throw new Error("Interrupted BWA did not write count=3.");
+
   console.log(
     JSON.stringify({
       instanceIdHex: fixture.instanceIdHex,
@@ -91,6 +95,7 @@ try {
       secondState: secondCommitted.state,
       thirdState: recovered.state,
       fourthState: fourthCommitted.state,
+      interruptedRunIdHex: interrupted.runIdHex,
     }),
   );
 } finally {

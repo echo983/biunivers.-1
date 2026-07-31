@@ -19,7 +19,9 @@ export class BwaRegistryError extends Error {
       | "BWA_PROTOCOL_UNSUPPORTED"
       | "IMAGE_INSPECTION_INVALID"
       | "APPLICATION_DISABLED"
-      | "SECRET_VALUE_MISSING",
+      | "SECRET_VALUE_MISSING"
+      | "APPLICATION_IMAGE_MISMATCH"
+      | "ROLLBACK_UNAVAILABLE",
     message: string,
   ) {
     super(message);
@@ -94,6 +96,68 @@ export class BwaRegistryService {
     );
     validateInspection(inspection);
     return inspection;
+  }
+
+  async update(applicationId: string, reference: string): Promise<BwaApplicationRecord> {
+    const current = this.#refStore.getBwaApplication(applicationId);
+    const inspection = await this.#images.pullAndInspect(reference);
+    const metadata = validateInspection(inspection);
+    if (inspection.canonicalRepository !== applicationId) {
+      throw new BwaRegistryError(
+        "APPLICATION_IMAGE_MISMATCH",
+        "Updated image repository does not match the installed Application.",
+      );
+    }
+    if (inspection.digest === current.installedDigest) return current;
+    return this.#refStore.updateBwaApplicationImage({
+      applicationId,
+      expectedDigest: current.installedDigest,
+      installedDigest: inspection.digest,
+      previousDigest: current.installedDigest,
+      title: metadata.title,
+      description: metadata.description,
+      sourceUrl: metadata.sourceUrl,
+      imageVersion: metadata.version,
+      imageRevision: metadata.revision,
+      imageLicenses: metadata.licenses,
+      updatedAtMs: this.#timestamp(),
+    });
+  }
+
+  async rollback(applicationId: string): Promise<BwaApplicationRecord> {
+    const current = this.#refStore.getBwaApplication(applicationId);
+    if (!current.previousDigest) {
+      throw new BwaRegistryError(
+        "ROLLBACK_UNAVAILABLE",
+        "Application has no previous image available for rollback.",
+      );
+    }
+    const inspection = await this.#images.inspectInstalled(
+      `${applicationId}@${current.previousDigest}`,
+    );
+    const metadata = validateInspection(inspection);
+    if (
+      inspection.canonicalRepository !== applicationId ||
+      inspection.digest !== current.previousDigest
+    ) {
+      throw new BwaRegistryError(
+        "APPLICATION_IMAGE_MISMATCH",
+        "Rollback image identity does not match the registered previous digest.",
+      );
+    }
+    return this.#refStore.updateBwaApplicationImage({
+      applicationId,
+      expectedDigest: current.installedDigest,
+      installedDigest: current.previousDigest,
+      previousDigest: current.installedDigest,
+      title: metadata.title,
+      description: metadata.description,
+      sourceUrl: metadata.sourceUrl,
+      imageVersion: metadata.version,
+      imageRevision: metadata.revision,
+      imageLicenses: metadata.licenses,
+      updatedAtMs: this.#timestamp(),
+    });
   }
 
   createInstance(input: {
