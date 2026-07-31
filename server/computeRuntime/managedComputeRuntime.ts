@@ -41,6 +41,25 @@ export class ManagedComputeRuntime {
     return await this.#runtime.prepare(input);
   }
 
+  async prepareBwa(input: Parameters<ComputeRuntimeCoordinator["prepareBwa"]>[0]) {
+    const run = this.#refStore.getWorkspaceRun(input.runIdHex);
+    const binding = this.#refStore.getBwaRunBinding(input.runIdHex);
+    const instance = this.#refStore.getBwaInstance(binding.instanceIdHex);
+    const application = this.#refStore.getBwaApplication(instance.applicationId);
+    if (
+      run.state !== "PREPARING" ||
+      run.executorId !== "bwa.workspace-application.v1" ||
+      run.workspaceIdHex !== input.workspaceIdHex ||
+      run.inputHeadFidHex !== input.inputHeadFidHex ||
+      instance.workspaceIdHex !== input.workspaceIdHex ||
+      binding.executorDigest !== application.installedDigest ||
+      input.imageReference !== `${application.applicationId}@${binding.executorDigest}`
+    ) {
+      throw new Error("BWA Runtime preparation does not match its control Run.");
+    }
+    return await this.#runtime.prepareBwa(input);
+  }
+
   async pullAndInspect(reference: string) {
     return await this.#images.pullAndInspect(reference);
   }

@@ -1890,6 +1890,7 @@ export function createDesktopServer({
           APPLICATION_NOT_FOUND: 404,
           INSTANCE_ALREADY_EXISTS: 409,
           INSTANCE_NOT_FOUND: 404,
+          INSTANCE_RUN_BLOCKED: 409,
           INVALID_REF_VALUE: 400,
         }[error.code];
         response.status(status).json({

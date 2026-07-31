@@ -4,12 +4,19 @@ import { chmod, lstat, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ComputeRuntimeCoordinator } from "./computeRuntimeCoordinator.js";
 
-const MAX_FRAME_BYTES = 64 * 1024;
+const MAX_FRAME_BYTES = 512 * 1024;
 const TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 
 type RuntimeExecutor = Pick<
   ComputeRuntimeCoordinator,
-  "prepare" | "start" | "inspect" | "freeze" | "thaw" | "stop" | "destroy"
+  | "prepare"
+  | "prepareBwa"
+  | "start"
+  | "inspect"
+  | "freeze"
+  | "thaw"
+  | "stop"
+  | "destroy"
 > & {
   commit(runIdHex: string): Promise<unknown>;
   pullAndInspect(reference: string): Promise<unknown>;
@@ -105,6 +112,8 @@ export class ComputeRuntimeServer {
         result = await this.#runtime.pullAndInspect(request.reference);
       } else if (request.operation === "inspectInstalled") {
         result = await this.#runtime.inspectInstalled(request.imageReference);
+      } else if (request.operation === "prepareBwa") {
+        result = await this.#runtime.prepareBwa(request.input);
       } else if (request.operation === "prepare") {
         result = await this.#runtime.prepare(request.input);
       } else if (request.operation === "start") {
@@ -158,6 +167,19 @@ type RuntimeRequest =
         revision: number;
         executorId: string;
         capabilityHex: string;
+      };
+    }
+  | {
+      tokenHex: string;
+      operation: "prepareBwa";
+      input: {
+        runIdHex: string;
+        workspaceIdHex: string;
+        inputHeadFidHex: string;
+        revision: number;
+        capabilityHex: string;
+        imageReference: string;
+        environment: Record<string, string>;
       };
     }
   | {
@@ -234,6 +256,46 @@ function parseRequest(value: unknown): RuntimeRequest {
       },
     };
   }
+  if (request.operation === "prepareBwa") {
+    requireExactKeys(request, ["tokenHex", "operation", "input"]);
+    if (!request.input || typeof request.input !== "object") {
+      throw invalidRequest();
+    }
+    const input = request.input as Record<string, unknown>;
+    requireExactKeys(input, [
+      "runIdHex",
+      "workspaceIdHex",
+      "inputHeadFidHex",
+      "revision",
+      "capabilityHex",
+      "imageReference",
+      "environment",
+    ]);
+    if (
+      typeof input.runIdHex !== "string" ||
+      typeof input.workspaceIdHex !== "string" ||
+      typeof input.inputHeadFidHex !== "string" ||
+      !Number.isSafeInteger(input.revision) ||
+      typeof input.capabilityHex !== "string" ||
+      typeof input.imageReference !== "string" ||
+      !isStringRecord(input.environment)
+    ) {
+      throw invalidRequest();
+    }
+    return {
+      tokenHex: request.tokenHex,
+      operation: "prepareBwa",
+      input: {
+        runIdHex: input.runIdHex,
+        workspaceIdHex: input.workspaceIdHex,
+        inputHeadFidHex: input.inputHeadFidHex,
+        revision: input.revision as number,
+        capabilityHex: input.capabilityHex,
+        imageReference: input.imageReference,
+        environment: input.environment,
+      },
+    };
+  }
   if (request.operation === "destroy") {
     requireExactKeys(request, [
       "tokenHex",
@@ -273,6 +335,15 @@ function requireExactKeys(
   ) {
     throw invalidRequest();
   }
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      Object.values(value).every((item) => typeof item === "string"),
+  );
 }
 
 function encodeFrame(value: unknown): Buffer {

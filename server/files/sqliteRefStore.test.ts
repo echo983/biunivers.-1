@@ -58,14 +58,14 @@ afterEach(async () => {
 });
 
 describe("SqliteRefStore", () => {
-  it("creates schema v3 and atomically migrates an existing schema v1 database", async () => {
+  it("creates schema v4 and atomically migrates existing v1, v2, and v3 databases", async () => {
     const freshPath = await databasePath();
     const fresh = await SqliteRefStore.initialize(freshPath);
     fresh.close();
     expect(readSchema(freshPath)).toEqual({
-      version: 3,
+      version: 4,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings"],
     });
 
     const legacyPath = await databasePath();
@@ -74,9 +74,9 @@ describe("SqliteRefStore", () => {
     expect(migrated.getRef("main")).toEqual(initial);
     migrated.close();
     expect(readSchema(legacyPath)).toEqual({
-      version: 3,
+      version: 4,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings"],
     });
 
     const v2Path = await databasePath();
@@ -88,9 +88,23 @@ describe("SqliteRefStore", () => {
     expect(migratedV2.getRef("main")).toEqual(initial);
     migratedV2.close();
     expect(readSchema(v2Path)).toEqual({
-      version: 3,
+      version: 4,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings"],
+    });
+
+    const v3Path = await databasePath();
+    const v3 = await SqliteRefStore.initialize(v3Path);
+    v3.createRef(initial);
+    v3.close();
+    downgradeSchemaToV3(v3Path);
+    const migratedV3 = await SqliteRefStore.openExisting(v3Path);
+    expect(migratedV3.getRef("main")).toEqual(initial);
+    migratedV3.close();
+    expect(readSchema(v3Path)).toEqual({
+      version: 4,
+      workspaceTables: ["workspace_records", "workspace_runs"],
+      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings"],
     });
   });
 
@@ -270,6 +284,70 @@ describe("SqliteRefStore", () => {
         expect.objectContaining({ code: "INVALID_REF_VALUE" }) as RefStoreError,
       );
     }
+    store.close();
+  });
+
+  it("atomically binds BWA Runs to Instance and digest while unresolved state blocks another Run", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    store.createWorkspace(workspaceInput());
+    store.createBwaApplication(bwaApplication());
+    const instance = store.createBwaInstance(bwaInstance());
+    const runIdHex = "63636363636363636363636363636363";
+    const created = store.createBwaWorkspaceRun({
+      runIdHex,
+      instanceIdHex: instance.instanceIdHex,
+      createdAtMs: instance.createdAtMs + 1,
+    });
+    expect(created.run).toMatchObject({
+      runIdHex,
+      workspaceIdHex,
+      executorId: "bwa.workspace-application.v1",
+      state: "PREPARING",
+    });
+    expect(created.binding).toEqual({
+      runIdHex,
+      instanceIdHex: instance.instanceIdHex,
+      executorDigest: bwaApplication().installedDigest,
+      stopReason: null,
+      createdAtMs: instance.createdAtMs + 1,
+    });
+    expect(store.getBwaInstance(instance.instanceIdHex).desiredState).toBe("RUNNING");
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBe(runIdHex);
+    expect(store.setBwaRunStopReason(runIdHex, "USER_STOP").stopReason).toBe(
+      "USER_STOP",
+    );
+    expect(() => store.setBwaRunStopReason(runIdHex, "SAVE_RESTART")).toThrowError(
+      expect.objectContaining({ code: "RUN_STATE_CONFLICT" }) as RefStoreError,
+    );
+    expect(() =>
+      store.createBwaWorkspaceRun({
+        runIdHex: "64646464646464646464646464646464",
+        instanceIdHex: instance.instanceIdHex,
+        createdAtMs: instance.createdAtMs + 2,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INSTANCE_RUN_BLOCKED" }) as RefStoreError,
+    );
+    store.transitionWorkspaceRun({
+      runIdHex,
+      expectedState: "PREPARING",
+      newState: "FAILED",
+      errorCode: "START_FAILED",
+      timestampMs: instance.createdAtMs + 3,
+    });
+    expect(store.getWorkspace(workspaceIdHex).activeWriteRunIdHex).toBeNull();
+    expect(() =>
+      store.createBwaWorkspaceRun({
+        runIdHex: "65656565656565656565656565656565",
+        instanceIdHex: instance.instanceIdHex,
+        createdAtMs: instance.createdAtMs + 4,
+      }),
+    ).toThrowError(
+      expect.objectContaining({ code: "INSTANCE_RUN_BLOCKED" }) as RefStoreError,
+    );
+    expect(store.listBwaRunBindings(instance.instanceIdHex)).toHaveLength(1);
     store.close();
   });
 
@@ -822,11 +900,23 @@ function downgradeSchemaToV2(path: string): void {
   const database = new Database(path);
   database.pragma("foreign_keys = OFF");
   database.exec(`
+    DROP TABLE bwa_run_bindings;
     DROP TABLE bwa_environment;
     DROP TABLE bwa_instances;
     DROP TABLE bwa_applications;
     UPDATE file_service_meta SET value = X'00000002' WHERE key = 'schema_version';
     PRAGMA user_version = 2;
+  `);
+  database.close();
+}
+
+function downgradeSchemaToV3(path: string): void {
+  const database = new Database(path);
+  database.pragma("foreign_keys = OFF");
+  database.exec(`
+    DROP TABLE bwa_run_bindings;
+    UPDATE file_service_meta SET value = X'00000003' WHERE key = 'schema_version';
+    PRAGMA user_version = 3;
   `);
   database.close();
 }

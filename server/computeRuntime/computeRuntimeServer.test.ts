@@ -21,6 +21,7 @@ describe("ComputeRuntimeServer", () => {
       pullAndInspect: vi.fn().mockResolvedValue({ digest: "sha256:test" }),
       inspectInstalled: vi.fn().mockResolvedValue({ digest: "sha256:test" }),
       prepare: vi.fn().mockResolvedValue({ state: "PREPARED" }),
+      prepareBwa: vi.fn().mockResolvedValue({ state: "PREPARED" }),
       start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       inspect: vi.fn().mockResolvedValue({ manifest: { state: "RUNNING" } }),
       freeze: vi.fn().mockResolvedValue({ state: "FROZEN" }),
@@ -51,6 +52,23 @@ describe("ComputeRuntimeServer", () => {
     });
     expect(prepared).toEqual({ ok: true, result: { state: "PREPARED" } });
     expect(runtime.prepare).toHaveBeenCalledOnce();
+
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "prepareBwa",
+        input: {
+          runIdHex: "66".repeat(16),
+          workspaceIdHex: "33".repeat(16),
+          inputHeadFidHex: "44".repeat(16),
+          revision: 0,
+          capabilityHex: "55".repeat(32),
+          imageReference: `ghcr.io/echo983/probe@sha256:${"a".repeat(64)}`,
+          environment: { MODE: "safe" },
+        },
+      }),
+    ).toMatchObject({ ok: true, result: { state: "PREPARED" } });
+    expect(runtime.prepareBwa).toHaveBeenCalledOnce();
 
     expect(
       await exchange(socketPath, {
@@ -148,6 +166,7 @@ describe("ComputeRuntimeServer", () => {
       pullAndInspect: vi.fn(),
       inspectInstalled: vi.fn(),
       prepare: vi.fn(),
+      prepareBwa: vi.fn(),
       start: vi.fn(),
       inspect: vi.fn(),
       freeze: vi.fn(),

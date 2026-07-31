@@ -3,7 +3,8 @@ import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
+const BWA_SCHEMA_VERSION = 3;
 const WORKSPACE_SCHEMA_VERSION = 2;
 const LEGACY_SCHEMA_VERSION = 1;
 const FID_HEX_PATTERN = /^[0-9a-f]{32}$/;
@@ -156,6 +157,26 @@ export interface BwaEnvironmentVariable {
   sensitive: boolean;
 }
 
+export type BwaStopReason =
+  | "USER_STOP"
+  | "SAVE_RESTART"
+  | "HOST_SHUTDOWN"
+  | "EXITED";
+
+export interface BwaRunBindingRecord {
+  runIdHex: string;
+  instanceIdHex: string;
+  executorDigest: string;
+  stopReason: BwaStopReason | null;
+  createdAtMs: number;
+}
+
+export interface CreateBwaWorkspaceRunInput {
+  runIdHex: string;
+  instanceIdHex: string;
+  createdAtMs: number;
+}
+
 export interface CommitWorkspaceRunResult {
   outcome: "committed" | "conflict";
   run: WorkspaceRunRecord;
@@ -180,6 +201,7 @@ export type RefStoreErrorCode =
   | "APPLICATION_NOT_FOUND"
   | "INSTANCE_ALREADY_EXISTS"
   | "INSTANCE_NOT_FOUND"
+  | "INSTANCE_RUN_BLOCKED"
   | "INVALID_REF_VALUE";
 
 export class RefStoreError extends Error {
@@ -1182,6 +1204,137 @@ export class SqliteRefStore {
     return rows.map(mapBwaInstance);
   }
 
+  setBwaInstanceDesiredState(
+    instanceIdHex: string,
+    desiredState: BwaDesiredState,
+    updatedAtMs: number,
+  ): BwaInstanceRecord {
+    validateId(instanceIdHex, "BWA instance ID");
+    if (desiredState !== "STOPPED" && desiredState !== "RUNNING") {
+      throw invalid("BWA desired state is invalid.");
+    }
+    validateTimestamp(updatedAtMs);
+    return this.#database.transaction(() => {
+      const current = this.getBwaInstance(instanceIdHex);
+      if (updatedAtMs < current.updatedAtMs) {
+        throw invalid("Instance update timestamp predates its current state.");
+      }
+      this.#database.prepare(
+        `UPDATE bwa_instances SET desired_state = ?, updated_at_ms = ?
+         WHERE instance_id = ?`,
+      ).run(desiredState, updatedAtMs, fromHex(instanceIdHex));
+      return this.getBwaInstance(instanceIdHex);
+    })();
+  }
+
+  createBwaWorkspaceRun(input: CreateBwaWorkspaceRunInput): {
+    run: WorkspaceRunRecord;
+    binding: BwaRunBindingRecord;
+  } {
+    validateId(input.runIdHex, "Run ID");
+    validateId(input.instanceIdHex, "BWA instance ID");
+    validateTimestamp(input.createdAtMs);
+    return this.#database.transaction(() => {
+      const instance = this.getBwaInstance(input.instanceIdHex);
+      const application = this.getBwaApplication(instance.applicationId);
+      if (!application.enabled) {
+        throw new RefStoreError(
+          "INSTANCE_RUN_BLOCKED",
+          "Disabled BWA Application cannot start a Run.",
+        );
+      }
+      const unresolved = this.#database.prepare(
+        `SELECT 1
+         FROM bwa_run_bindings binding
+         JOIN workspace_runs run ON run.run_id = binding.run_id
+         WHERE binding.instance_id = ?
+           AND run.state NOT IN ('COMMITTED', 'DISCARDED')
+         LIMIT 1`,
+      ).get(fromHex(input.instanceIdHex));
+      if (unresolved) {
+        throw new RefStoreError(
+          "INSTANCE_RUN_BLOCKED",
+          "BWA Instance has an active or unresolved Run.",
+        );
+      }
+      const workspace = this.getWorkspace(instance.workspaceIdHex);
+      const ref = this.getRef(workspace.refId);
+      const run = this.createWorkspaceRun({
+        runIdHex: input.runIdHex,
+        workspaceIdHex: instance.workspaceIdHex,
+        executorId: "bwa.workspace-application.v1",
+        inputHeadFidHex: ref.headFidHex,
+        createdAtMs: input.createdAtMs,
+      });
+      this.#database.prepare(
+        `INSERT INTO bwa_run_bindings (
+           run_id, instance_id, executor_digest, stop_reason, created_at_ms
+         ) VALUES (?, ?, ?, NULL, ?)`,
+      ).run(
+        fromHex(input.runIdHex),
+        fromHex(input.instanceIdHex),
+        application.installedDigest,
+        input.createdAtMs,
+      );
+      this.#database.prepare(
+        `UPDATE bwa_instances
+         SET desired_state = 'RUNNING', updated_at_ms = MAX(updated_at_ms, ?)
+         WHERE instance_id = ?`,
+      ).run(input.createdAtMs, fromHex(input.instanceIdHex));
+      return { run, binding: this.getBwaRunBinding(input.runIdHex) };
+    })();
+  }
+
+  getBwaRunBinding(runIdHex: string): BwaRunBindingRecord {
+    validateId(runIdHex, "Run ID");
+    const row = this.#database.prepare(
+      `SELECT run_id, instance_id, executor_digest, stop_reason, created_at_ms
+       FROM bwa_run_bindings WHERE run_id = ?`,
+    ).get(fromHex(runIdHex)) as BwaRunBindingRow | undefined;
+    if (!row) {
+      throw new RefStoreError("RUN_NOT_FOUND", "BWA Run binding was not found.");
+    }
+    return mapBwaRunBinding(row);
+  }
+
+  listBwaRunBindings(instanceIdHex: string): Array<{
+    run: WorkspaceRunRecord;
+    binding: BwaRunBindingRecord;
+  }> {
+    validateId(instanceIdHex, "BWA instance ID");
+    this.getBwaInstance(instanceIdHex);
+    const rows = this.#database.prepare(
+      `SELECT run_id FROM bwa_run_bindings
+       WHERE instance_id = ? ORDER BY created_at_ms, run_id`,
+    ).all(fromHex(instanceIdHex)) as Array<{ run_id: Buffer }>;
+    return rows.map((row) => {
+      const runIdHex = toHex(row.run_id);
+      return {
+        run: this.getWorkspaceRun(runIdHex),
+        binding: this.getBwaRunBinding(runIdHex),
+      };
+    });
+  }
+
+  setBwaRunStopReason(
+    runIdHex: string,
+    stopReason: BwaStopReason,
+  ): BwaRunBindingRecord {
+    validateId(runIdHex, "Run ID");
+    validateBwaStopReason(stopReason);
+    const current = this.getBwaRunBinding(runIdHex);
+    if (current.stopReason !== null && current.stopReason !== stopReason) {
+      throw new RefStoreError(
+        "RUN_STATE_CONFLICT",
+        "BWA Run already has a different stop reason.",
+      );
+    }
+    this.#database.prepare(
+      `UPDATE bwa_run_bindings SET stop_reason = ? WHERE run_id = ?`,
+    ).run(stopReason, fromHex(runIdHex));
+    return this.getBwaRunBinding(runIdHex);
+  }
+
   replaceBwaEnvironment(
     instanceIdHex: string,
     variables: readonly BwaEnvironmentVariable[],
@@ -1232,6 +1385,20 @@ export class SqliteRefStore {
         throw new RefStoreError(
           "WORKSPACE_ACTIVE",
           "A running Workspace cannot be detached from its BWA Instance.",
+        );
+      }
+      const unresolved = this.#database.prepare(
+        `SELECT 1
+         FROM bwa_run_bindings binding
+         JOIN workspace_runs run ON run.run_id = binding.run_id
+         WHERE binding.instance_id = ?
+           AND run.state NOT IN ('COMMITTED', 'DISCARDED')
+         LIMIT 1`,
+      ).get(fromHex(instanceIdHex));
+      if (unresolved) {
+        throw new RefStoreError(
+          "INSTANCE_RUN_BLOCKED",
+          "BWA Instance has an unresolved Run and cannot be detached.",
         );
       }
       const application = this.getBwaApplication(instance.applicationId);
@@ -1356,6 +1523,14 @@ interface BwaEnvironmentRow {
   sensitive: number;
 }
 
+interface BwaRunBindingRow {
+  run_id: Buffer;
+  instance_id: Buffer;
+  executor_digest: string;
+  stop_reason: BwaStopReason | null;
+  created_at_ms: number;
+}
+
 function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("synchronous = FULL");
@@ -1385,12 +1560,13 @@ function createSchema(database: Database.Database): void {
     ) STRICT;
     ${workspaceSchemaSql()}
     ${bwaSchemaSql()}
+    ${bwaLifecycleSchemaSql()}
     CREATE TABLE file_service_meta (
       key TEXT PRIMARY KEY,
       value BLOB NOT NULL
     ) STRICT;
     INSERT INTO file_service_meta(key, value)
-    VALUES ('schema_version', X'00000003');
+    VALUES ('schema_version', X'00000004');
     PRAGMA user_version = ${SCHEMA_VERSION};
     COMMIT;
   `);
@@ -1401,7 +1577,11 @@ function migrateSchema(database: Database.Database): void {
   if (version === SCHEMA_VERSION) {
     return;
   }
-  if (version !== LEGACY_SCHEMA_VERSION && version !== WORKSPACE_SCHEMA_VERSION) {
+  if (
+    version !== LEGACY_SCHEMA_VERSION &&
+    version !== WORKSPACE_SCHEMA_VERSION &&
+    version !== BWA_SCHEMA_VERSION
+  ) {
     throw new RefStoreError(
       "REFSTORE_CORRUPT",
       `Unsupported RefStore schema version: ${String(version)}.`,
@@ -1411,9 +1591,10 @@ function migrateSchema(database: Database.Database): void {
     database.exec(`
       BEGIN IMMEDIATE;
       ${version === LEGACY_SCHEMA_VERSION ? workspaceSchemaSql() : ""}
-      ${bwaSchemaSql()}
+      ${version <= WORKSPACE_SCHEMA_VERSION ? bwaSchemaSql() : ""}
+      ${bwaLifecycleSchemaSql()}
       UPDATE file_service_meta
-      SET value = X'00000003'
+      SET value = X'00000004'
       WHERE key = 'schema_version';
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
@@ -1515,6 +1696,24 @@ function bwaSchemaSql(): string {
   `;
 }
 
+function bwaLifecycleSchemaSql(): string {
+  return `
+    CREATE TABLE bwa_run_bindings (
+      run_id BLOB PRIMARY KEY
+        REFERENCES workspace_runs(run_id) ON DELETE CASCADE,
+      instance_id BLOB NOT NULL
+        REFERENCES bwa_instances(instance_id) ON DELETE CASCADE,
+      executor_digest TEXT NOT NULL,
+      stop_reason TEXT CHECK(stop_reason IN (
+        'USER_STOP', 'SAVE_RESTART', 'HOST_SHUTDOWN', 'EXITED'
+      )),
+      created_at_ms INTEGER NOT NULL CHECK(created_at_ms >= 0)
+    ) STRICT;
+    CREATE INDEX bwa_run_bindings_instance
+      ON bwa_run_bindings(instance_id, created_at_ms);
+  `;
+}
+
 function verifyDatabase(database: Database.Database): void {
   const integrity = database.pragma("quick_check", { simple: true });
   if (integrity !== "ok") {
@@ -1538,6 +1737,7 @@ function verifyDatabase(database: Database.Database): void {
     "bwa_applications",
     "bwa_instances",
     "bwa_environment",
+    "bwa_run_bindings",
     "file_service_meta",
   ];
   const placeholders = requiredTables.map(() => "?").join(", ");
@@ -1632,6 +1832,27 @@ function mapBwaInstance(row: BwaInstanceRow): BwaInstanceRecord {
     createdAtMs: row.created_at_ms,
     updatedAtMs: row.updated_at_ms,
   };
+}
+
+function mapBwaRunBinding(row: BwaRunBindingRow): BwaRunBindingRecord {
+  return {
+    runIdHex: toHex(row.run_id),
+    instanceIdHex: toHex(row.instance_id),
+    executorDigest: row.executor_digest,
+    stopReason: row.stop_reason,
+    createdAtMs: row.created_at_ms,
+  };
+}
+
+function validateBwaStopReason(value: BwaStopReason): void {
+  if (
+    value !== "USER_STOP" &&
+    value !== "SAVE_RESTART" &&
+    value !== "HOST_SHUTDOWN" &&
+    value !== "EXITED"
+  ) {
+    throw invalid("BWA stop reason is invalid.");
+  }
 }
 
 function validateBwaApplication(input: BwaApplicationRecord): void {

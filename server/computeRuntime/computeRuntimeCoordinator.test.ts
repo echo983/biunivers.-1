@@ -8,6 +8,7 @@ import {
 } from "./computeRuntimeCoordinator.js";
 import { ExecutorRegistry, type ExecutorDefinition } from "./executorRegistry.js";
 import { RunDirectoryManager } from "./runDirectoryManager.js";
+import type { DockerOciPlan } from "./dockerOciPlan.js";
 
 const roots: string[] = [];
 const runIdHex = "11".repeat(16);
@@ -41,6 +42,7 @@ async function setup(options: { failStart?: boolean } = {}) {
     now: () => now++,
   });
   const events: string[] = [];
+  const plans: DockerOciPlan[] = [];
   const activeMounts = new Set<string>();
   const mounts = {
     async prepare(input: { runIdHex: string }) {
@@ -71,8 +73,9 @@ async function setup(options: { failStart?: boolean } = {}) {
   let containerRunning = false;
   let containerPaused = false;
   const oci = {
-    async create() {
+    async create(plan: DockerOciPlan) {
       events.push("oci:create");
+      plans.push(plan);
       return "a".repeat(64);
     },
     async start() {
@@ -118,6 +121,7 @@ async function setup(options: { failStart?: boolean } = {}) {
     root,
     directories,
     events,
+    plans,
     coordinator: new ComputeRuntimeCoordinator({
       directories,
       executors: new ExecutorRegistry([executor]),
@@ -129,6 +133,34 @@ async function setup(options: { failStart?: boolean } = {}) {
 }
 
 describe("ComputeRuntimeCoordinator", () => {
+  it("runs a dynamic BWA digest without registering it as a fixed Executor", async () => {
+    const setupResult = await setup();
+    const imageReference = `ghcr.io/echo983/probe@sha256:${"a".repeat(64)}`;
+    await setupResult.coordinator.prepareBwa({
+      runIdHex,
+      workspaceIdHex,
+      inputHeadFidHex: "44".repeat(16),
+      revision: 0,
+      capabilityHex: "55".repeat(32),
+      imageReference,
+      environment: { MODE: "bwa", API_TOKEN: "runtime-secret" },
+    });
+    await setupResult.coordinator.start(runIdHex);
+    expect(setupResult.plans).toHaveLength(1);
+    expect(setupResult.plans[0].createArguments).toContain(imageReference);
+    expect(setupResult.plans[0].createArguments).toContain("MODE=bwa");
+    expect(setupResult.plans[0].createArguments).toContain(
+      "API_TOKEN=runtime-secret",
+    );
+    expect(setupResult.plans[0].createArguments).not.toContain("--entrypoint");
+    const manifestBytes = await readFile(
+      setupResult.directories.paths(runIdHex).manifest,
+      "utf8",
+    );
+    expect(manifestBytes).not.toContain("runtime-secret");
+    await setupResult.coordinator.stop(runIdHex);
+  });
+
   it("coordinates prepare, start, inspect, and stop while preserving Upper", async () => {
     const setupResult = await setup();
     const prepared = await setupResult.coordinator.prepare({
