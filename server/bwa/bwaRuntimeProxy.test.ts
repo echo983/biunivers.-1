@@ -1,11 +1,15 @@
 import type { AddressInfo } from "node:net";
 import http from "node:http";
+import { Duplex } from "node:stream";
 import express from "express";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SqliteRefStore } from "../files/sqliteRefStore.js";
 import { BwaBrowserSessionRegistry } from "./bwaBrowserSessionRegistry.js";
 import { bwaOriginLabel } from "./bwaOrigin.js";
-import { createBwaRuntimeProxy } from "./bwaRuntimeProxy.js";
+import {
+  createBwaRuntimeProxy,
+  createBwaWebSocketProxy,
+} from "./bwaRuntimeProxy.js";
 
 const instanceIdHex = "11".repeat(16);
 const runIdHex = "22".repeat(16);
@@ -98,20 +102,95 @@ describe("BWA Runtime Proxy", () => {
     expect(JSON.parse(stopped.body).error.code).toBe("BWA_STOPPED");
     expect(runtime.resolveBwaEndpoint).not.toHaveBeenCalled();
   });
+
+  it("authorizes and forwards a WebSocket upgrade without exposing the host session cookie", async () => {
+    const sessions = new BwaBrowserSessionRegistry();
+    const ticket = sessions.issueBootstrap(instanceIdHex);
+    const session = sessions.consumeBootstrap(instanceIdHex, ticket.ticket).session;
+    const runtime = {
+      resolveBwaEndpoint: vi.fn().mockResolvedValue({ address: "172.30.0.9", port: 8080 }),
+    };
+    const upstream = new CapturingSocket();
+    const client = new CapturingSocket();
+    const handler = createBwaWebSocketProxy({
+      appOrigin,
+      refStore: fakeRefStore("RUNNING"),
+      sessions,
+      runtime,
+      connect: () => upstream as never,
+    });
+    handler(
+      {
+        method: "GET",
+        url: "/socket?channel=one",
+        headers: {
+          host: instanceHost,
+          connection: "Upgrade",
+          upgrade: "websocket",
+          cookie: `biunivers-bwa-session=${session}; application=value`,
+          "sec-websocket-key": "fixture",
+          "sec-websocket-version": "13",
+        },
+      } as http.IncomingMessage,
+      client as never,
+      Buffer.from("head"),
+    );
+    await vi.waitFor(() => expect(runtime.resolveBwaEndpoint).toHaveBeenCalledWith(runIdHex));
+    upstream.emit("connect");
+    await vi.waitFor(() => expect(upstream.text()).toContain("head"));
+
+    expect(upstream.text()).toContain("GET /socket?channel=one HTTP/1.1");
+    expect(upstream.text()).toContain("cookie: application=value");
+    expect(upstream.text()).not.toContain(session);
+    expect(upstream.text()).toContain("x-forwarded-proto: http");
+    client.destroy();
+    upstream.destroy();
+  });
 });
+
+class CapturingSocket extends Duplex {
+  readonly chunks: Buffer[] = [];
+
+  override _read(): void {}
+
+  override _write(
+    chunk: Buffer | string,
+    _encoding: BufferEncoding,
+    callback: (error?: Error | null) => void,
+  ): void {
+    this.chunks.push(Buffer.from(chunk));
+    callback();
+  }
+
+  text(): string {
+    return Buffer.concat(this.chunks).toString("utf8");
+  }
+}
+
+function fakeRefStore(runState: "RUNNING" | "STOPPED"): SqliteRefStore {
+  return {
+    listBwaApplications: () => [
+      { applicationId: "ghcr.io/echo983/diagnostic", enabled: true },
+    ],
+    listBwaInstances: () => [{ instanceIdHex }],
+    listBwaRunBindings: () => [{ run: { runIdHex, state: runState } }],
+  } as unknown as SqliteRefStore;
+}
 
 async function startProxy(
   sessions: BwaBrowserSessionRegistry,
   runState: "RUNNING" | "STOPPED",
   runtime = { resolveBwaEndpoint: vi.fn() },
 ): Promise<http.Server> {
-  const refStore = {
-    listBwaApplications: () => [{ applicationId: "ghcr.io/echo983/diagnostic", enabled: true }],
-    listBwaInstances: () => [{ instanceIdHex }],
-    listBwaRunBindings: () => [{ run: { runIdHex, state: runState } }],
-  } as unknown as SqliteRefStore;
   const app = express();
-  app.use(createBwaRuntimeProxy({ appOrigin, refStore, sessions, runtime }));
+  app.use(
+    createBwaRuntimeProxy({
+      appOrigin,
+      refStore: fakeRefStore(runState),
+      sessions,
+      runtime,
+    }),
+  );
   app.use((_request, response) => response.status(404).end());
   const server = app.listen(0, "127.0.0.1");
   servers.push(server);

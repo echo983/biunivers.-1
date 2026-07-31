@@ -1,4 +1,5 @@
 import http from "node:http";
+import net, { type Socket } from "node:net";
 import type { RequestHandler } from "express";
 import type { SqliteRefStore } from "../files/sqliteRefStore.js";
 import {
@@ -24,12 +25,14 @@ interface EndpointClient {
   resolveBwaEndpoint(runIdHex: string): Promise<unknown>;
 }
 
-export function createBwaRuntimeProxy(options: {
+interface RuntimeProxyOptions {
   appOrigin: string;
   refStore: SqliteRefStore;
   sessions: BwaBrowserSessionRegistry;
   runtime: EndpointClient;
-}): RequestHandler {
+}
+
+export function createBwaRuntimeProxy(options: RuntimeProxyOptions): RequestHandler {
   const cookieName = bwaSessionCookieName(options.appOrigin);
   const secure = new URL(options.appOrigin).protocol === "https:";
 
@@ -96,6 +99,63 @@ export function createBwaRuntimeProxy(options: {
         response.destroy(error instanceof Error ? error : undefined);
       }
     });
+  };
+}
+
+export function createBwaWebSocketProxy(
+  options: RuntimeProxyOptions & {
+    connect?: (endpoint: { host: string; port: number }) => Socket;
+  },
+): (request: http.IncomingMessage, socket: Socket, head: Buffer) => void {
+  const cookieName = bwaSessionCookieName(options.appOrigin);
+  const connect = options.connect ?? ((endpoint) => net.createConnection(endpoint));
+  return (request, socket, head) => {
+    void (async () => {
+      const target = resolveHostTarget(request.headers.host, options.appOrigin, options.refStore);
+      if (!target || !target.enabled) {
+        rejectUpgrade(socket, 404, "Not Found");
+        return;
+      }
+      try {
+        options.sessions.authorize(
+          target.instanceIdHex,
+          parseCookies(request.headers.cookie).get(cookieName) ?? "",
+        );
+      } catch (error) {
+        if (error instanceof BwaBrowserSessionError) {
+          rejectUpgrade(socket, 401, "Unauthorized");
+          return;
+        }
+        throw error;
+      }
+      const run = uniqueRunningRun(options.refStore, target.instanceIdHex);
+      if (!run) {
+        rejectUpgrade(socket, 503, "Service Unavailable");
+        return;
+      }
+      const endpoint = validateEndpoint(await options.runtime.resolveBwaEndpoint(run.runIdHex));
+      const upstream = connect({ host: endpoint.address, port: endpoint.port });
+      let connected = false;
+      upstream.once("connect", () => {
+        connected = true;
+        upstream.write(
+          serializeUpgradeRequest(
+            request,
+            endpoint,
+            cookieName,
+            new URL(options.appOrigin).protocol.slice(0, -1),
+          ),
+        );
+        if (head.byteLength > 0) upstream.write(head);
+        socket.pipe(upstream).pipe(socket);
+      });
+      upstream.once("error", () => {
+        if (!connected) rejectUpgrade(socket, 502, "Bad Gateway");
+        else socket.destroy();
+      });
+      socket.once("error", () => upstream.destroy());
+      socket.once("close", () => upstream.destroy());
+    })().catch(() => rejectUpgrade(socket, 502, "Bad Gateway"));
   };
 }
 
@@ -213,6 +273,43 @@ function parseCookies(value: string | undefined): Map<string, string> {
 
 function serializeSessionCookie(name: string, value: string, secure: boolean): string {
   return `${name}=${value}; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`;
+}
+
+function serializeUpgradeRequest(
+  request: http.IncomingMessage,
+  endpoint: { address: string; port: 8080 },
+  sessionCookieName: string,
+  forwardedProtocol: string,
+): string {
+  const lines = [`${request.method ?? "GET"} ${request.url ?? "/"} HTTP/1.1`];
+  for (const [name, value] of Object.entries(request.headers)) {
+    const lower = name.toLowerCase();
+    if (lower === "host" || lower === "cookie" || value === undefined) continue;
+    for (const item of Array.isArray(value) ? value : [value]) {
+      lines.push(`${name}: ${item}`);
+    }
+  }
+  const applicationCookies = [...parseCookies(request.headers.cookie)]
+    .filter(([name]) => name !== sessionCookieName)
+    .map(([name, value]) => `${name}=${value}`)
+    .join("; ");
+  lines.push(`host: ${endpoint.address}:8080`);
+  if (applicationCookies) lines.push(`cookie: ${applicationCookies}`);
+  lines.push(`x-forwarded-host: ${request.headers.host ?? ""}`);
+  lines.push(`x-forwarded-proto: ${forwardedProtocol}`);
+  lines.push("x-forwarded-prefix: /");
+  lines.push("", "");
+  return lines.join("\r\n");
+}
+
+function rejectUpgrade(socket: Socket, status: number, reason: string): void {
+  if (socket.destroyed) return;
+  socket.end(
+    `HTTP/1.1 ${status} ${reason}\r\n` +
+      "Connection: close\r\n" +
+      "Cache-Control: no-store\r\n" +
+      "Content-Length: 0\r\n\r\n",
+  );
 }
 
 function sendFailure(
