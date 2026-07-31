@@ -120,7 +120,7 @@ describe("BlankBwaInstanceCreator", () => {
     expect(forkRef).toMatchObject({
       lineageIdHex: sourceRef.lineageIdHex,
       headFidHex: sourceRef.headFidHex,
-      revision: 0,
+      revision: sourceRef.revision,
     });
     expect(forked.instance.instanceIdHex).toBe("31".repeat(16));
     genesis.store.close();

@@ -131,7 +131,7 @@ export class BlankBwaInstanceCreator {
           refId,
           lineageIdHex: sourceRef.lineageIdHex,
           headFidHex: sourceRef.headFidHex,
-          revision: 0,
+          revision: sourceRef.revision,
           updatedAtMs: createdAtMs,
         },
       },
