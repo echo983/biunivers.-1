@@ -8,6 +8,7 @@ import { BlankBwaInstanceCreator } from "./blankBwaInstanceCreator.js";
 import { BwaBrowserSessionRegistry } from "./bwaBrowserSessionRegistry.js";
 import { BwaLifecycleService } from "./bwaLifecycleService.js";
 import { BwaLifecycleSupervisor } from "./bwaLifecycleSupervisor.js";
+import { BwaManagerControlService } from "./bwaManagerControlService.js";
 import { BwaRegistryService } from "./bwaRegistryService.js";
 import {
   createBwaRuntimeProxy,
@@ -21,6 +22,7 @@ export class BwaManagerRuntime {
   readonly registry: BwaRegistryService;
   readonly lifecycle: BwaLifecycleService;
   readonly sessions: BwaBrowserSessionRegistry;
+  readonly control: BwaManagerControlService;
   readonly httpProxy: RequestHandler;
   readonly websocketProxy: (
     request: IncomingMessage,
@@ -37,6 +39,7 @@ export class BwaManagerRuntime {
     supervisor: BwaLifecycleSupervisor;
     httpProxy: RequestHandler;
     websocketProxy: BwaManagerRuntime["websocketProxy"];
+    control: BwaManagerControlService;
   }) {
     this.registry = options.registry;
     this.lifecycle = options.lifecycle;
@@ -44,6 +47,7 @@ export class BwaManagerRuntime {
     this.#supervisor = options.supervisor;
     this.httpProxy = options.httpProxy;
     this.websocketProxy = options.websocketProxy;
+    this.control = options.control;
   }
 
   static async create(options: {
@@ -103,6 +107,13 @@ export class BwaManagerRuntime {
       }),
       httpProxy: createBwaRuntimeProxy(proxyOptions),
       websocketProxy: createBwaWebSocketProxy(proxyOptions),
+      control: new BwaManagerControlService({
+        appOrigin: options.appOrigin,
+        refStore: options.refStore,
+        registry,
+        lifecycle,
+        sessions,
+      }),
     });
     manager.#startSupervisor();
     return manager;

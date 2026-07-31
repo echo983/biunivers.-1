@@ -365,6 +365,7 @@ async function main() {
     openResourceResolver,
     openResourceLaunchService,
     desktopSurface,
+    bwaManager: bwaManager?.control,
   }).listen(config.desktopPort, () => {
     console.log(
       `Biunivers desktop listening on ${config.desktopOrigin} (port ${config.desktopPort})`,
