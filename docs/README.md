@@ -160,7 +160,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 | 文档 | 状态 | 说明 |
 | --- | --- | --- |
-| [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 第二版已完成首轮审查 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
+| [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 第三版概念冻结候选 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
 
 ## 第三方应用生态 V1：发布候选
 
