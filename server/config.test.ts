@@ -88,4 +88,50 @@ describe("loadServerConfig", () => {
       /file-service\/file-service\.sqlite$/,
     );
   });
+
+  it("keeps BWA disabled by default and validates its Runtime control channel", () => {
+    expect(loadServerConfig(validEnvironment).bwaManager).toBeUndefined();
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        BIUNIVERS_BWA_ENABLED: "true",
+      }),
+    ).toThrow("需要启用 File Service");
+    expect(() =>
+      loadServerConfig({
+        ...validEnvironment,
+        BIUNIVERS_BWA_ENABLED: "true",
+        BIUNIVERS_FILE_ENABLED: "true",
+        BIUNIVERS_FILE_S3_ENDPOINT: "https://account.r2.example.com",
+        BIUNIVERS_FILE_S3_BUCKET: "files",
+        BIUNIVERS_FILE_NAMESPACE: "users/alice",
+        BIUNIVERS_FILE_S3_ACCESS_KEY_ID: "access-key",
+        BIUNIVERS_FILE_S3_SECRET_ACCESS_KEY: "secret-key",
+        BIUNIVERS_RUNTIME_AUTH_TOKEN: "short",
+      }),
+    ).toThrow("64 位");
+  });
+
+  it("loads the optional BWA Manager configuration", () => {
+    const config = loadServerConfig({
+      ...validEnvironment,
+      BIUNIVERS_FILE_ENABLED: "true",
+      BIUNIVERS_FILE_S3_ENDPOINT: "https://account.r2.example.com",
+      BIUNIVERS_FILE_S3_BUCKET: "files",
+      BIUNIVERS_FILE_NAMESPACE: "users/alice",
+      BIUNIVERS_FILE_S3_ACCESS_KEY_ID: "access-key",
+      BIUNIVERS_FILE_S3_SECRET_ACCESS_KEY: "secret-key",
+      BIUNIVERS_BWA_ENABLED: "true",
+      BIUNIVERS_RUNTIME_AUTH_TOKEN: "11".repeat(32),
+    });
+    expect(config.bwaManager).toMatchObject({
+      runtimeAuthenticationTokenHex: "11".repeat(32),
+    });
+    expect(config.bwaManager?.runtimeSocketPath).toMatch(
+      /compute-runtime\/runtime\.sock$/,
+    );
+    expect(config.bwaManager?.secretStorePath).toMatch(
+      /private\/bwa-secrets\.json$/,
+    );
+  });
 });

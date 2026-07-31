@@ -32,6 +32,7 @@ import { WormholeControlService } from "./wormhole/wormholeControlService.js";
 import { WormholeFileService } from "./wormhole/wormholeFileService.js";
 import { createWormholeRouter } from "./wormhole/wormholeRouter.js";
 import { WorkspaceControlService } from "./workspace/workspaceControlService.js";
+import { BwaManagerRuntime } from "./bwa/bwaManagerRuntime.js";
 
 async function main() {
   const config = loadServerConfig();
@@ -320,6 +321,20 @@ async function main() {
     );
   }
 
+  const bwaManager = config.bwaManager
+    ? fileService.repository && fileService.refStore && config.fileService
+      ? await BwaManagerRuntime.create({
+          config: config.bwaManager,
+          appOrigin: config.appOrigin,
+          repository: fileService.repository,
+          refStore: fileService.refStore,
+          writerId: config.fileService.writerId,
+        })
+      : (() => {
+          throw new Error("BWA Manager requires a ready File Service.");
+        })()
+    : undefined;
+
   const clientDir = fileURLToPath(new URL("../client/", import.meta.url));
   const desktopServer = createDesktopServer({
     config,
@@ -360,14 +375,17 @@ async function main() {
     appStore,
     dataDir: config.dataDir,
     appOrigin: config.appOrigin,
+    bwaProxy: bwaManager?.httpProxy,
   }).listen(config.appPort, () => {
     console.log(
       `Biunivers apps listening on ${config.appOrigin} (port ${config.appPort})`,
     );
   });
+  if (bwaManager) appServer.on("upgrade", bwaManager.websocketProxy);
 
   const shutdown = () => {
     wormholeRuntime?.disable();
+    bwaManager?.close();
     desktopSurfaceStore.close();
     fileService.close();
     desktopServer.close();
