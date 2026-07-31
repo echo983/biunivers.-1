@@ -10,12 +10,13 @@ Biunivers Workspace Application 使用以下 Linux 拓扑：
 Biunivers Host 容器
 ├── Desktop / Manager / Runtime Proxy
 ├── bind mount：绝对 DATA_ROOT → 相同绝对路径
-└── Unix socket：DATA_ROOT/compute-runtime/runtime.sock
+└── Unix socket：/var/tmp/biunivers-bwa-<uid>/runtime.sock
 
 Linux 宿主 Compute Runtime
 ├── PVLogFS / fuse-overlayfs
 ├── Docker CLI → 宿主 Docker daemon
 ├── 同一个 DATA_ROOT
+├── 短路径状态根：/var/tmp/biunivers-bwa-<uid>
 └── 创建无 published port 的 BWA 容器
 ```
 
@@ -80,11 +81,17 @@ secret/bwa-product-data/
 ├── private/bwa-secrets.json
 └── compute-runtime/
     ├── auth-token
-    ├── runtime.sock
-    ├── runtime.log
-    ├── runs/
-    └── chunk-cache/
+    └── runtime.log
+
+/var/tmp/biunivers-bwa-<uid>/
+├── runtime.sock
+├── runs/
+└── chunk-cache/
 ```
+
+Run manifest、异常 Upper、mount point 和 gateway socket 使用短状态根，是为了满足 Linux
+Unix socket 107 字节路径上限。Upper 仍需保留到正常提交或显式丢弃，不能在 Runtime 运行中
+手工删除。可用 `BIUNIVERS_BWA_RUNTIME_STATE` 指定另一个足够短的绝对路径。
 
 不得提交该目录、环境文件、Runtime token、S3 key 或 BWA secret。备份仍以 File Service
 RefStore 备份和 S3 不可变对象为准；Runtime cache、socket 和容器本身不是持久数据。

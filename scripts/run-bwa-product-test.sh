@@ -9,7 +9,8 @@ IMAGE_NAME="${BIUNIVERS_BWA_TEST_IMAGE:-biunivers:bwa-product-dev}"
 SOURCE_VOLUME="${BIUNIVERS_BWA_SOURCE_VOLUME:-biunivers-v02-test-data}"
 DATA_ROOT="${BIUNIVERS_BWA_TEST_DATA:-$PWD/secret/bwa-product-data}"
 RUNTIME_DIR="$DATA_ROOT/compute-runtime"
-SOCKET_PATH="$RUNTIME_DIR/runtime.sock"
+RUNTIME_STATE_ROOT="${BIUNIVERS_BWA_RUNTIME_STATE:-/var/tmp/biunivers-bwa-$(id -u)}"
+SOCKET_PATH="$RUNTIME_STATE_ROOT/runtime.sock"
 TOKEN_FILE="$RUNTIME_DIR/auth-token"
 PID_FILE="$RUNTIME_DIR/runtime.pid"
 LOG_FILE="$RUNTIME_DIR/runtime.log"
@@ -39,8 +40,8 @@ for command in docker fuse-overlayfs fusermount3; do
   command -v "$command" >/dev/null || { echo "缺少 $command。" >&2; exit 1; }
 done
 
-mkdir -p "$RUNTIME_DIR" "$DATA_ROOT/file-service"
-chmod 700 "$RUNTIME_DIR"
+mkdir -p "$RUNTIME_DIR" "$RUNTIME_STATE_ROOT" "$DATA_ROOT/file-service"
+chmod 700 "$RUNTIME_DIR" "$RUNTIME_STATE_ROOT"
 
 set -a
 source "$ENV_FILE"
@@ -99,8 +100,8 @@ DIAGNOSTIC_IMAGE_ID="$(docker image inspect --format '{{.Id}}' biunivers-runtime
 export BIUNIVERS_DATA_DIR="$DATA_ROOT"
 export BIUNIVERS_FILE_INITIALIZE=false
 export BIUNIVERS_BWA_ENABLED=true
-export BIUNIVERS_RUNTIME_ROOT="$RUNTIME_DIR/runs"
-export BIUNIVERS_RUNTIME_CACHE="$RUNTIME_DIR/chunk-cache"
+export BIUNIVERS_RUNTIME_ROOT="$RUNTIME_STATE_ROOT/runs"
+export BIUNIVERS_RUNTIME_CACHE="$RUNTIME_STATE_ROOT/chunk-cache"
 export BIUNIVERS_RUNTIME_SOCKET="$SOCKET_PATH"
 export BIUNIVERS_RUNTIME_AUTH_TOKEN="$TOKEN_HEX"
 export BIUNIVERS_PVLOGFS_BINARY="$PVLOGFS_BINARY"
@@ -139,6 +140,7 @@ docker run --rm -d \
   -e BIUNIVERS_RUNTIME_SOCKET="$SOCKET_PATH" \
   -e BIUNIVERS_RUNTIME_AUTH_TOKEN="$TOKEN_HEX" \
   --mount "type=bind,src=$DATA_ROOT,dst=$DATA_ROOT" \
+  --mount "type=bind,src=$RUNTIME_STATE_ROOT,dst=$RUNTIME_STATE_ROOT" \
   "$IMAGE_NAME" >/dev/null
 
 echo "等待 Biunivers 启动……"
