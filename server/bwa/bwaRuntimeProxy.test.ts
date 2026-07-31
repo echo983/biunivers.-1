@@ -44,7 +44,7 @@ describe("BWA Runtime Proxy", () => {
     expect(bootstrap.status).toBe(303);
     expect(bootstrap.headers.location).toBe("/");
     expect(bootstrap.headers["set-cookie"]?.[0]).toMatch(
-      /^biunivers-bwa-session=.+; Path=\/; HttpOnly; SameSite=Strict$/,
+      /^biunivers-bwa-session=.+; Path=\/; HttpOnly; SameSite=None; Secure; Partitioned$/,
     );
 
     const replay = await request(server, {

@@ -34,7 +34,6 @@ interface RuntimeProxyOptions {
 
 export function createBwaRuntimeProxy(options: RuntimeProxyOptions): RequestHandler {
   const cookieName = bwaSessionCookieName(options.appOrigin);
-  const secure = new URL(options.appOrigin).protocol === "https:";
 
   return (request, response, next) => {
     const target = resolveHostTarget(request.get("host"), options.appOrigin, options.refStore);
@@ -61,7 +60,7 @@ export function createBwaRuntimeProxy(options: RuntimeProxyOptions): RequestHand
           );
           response.setHeader(
             "Set-Cookie",
-            serializeSessionCookie(cookieName, issued.session, secure),
+            serializeSessionCookie(cookieName, issued.session),
           );
           response.redirect(303, "/");
         } catch (error) {
@@ -271,8 +270,12 @@ function parseCookies(value: string | undefined): Map<string, string> {
   return output;
 }
 
-function serializeSessionCookie(name: string, value: string, secure: boolean): string {
-  return `${name}=${value}; Path=/; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`;
+function serializeSessionCookie(name: string, value: string): string {
+  // A BWA has an isolated subdomain and runs inside the Desktop iframe. CHIPS
+  // keeps its host-only session available in that cross-site iframe while
+  // binding it to the current top-level Biunivers site. Secure is mandatory
+  // for both SameSite=None and Partitioned; browsers permit it on localhost.
+  return `${name}=${value}; Path=/; HttpOnly; SameSite=None; Secure; Partitioned`;
 }
 
 function serializeUpgradeRequest(
