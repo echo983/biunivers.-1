@@ -108,11 +108,13 @@ for _ in $(seq 1 100); do
 done
 [[ -S "$SOCKET_PATH" ]]
 
-"$NODE_BIN" scripts/bwa-lifecycle-fixture.mjs \
-  verify "$FIXTURE_PATH" "$SECRET_PATH" >/dev/null
+"$NODE_BIN" scripts/prepare-bwa-controlled-shutdown.mjs \
+  "$SOCKET_PATH" "$TOKEN_HEX" "$FIXTURE_PATH" "$SECRET_PATH" >/dev/null
 
 kill -TERM "$DAEMON_PID"
 wait "$DAEMON_PID"
 DAEMON_PID=""
+"$NODE_BIN" scripts/bwa-lifecycle-fixture.mjs \
+  verify "$FIXTURE_PATH" "$SECRET_PATH" >/dev/null
 echo "$RESULT"
-echo "BWA 保存重启、异常 Upper、daemon 中断恢复、Ref 不变和单次回退基础全部通过。"
+echo "BWA 保存重启、异常 Upper、daemon 中断恢复、Ref 不变和受控关机提交全部通过。"

@@ -79,11 +79,11 @@ try {
     const ref = runtime.refStore.getRef(fixture.workspaceRefId);
     const runs = runtime.refStore.listBwaRunBindings(fixture.instanceIdHex);
     if (
-      instance.desiredState !== "STOPPED" ||
-      ref.revision !== 2 ||
-      runs.length !== 5 ||
-      runs.filter(({ run }) => run.state === "COMMITTED").length !== 4 ||
-      runs.filter(({ run }) => run.state === "FAILED").length !== 1
+      instance.desiredState !== "RUNNING" ||
+      ref.revision !== 3 ||
+      runs.length !== 6 ||
+      runs.filter(({ run }) => run.state === "COMMITTED").length !== 5 ||
+      runs.filter(({ run }) => run.state === "DISCARDED").length !== 1
     ) {
       throw new Error("BWA lifecycle committed state is invalid.");
     }

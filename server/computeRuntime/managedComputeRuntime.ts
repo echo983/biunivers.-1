@@ -138,10 +138,23 @@ export class ManagedComputeRuntime {
     if (manifest.state !== "STOPPED") {
       throw new Error("Only a locally STOPPED Run can be committed.");
     }
-    return await this.#committer.commit({
-      runIdHex,
-      upperPath: this.#directories.paths(runIdHex).upper,
-    });
+    try {
+      return await this.#committer.commit({
+        runIdHex,
+        upperPath: this.#directories.paths(runIdHex).upper,
+      });
+    } catch (error) {
+      const current = await this.#directories.inspect(runIdHex);
+      if (current.state === "STOPPED") {
+        await this.#directories.transition({
+          runIdHex,
+          expectedState: "STOPPED",
+          newState: "FAILED",
+          errorCode: "COW_COMMIT_FAILED",
+        });
+      }
+      throw error;
+    }
   }
 
   async destroy(runIdHex: string, preserveUpper: boolean) {

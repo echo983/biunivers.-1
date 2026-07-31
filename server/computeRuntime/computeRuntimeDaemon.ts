@@ -22,6 +22,8 @@ import { ManagedComputeRuntime } from "./managedComputeRuntime.js";
 import { PvlogSnapshotProvisioner } from "./pvlogSnapshotProvisioner.js";
 import { RunDirectoryManager } from "./runDirectoryManager.js";
 import { BwaHostRecovery } from "../bwa/bwaHostRecovery.js";
+import { BwaControlledShutdown } from "../bwa/bwaControlledShutdown.js";
+import { BwaLifecycleService } from "../bwa/bwaLifecycleService.js";
 
 export interface ComputeRuntimeDaemon {
   readonly socketPath: string;
@@ -150,12 +152,25 @@ export async function startComputeRuntimeDaemon(options: {
       runtime: managedRuntime,
     });
     await server.listen();
+    const bwaShutdown = new BwaControlledShutdown({
+      refStore: fileRuntime.refStore,
+      lifecycle: new BwaLifecycleService({
+        refStore: fileRuntime.refStore,
+        environment: {
+          resolveEnvironment: async () => {
+            throw new Error("Environment resolution is unavailable during shutdown.");
+          },
+        },
+        runtime: managedRuntime,
+      }),
+    });
     return new RunningComputeRuntimeDaemon({
       socketPath: options.runtimeConfig.socketPath,
       quarantinedPaths: reconciliation.quarantined.length,
       recoveredRuns: recoveredRunCount,
       server,
       coordinator: managedRuntime,
+      bwaShutdown,
       fileRuntime,
     });
   } catch (error) {
@@ -170,6 +185,7 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
   readonly recoveredRuns: number;
   readonly #server: ComputeRuntimeServer;
   readonly #coordinator: Pick<ManagedComputeRuntime, "shutdown">;
+  readonly #bwaShutdown: BwaControlledShutdown;
   readonly #fileRuntime: FileServiceRuntime;
   #closed = false;
 
@@ -179,6 +195,7 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
     recoveredRuns: number;
     server: ComputeRuntimeServer;
     coordinator: Pick<ManagedComputeRuntime, "shutdown">;
+    bwaShutdown: BwaControlledShutdown;
     fileRuntime: FileServiceRuntime;
   }) {
     this.socketPath = options.socketPath;
@@ -186,6 +203,7 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
     this.recoveredRuns = options.recoveredRuns;
     this.#server = options.server;
     this.#coordinator = options.coordinator;
+    this.#bwaShutdown = options.bwaShutdown;
     this.#fileRuntime = options.fileRuntime;
   }
 
@@ -195,6 +213,19 @@ class RunningComputeRuntimeDaemon implements ComputeRuntimeDaemon {
     const errors: unknown[] = [];
     try {
       await this.#server.close();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      const report = await this.#bwaShutdown.shutdown();
+      if (report.failed.length > 0) {
+        errors.push(
+          new AggregateError(
+            report.failed.map((item) => item.error),
+            "Controlled BWA shutdown did not commit every running Instance.",
+          ),
+        );
+      }
     } catch (error) {
       errors.push(error);
     }

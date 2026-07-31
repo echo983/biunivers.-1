@@ -64,6 +64,30 @@ describe("ManagedComputeRuntime", () => {
       upperPath: `/runtime/${runIdHex}/upper`,
     });
   });
+
+  it("mirrors a control commit failure into the local manifest for Upper recovery", async () => {
+    const transition = vi.fn().mockResolvedValue({ state: "FAILED" });
+    const managed = createManaged(
+      {},
+      {},
+      {
+        inspect: vi.fn()
+          .mockResolvedValueOnce({ state: "STOPPED" })
+          .mockResolvedValueOnce({ state: "STOPPED" }),
+        paths: vi.fn().mockReturnValue({ upper: `/runtime/${runIdHex}/upper` }),
+        transition,
+      },
+      { commit: vi.fn().mockRejectedValue(new Error("commit failed")) },
+    );
+
+    await expect(managed.commit(runIdHex)).rejects.toThrow("commit failed");
+    expect(transition).toHaveBeenCalledWith({
+      runIdHex,
+      expectedState: "STOPPED",
+      newState: "FAILED",
+      errorCode: "COW_COMMIT_FAILED",
+    });
+  });
 });
 
 function createManaged(

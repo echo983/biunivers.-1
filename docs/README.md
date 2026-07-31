@@ -167,6 +167,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.14-A BWA Registry 与 Image 验收](<acceptance/V0.14-A BWA Registry 与 Image 验收.md>) | 已通过 | 公开 GHCR、真实 Runtime socket、固定 digest、持久 Schema、空白 Instance 与 secret 边界 |
 | [V0.14 Lifecycle、提交与异常恢复局部设计](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复局部设计.md>) | 实现基线 | 动态 BWA Run、结束分类、正常提交、保存重启、受控关机和异常 Upper 门禁 |
 | [V0.14 Lifecycle、提交与异常恢复规范评审](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复规范评审.md>) | 评审通过 | 必要性、过度设计删减、状态自洽性、风险和分段施工门 |
+| [V0.14 Lifecycle、提交与异常恢复阶段验收](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复阶段验收.md>) | 阶段通过 | 真实 BWA、异常 Upper、保存重启、受控/非受控恢复、更新门和回退出口 |
 
 ## 第三方应用生态 V1：发布候选
 
