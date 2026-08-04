@@ -30,7 +30,7 @@ const manifest = {
   ],
 };
 
-test("unlocks management, reports a bad ref, and installs an app", async ({
+test("opens management, reports a bad ref, and installs an app", async ({
   page,
 }) => {
   let installed = false;
@@ -62,10 +62,7 @@ test("unlocks management, reports a bad ref, and installs an app", async ({
     });
   });
 
-  await page.route("**/api/v1/admin/apps", async (route) => {
-    expect(route.request().headers().authorization).toBe(
-      "Bearer playwright-admin-token",
-    );
+  await page.route("**/api/v1/control/apps", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         json: {
@@ -99,7 +96,7 @@ test("unlocks management, reports a bad ref, and installs an app", async ({
     });
   });
 
-  await page.route("**/api/v1/admin/inspections", async (route) => {
+  await page.route("**/api/v1/control/inspections", async (route) => {
     const body = route.request().postDataJSON() as { ref: string };
     if (body.ref === "missing") {
       await route.fulfill({
@@ -135,12 +132,6 @@ test("unlocks management, reports a bad ref, and installs an app", async ({
     .click();
 
   const settingsWindow = page.locator("#app-system\\.settings");
-  await settingsWindow.getByLabel("管理员 token").fill(
-    "playwright-admin-token",
-  );
-  await settingsWindow.getByRole("button", {
-    name: "解锁应用管理",
-  }).click();
   await expect(
     settingsWindow.getByRole("heading", { name: "从 GitHub 安装" }),
   ).toBeVisible();
@@ -166,9 +157,10 @@ test("unlocks management, reports a bad ref, and installs an app", async ({
     settingsWindow.getByText("“Biunivers Hello”安装成功"),
   ).toBeVisible();
   expect(configuredGreeting).toBe("来自浏览器 E2E");
+  await page.getByRole("button", { name: "打开 App 菜单" }).click();
   await expect(
     page
-      .getByRole("group", { name: "桌面应用" })
+      .getByRole("dialog", { name: "App 菜单" })
       .getByRole("button", { name: "Biunivers Hello" }),
   ).toBeVisible();
 });

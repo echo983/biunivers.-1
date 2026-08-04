@@ -51,8 +51,9 @@ if [[ ! -f "$DATA_ROOT/file-service/file-service.sqlite" ]]; then
   if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
     echo "从当前 Host 创建一致性 RefStore 备份……"
     curl --fail --silent --show-error --request POST \
-      --header "Authorization: Bearer $BIUNIVERS_ADMIN_TOKEN" \
-      "${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}/api/v1/admin/file-service/backups" >/dev/null
+      --header "Origin: ${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}" \
+      --header "Sec-Fetch-Site: same-origin" \
+      "${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}/api/v1/control/file-service/backups" >/dev/null
     docker cp "$CONTAINER_NAME:/data/file-service/backups/latest.sqlite" \
       "$DATA_ROOT/file-service/file-service.sqlite" >/dev/null
   elif docker volume inspect "$SOURCE_VOLUME" >/dev/null 2>&1; then

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import { loadServerConfig } from "./config.js";
 
 const validEnvironment = {
-  BIUNIVERS_ADMIN_TOKEN: "a-secure-token-value",
   BIUNIVERS_DESKTOP_ORIGIN: "http://localhost:8080",
   BIUNIVERS_APP_ORIGIN: "http://localhost:8081",
   BIUNIVERS_DATA_DIR: "./test-data",
@@ -37,14 +36,7 @@ describe("loadServerConfig", () => {
     ).toThrow("不能使用 IP");
   });
 
-  it("rejects weak admin tokens and origins with paths", () => {
-    expect(() =>
-      loadServerConfig({
-        ...validEnvironment,
-        BIUNIVERS_ADMIN_TOKEN: "replace-me",
-      }),
-    ).toThrow("长度至少为 16");
-
+  it("rejects origins with paths", () => {
     expect(() =>
       loadServerConfig({
         ...validEnvironment,

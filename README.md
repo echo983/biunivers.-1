@@ -1,6 +1,6 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.12.0` 已具备窗口与
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.14.1` 已具备窗口与
 自由布局桌面、第三方静态应用安装、不可变文件服务、文件管理器、资源关联打开、可续租
 Resource Session、Open Resource v1.1 多资源交付、桌面快捷入口、原子批量文件操作和按需
 WebDAV 文件交换。
@@ -9,12 +9,12 @@ WebDAV 文件交换。
 
 ## 项目状态
 
-`v0.1.0` 至 `v0.12.0` 已按里程碑归档；`v0.12.0` 完成 Open Resource v1.1、
-第三方应用主动多选和文件管理器批量 Launch。
+`v0.1.0` 至 `v0.14.0` 已按里程碑归档；`v0.14.0` 完成 Workspace Application 闭环。
 各版本需求、技术设计、施工计划和真实验收证据统一收录在 [`docs/`](docs/)。
 
-当前定位是单用户、单实例的个人部署版本。公网使用时应在 Biunivers 前增加 VPN、
-Cloudflare Access 或反向代理认证；管理员 token 只保护管理接口，不等同于桌面登录。
+当前定位是单一主人、单实例的个人部署版本。公网使用时必须在 Biunivers 前增加 VPN、
+Cloudflare Access 或反向代理认证。可信桌面直接拥有控制权，第三方应用仍由独立 Origin
+和资源能力隔离；详见单一主人控制模型设计。
 
 ## 环境要求
 
@@ -34,7 +34,6 @@ npm run dev
 
 ```bash
 npm run build
-BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
 BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
 BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
 BIUNIVERS_DATA_DIR="./data" \
@@ -46,13 +45,11 @@ Desktop Origin 为 `http://localhost:8080`，第三方 App Origin 为 `http://lo
 ## 管理第三方应用
 
 1. 打开内建“设置”应用；
-2. 在“应用管理”中输入部署时设置的 `BIUNIVERS_ADMIN_TOKEN`；
-3. 填写公开 GitHub 仓库 URL 和 branch、tag 或 commit；
-4. 检查应用身份、许可证、固定 commit 和公开配置；
-5. 确认安装。
+2. 填写公开 GitHub 仓库 URL 和 branch、tag 或 commit；
+3. 检查应用身份、许可证、固定 commit 和公开配置；
+4. 确认安装。
 
-管理员 token 只保存在当前设置窗口的内存中。安装配置会由 App Origin
-发送给浏览器，因此不能填写密码、私钥或长期 token。
+安装配置会由 App Origin 发送给浏览器，因此不能填写密码、私钥或长期 token。
 
 已安装应用可以在同一页面修改配置、更新、停用、启用和卸载。更新失败不会替换当前版本；
 卸载会删除服务器端文件和配置，但不能保证清除第三方应用已经写入浏览器的站点数据。
@@ -108,21 +105,20 @@ https://desktop.example.com/services/example/
 
 ## Docker
 
-V0.12 使用 Node.js 单容器提供桌面、管理 API、第三方应用静态文件、可选 File Service
+V0.14.1 使用 Node.js 单容器提供桌面、控制 API、第三方应用静态文件、可选 File Service
 和按需开启的 Wormhole。
 构建并运行：
 
 ```bash
-docker build -t biunivers:v0.12.0 .
+docker build -t biunivers:v0.14.1 .
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
-  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
   -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.12.0
+  biunivers:v0.14.1
 ```
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。
@@ -154,20 +150,22 @@ Windows WebDAV 连接信息以及可复制的 rclone Mount/Sync 命令。关闭�
 撤销旧凭据。公网使用必须通过 HTTPS；它是传输与主动同步通道，不是实时同步服务。
 
 RefStore 缺失/损坏、对象存储不可用或 Head 校验失败时，File Service 进入不可写的
-`offline` 状态，桌面和应用管理继续启动。管理员可通过
-`GET /api/v1/admin/file-service` 查看不含凭据的状态。Access Key 和 Secret 只能通过 secret
+`offline` 状态，桌面和应用管理继续启动。桌面可通过
+`GET /api/v1/control/file-service` 查看不含凭据的状态。Access Key 和 Secret 只能通过 secret
 管理或环境变量提供，不能写入应用配置、日志或 Git。
 
-管理员可以创建在线一致性 RefStore 备份和只读 GC 报告：
+可信桌面控制面可以创建在线一致性 RefStore 备份和只读 GC 报告。命令行运维必须显式模拟同源控制请求：
 
 ```bash
 curl -X POST \
-  -H 'Authorization: Bearer <admin-token>' \
-  http://localhost:8080/api/v1/admin/file-service/backups
+  -H 'Origin: http://localhost:8080' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  http://localhost:8080/api/v1/control/file-service/backups
 
 curl -X POST \
-  -H 'Authorization: Bearer <admin-token>' \
-  http://localhost:8080/api/v1/admin/file-service/gc-reports
+  -H 'Origin: http://localhost:8080' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  http://localhost:8080/api/v1/control/file-service/gc-reports
 ```
 
 备份固定写入 `/data/file-service/backups/latest.sqlite`。V0.3 GC 只报告，不删除对象；
@@ -233,7 +231,6 @@ BIUNIVERS_APP_ORIGIN=https://apps.desktop.example.com
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
-  -e BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值" \
   -e BIUNIVERS_DESKTOP_ORIGIN="http://localhost:8080" \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v "$PWD/apps.json:/app/dist/client/config/apps.json:ro" \
@@ -242,10 +239,9 @@ docker run --rm \
   biunivers:v0.7.0
 ```
 
-也可复制 `compose.example.yml`，在同目录准备 `apps.json` 并设置管理员 token：
+也可复制 `compose.example.yml`，在同目录准备 `apps.json`：
 
 ```bash
-export BIUNIVERS_ADMIN_TOKEN="请使用至少16字符的随机值"
 docker compose -f compose.example.yml up -d --build
 ```
 

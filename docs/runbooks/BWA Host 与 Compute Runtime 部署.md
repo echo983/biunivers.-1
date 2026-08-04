@@ -106,8 +106,8 @@ RefStore 备份和 S3 不可变对象为准；Runtime cache、socket 和容器�
 docker logs biunivers-v02-test
 tail -n 100 secret/bwa-product-data/compute-runtime/runtime.log
 curl http://localhost:8080/health
-curl -H 'Authorization: Bearer <admin-token>' \
-  http://localhost:8080/api/v1/admin/bwa
+curl -H 'Sec-Fetch-Site: same-origin' \
+  http://localhost:8080/api/v1/control/bwa
 ```
 
 如果 Host 能启动但 BWA 无法打开，依次检查：

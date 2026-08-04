@@ -94,8 +94,9 @@ CARGO_TARGET_DIR="$TEST_ROOT/cargo-target" \
 
 curl --fail --silent --show-error \
   --request POST \
-  --header "Authorization: Bearer $BIUNIVERS_ADMIN_TOKEN" \
-  "$BIUNIVERS_DESKTOP_ORIGIN/api/v1/admin/file-service/backups" >/dev/null
+  --header "Origin: $BIUNIVERS_DESKTOP_ORIGIN" \
+  --header "Sec-Fetch-Site: same-origin" \
+  "$BIUNIVERS_DESKTOP_ORIGIN/api/v1/control/file-service/backups" >/dev/null
 mkdir -p "$TEST_ROOT/data/file-service"
 docker cp \
   "$HOST_CONTAINER:/data/file-service/backups/latest.sqlite" \

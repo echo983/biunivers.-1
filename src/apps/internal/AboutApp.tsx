@@ -15,7 +15,7 @@ export function AboutApp() {
         当前版本已具备自由布局桌面、窗口、原子批量文件操作、目录 ZIP 导出、
         Wormhole 文件交换、固定快照 Workspace、隔离计算与 COW 提交、
         变更审阅和原子导回、Workspace Application 容器应用与平行状态，
-        以及 Open Resource v1.1 多资源交付与第三方静态应用闭环。
+        Open Resource v1.1 多资源交付、第三方静态应用闭环，以及单一主人控制面。
       </p>
       <dl>
         <div>
@@ -40,6 +40,10 @@ export function AboutApp() {
         <div>
           <dt>窗口</dt>
           <dd>WinBox.js</dd>
+        </div>
+        <div>
+          <dt>控制</dt>
+          <dd>单一主人 · 桌面同源 · 应用能力隔离</dd>
         </div>
       </dl>
     </article>

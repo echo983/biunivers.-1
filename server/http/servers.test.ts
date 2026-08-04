@@ -38,7 +38,6 @@ async function createDependencies() {
   await writeFile(join(clientDir, "index.html"), "<h1>Biunivers</h1>");
 
   const config: ServerConfig = {
-    adminToken: "a-secure-token-value",
     dataDir: store.dataDir,
     desktopPort: 8080,
     appPort: 8081,
@@ -84,18 +83,18 @@ describe("desktop and app origins", () => {
       .toContain("Biunivers");
   });
 
-  it("requires the admin bearer token", async () => {
+  it("restricts the control plane to the trusted desktop origin", async () => {
     const dependencies = await createDependencies();
     const origin = await listen(
       createDesktopServer(dependencies).listen(0, "127.0.0.1"),
     );
 
-    const unauthorized = await fetch(`${origin}/api/v1/admin/apps`);
-    expect(unauthorized.status).toBe(401);
+    const unauthorized = await fetch(`${origin}/api/v1/control/apps`);
+    expect(unauthorized.status).toBe(403);
 
-    const authorized = await fetch(`${origin}/api/v1/admin/apps`, {
+    const authorized = await fetch(`${origin}/api/v1/control/apps`, {
       headers: {
-        authorization: `Bearer ${dependencies.config.adminToken}`,
+        "sec-fetch-site": "same-origin",
       },
     });
     expect(authorized.status).toBe(200);
@@ -105,10 +104,10 @@ describe("desktop and app origins", () => {
     });
 
     const fileService = await fetch(
-      `${origin}/api/v1/admin/file-service`,
+      `${origin}/api/v1/control/file-service`,
       {
         headers: {
-          authorization: `Bearer ${dependencies.config.adminToken}`,
+          "sec-fetch-site": "same-origin",
         },
       },
     );
@@ -118,11 +117,12 @@ describe("desktop and app origins", () => {
     });
 
     const unavailableBackup = await fetch(
-      `${origin}/api/v1/admin/file-service/backups`,
+      `${origin}/api/v1/control/file-service/backups`,
       {
         method: "POST",
         headers: {
-          authorization: `Bearer ${dependencies.config.adminToken}`,
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
         },
       },
     );
@@ -132,11 +132,12 @@ describe("desktop and app origins", () => {
     });
 
     const unavailableGc = await fetch(
-      `${origin}/api/v1/admin/file-service/gc-reports`,
+      `${origin}/api/v1/control/file-service/gc-reports`,
       {
         method: "POST",
         headers: {
-          authorization: `Bearer ${dependencies.config.adminToken}`,
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
         },
       },
     );
@@ -168,10 +169,11 @@ describe("desktop and app origins", () => {
     const origin = await listen(
       createDesktopServer({ ...dependencies, bwaManager }).listen(0, "127.0.0.1"),
     );
-    const endpoint = `${origin}/api/v1/admin/bwa`;
-    expect((await fetch(endpoint)).status).toBe(401);
+    const endpoint = `${origin}/api/v1/control/bwa`;
+    expect((await fetch(endpoint)).status).toBe(403);
     const headers = {
-      authorization: `Bearer ${dependencies.config.adminToken}`,
+      origin: dependencies.config.desktopOrigin,
+      "sec-fetch-site": "same-origin",
       "content-type": "application/json",
     };
     await expect(fetch(endpoint, { headers }).then((response) => response.json()))
@@ -354,17 +356,18 @@ describe("desktop and app origins", () => {
     );
 
     const unauthorized = await fetch(
-      `${origin}/api/v1/admin/file-service/backups`,
+      `${origin}/api/v1/control/file-service/backups`,
       { method: "POST" },
     );
-    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.status).toBe(403);
 
     const created = await fetch(
-      `${origin}/api/v1/admin/file-service/backups`,
+      `${origin}/api/v1/control/file-service/backups`,
       {
         method: "POST",
         headers: {
-          authorization: `Bearer ${dependencies.config.adminToken}`,
+          origin: dependencies.config.desktopOrigin,
+          "sec-fetch-site": "same-origin",
         },
       },
     );

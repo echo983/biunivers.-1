@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(
     page
-      .getByRole("group", { name: "桌面应用" })
+      .getByRole("group", { name: "桌面项目" })
       .getByRole("button", { name: "文件" }),
   ).toBeVisible();
 });
@@ -13,7 +13,7 @@ test("opens, controls, closes, and restores an internal window", async ({
   page,
 }) => {
   await page
-    .getByRole("group", { name: "桌面应用" })
+    .getByRole("group", { name: "桌面项目" })
     .getByRole("button", { name: "关于" })
     .dblclick();
 

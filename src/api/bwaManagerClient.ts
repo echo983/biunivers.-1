@@ -40,8 +40,6 @@ interface ErrorBody {
 }
 
 export class BwaManagerClient {
-  constructor(private readonly token: string) {}
-
   async status() {
     return await this.request<{
       applications: BwaApplicationSummary[];
@@ -132,11 +130,10 @@ export class BwaManagerClient {
     path: string,
     options: { method?: string; body?: unknown } = {},
   ): Promise<T> {
-    const response = await fetch(`/api/v1/admin/bwa${path}`, {
+    const response = await fetch(`/api/v1/control/bwa${path}`, {
       method: options.method,
       cache: "no-store",
       headers: {
-        authorization: `Bearer ${this.token}`,
         ...(options.body === undefined ? {} : { "content-type": "application/json" }),
       },
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

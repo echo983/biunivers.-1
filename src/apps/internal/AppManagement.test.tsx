@@ -76,23 +76,23 @@ afterEach(() => {
 });
 
 describe("AppManagement", () => {
-  it("unlocks, inspects and installs an application", async () => {
+  it("loads, inspects and installs an application", async () => {
     const user = userEvent.setup();
     let installedState = false;
     const fetchMock = vi.fn(
       async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
-        if (url === "/api/v1/admin/apps" && init?.method === "POST") {
+        if (url === "/api/v1/control/apps" && init?.method === "POST") {
           installedState = true;
           return Response.json(installed, { status: 201 });
         }
-        if (url === "/api/v1/admin/apps") {
+        if (url === "/api/v1/control/apps") {
           return Response.json({
             schemaVersion: 1,
             apps: installedState ? [installed] : [],
           });
         }
-        if (url === "/api/v1/admin/inspections") {
+        if (url === "/api/v1/control/inspections") {
           return Response.json(inspection, { status: 201 });
         }
         if (url === "/config/apps.json") {
@@ -125,14 +125,6 @@ describe("AppManagement", () => {
     useDesktopStore.setState({ pinnedAppIds: [], pinnedInitialized: true });
 
     render(<AppManagement />);
-    await user.type(
-      screen.getByLabelText("管理员 token"),
-      "a-secure-token-value",
-    );
-    await user.click(
-      screen.getByRole("button", { name: "解锁应用管理" }),
-    );
-
     expect(
       await screen.findByRole("heading", { name: "从 GitHub 安装" }),
     ).toBeVisible();
@@ -166,16 +158,15 @@ describe("AppManagement", () => {
     expect(localStorage.getItem("admin-token")).toBeNull();
   });
 
-  it("keeps the manager locked after an authentication failure", async () => {
-    const user = userEvent.setup();
+  it("shows a control-plane loading failure", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
         Response.json(
           {
             error: {
-              code: "ADMIN_AUTH_REQUIRED",
-              message: "需要有效的管理员凭据",
+              code: "CONTROL_ORIGIN_FORBIDDEN",
+              message: "控制操作只能由当前 Biunivers 桌面发起",
             },
           },
           { status: 401 },
@@ -184,19 +175,11 @@ describe("AppManagement", () => {
     );
 
     render(<AppManagement />);
-    await user.type(screen.getByLabelText("管理员 token"), "wrong-token");
-    await user.click(
-      screen.getByRole("button", { name: "解锁应用管理" }),
-    );
-
     expect(
-      await screen.findByText("需要有效的管理员凭据"),
+      await screen.findByText("控制操作只能由当前 Biunivers 桌面发起"),
     ).toBeVisible();
-    expect(
-      screen.queryByRole("heading", { name: "从 GitHub 安装" }),
-    ).toBeNull();
     await waitFor(() =>
-      expect(screen.getByLabelText("管理员 token")).toBeVisible(),
+      expect(screen.getByRole("heading", { name: "从 GitHub 安装" })).toBeVisible(),
     );
   });
 
@@ -209,7 +192,7 @@ describe("AppManagement", () => {
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         if (
-          url === `/api/v1/admin/apps/${installed.appId}` &&
+          url === `/api/v1/control/apps/${installed.appId}` &&
           init?.method === "PATCH"
         ) {
           const patch = JSON.parse(String(init.body)) as {
@@ -221,13 +204,13 @@ describe("AppManagement", () => {
           return Response.json(current);
         }
         if (
-          url === `/api/v1/admin/apps/${installed.appId}` &&
+          url === `/api/v1/control/apps/${installed.appId}` &&
           init?.method === "DELETE"
         ) {
           current = null;
           return new Response(null, { status: 204 });
         }
-        if (url === "/api/v1/admin/apps") {
+        if (url === "/api/v1/control/apps") {
           return Response.json({
             schemaVersion: 1,
             apps: current ? [current] : [],
@@ -244,13 +227,6 @@ describe("AppManagement", () => {
     );
 
     render(<AppManagement />);
-    await user.type(
-      screen.getByLabelText("管理员 token"),
-      "a-secure-token-value",
-    );
-    await user.click(
-      screen.getByRole("button", { name: "解锁应用管理" }),
-    );
     expect(await screen.findByText(installed.appId)).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "停用" }));
