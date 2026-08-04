@@ -301,7 +301,7 @@ async function main() {
       },
       {
         id: "system.bwa-manager",
-        name: "Workspace Apps",
+        name: "工作空间应用",
         icon: "/icons/workspaces.svg",
         desktop: false,
       },

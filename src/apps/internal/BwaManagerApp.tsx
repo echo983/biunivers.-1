@@ -60,7 +60,7 @@ export function BwaManagerApp() {
     <article className="bwa-manager">
       <header>
         <div>
-          <h1>Workspace Application Manager</h1>
+          <h1>工作空间应用管理</h1>
           <p>每个 Instance 绑定一个可独立 Fork 和提交的 Workspace 状态。</p>
         </div>
         <button type="button" disabled={busy} onClick={() => void refresh()}>刷新</button>

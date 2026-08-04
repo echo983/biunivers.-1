@@ -2407,7 +2407,7 @@ function requireBwaManager(
   if (!service) {
     throw new AppError(
       "HOST_API_UNSUPPORTED",
-      "当前宿主尚未启用 Workspace Application Manager",
+      "当前宿主尚未启用工作空间应用管理器",
       503,
     );
   }

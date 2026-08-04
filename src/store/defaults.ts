@@ -57,10 +57,10 @@ export const defaultApps: AppDefinition[] = [
   },
   {
     id: "system.bwa-manager",
-    name: "Workspace Apps",
+    name: "工作空间应用",
     kind: "internal",
     icon: "/icons/workspaces.svg",
-    description: "安装和管理 Workspace Application",
+    description: "安装和管理容器化工作空间应用",
     defaultWidth: 900,
     defaultHeight: 640,
     minWidth: 640,
