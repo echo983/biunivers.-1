@@ -18,9 +18,16 @@ describe("AboutApp", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "PVLogFS · 隔离 Run · COW 提交 · Diff · 原子导回",
+        "PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 原子导回",
       ),
     ).toBeVisible();
-    expect(screen.getByText("Static App v1 · Open Resource v1/v1.1")).toBeVisible();
+    expect(
+      screen.getByText("单一主人 · 桌面同源 · 应用能力隔离"),
+    ).toBeVisible();
+    expect(
+      screen.getByText(
+        "Static App v1 · Workspace Application v1 · Open Resource v1/v1.1",
+      ),
+    ).toBeVisible();
   });
 });

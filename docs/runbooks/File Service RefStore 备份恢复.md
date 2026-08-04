@@ -14,12 +14,13 @@ RefStore 默认位于 `/data/file-service/file-service.sqlite`。它保存当前
 2. 对临时备份执行 `quick_check`、schema version 和必需表校验；
 3. 校验通过后原子重命名到目标路径。
 
-管理员可在服务运行时触发受控备份：
+可信桌面可以在服务运行时触发受控备份；命令行运维需显式声明桌面同源请求：
 
 ```sh
 curl -X POST \
-  -H 'Authorization: Bearer <admin-token>' \
-  http://localhost:8080/api/v1/admin/file-service/backups
+  -H 'Origin: http://localhost:8080' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  http://localhost:8080/api/v1/control/file-service/backups
 ```
 
 宿主不接受调用方提供的文件路径，只会原子更新
@@ -56,12 +57,13 @@ V1 只报告，不自动删除。
 
 ## 只读 GC 报告
 
-管理员可触发一次完整可达性扫描：
+可信桌面可触发一次完整可达性扫描：
 
 ```sh
 curl -X POST \
-  -H 'Authorization: Bearer <admin-token>' \
-  http://localhost:8080/api/v1/admin/file-service/gc-reports
+  -H 'Origin: http://localhost:8080' \
+  -H 'Sec-Fetch-Site: same-origin' \
+  http://localhost:8080/api/v1/control/file-service/gc-reports
 ```
 
 扫描根包括当前 `main` Ref 和其快照。扫描器沿父 Head 历史遍历 Head、Segment、Checkpoint、

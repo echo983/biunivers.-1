@@ -119,14 +119,11 @@ async function readResponse<T>(response: Response): Promise<T> {
 }
 
 export class AppManagementClient {
-  constructor(private readonly token: string) {}
-
   private request(path: string, init?: RequestInit) {
     return fetch(path, {
       ...init,
       cache: "no-store",
       headers: {
-        authorization: `Bearer ${this.token}`,
         ...(init?.body ? { "content-type": "application/json" } : {}),
         ...init?.headers,
       },
@@ -134,7 +131,7 @@ export class AppManagementClient {
   }
 
   async list() {
-    const response = await this.request("/api/v1/admin/apps");
+    const response = await this.request("/api/v1/control/apps");
     const value = await readResponse<{
       schemaVersion: 1;
       apps: InstalledApp[];
@@ -144,7 +141,7 @@ export class AppManagementClient {
 
   async inspect(repository: string, ref: string) {
     return readResponse<InspectionResult>(
-      await this.request("/api/v1/admin/inspections", {
+      await this.request("/api/v1/control/inspections", {
         method: "POST",
         body: JSON.stringify({ repository, ref }),
       }),
@@ -156,7 +153,7 @@ export class AppManagementClient {
     configuration: Record<string, string | number | boolean>,
   ) {
     return readResponse<InstalledApp>(
-      await this.request("/api/v1/admin/apps", {
+      await this.request("/api/v1/control/apps", {
         method: "POST",
         body: JSON.stringify({ inspectionId, configuration }),
       }),
@@ -170,7 +167,7 @@ export class AppManagementClient {
   ) {
     return readResponse<InstalledApp>(
       await this.request(
-        `/api/v1/admin/apps/${encodeURIComponent(appId)}/version`,
+        `/api/v1/control/apps/${encodeURIComponent(appId)}/version`,
         {
           method: "PUT",
           body: JSON.stringify({ inspectionId, configuration }),
@@ -187,7 +184,7 @@ export class AppManagementClient {
     },
   ) {
     return readResponse<InstalledApp>(
-      await this.request(`/api/v1/admin/apps/${encodeURIComponent(appId)}`, {
+      await this.request(`/api/v1/control/apps/${encodeURIComponent(appId)}`, {
         method: "PATCH",
         body: JSON.stringify(patch),
       }),
@@ -196,7 +193,7 @@ export class AppManagementClient {
 
   async uninstall(appId: string) {
     const response = await this.request(
-      `/api/v1/admin/apps/${encodeURIComponent(appId)}`,
+      `/api/v1/control/apps/${encodeURIComponent(appId)}`,
       { method: "DELETE" },
     );
     if (!response.ok) {

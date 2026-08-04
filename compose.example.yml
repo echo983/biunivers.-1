@@ -5,7 +5,6 @@ services:
       - "8080:8080"
       - "8081:8081"
     environment:
-      BIUNIVERS_ADMIN_TOKEN: ${BIUNIVERS_ADMIN_TOKEN:?请设置 BIUNIVERS_ADMIN_TOKEN}
       BIUNIVERS_DESKTOP_ORIGIN: ${BIUNIVERS_DESKTOP_ORIGIN:-http://localhost:8080}
       BIUNIVERS_APP_ORIGIN: ${BIUNIVERS_APP_ORIGIN:-http://localhost:8081}
     volumes:

@@ -163,7 +163,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.14 Biunivers Workspace Application 概念设计](<浏览器云端个人桌面 V0.14 Biunivers Workspace Application 概念设计.md>) | 第三版概念已冻结 | OCI repository 身份、容器 HTTP UI、Workspace 状态、Application Manager、动态配置与信任边界 |
 | [V0.14 Registry、Image 与持久 Schema 局部设计](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 局部设计.md>) | 实现基线 | GHCR 镜像固定、Application/Instance Schema、Workspace 独占绑定和敏感变量边界 |
 | [V0.14 Registry、Image 与持久 Schema 规范评审](<浏览器云端个人桌面 V0.14 Registry、Image 与持久 Schema 规范评审.md>) | 评审通过 | 第一施工切片的必要性、删减项、事务闭环和风险门禁 |
-| [V0.14 Workspace Application 施工计划](<浏览器云端个人桌面 V0.14 Workspace Application 施工计划.md>) | 已完成，等待合并 | Registry/Image、Lifecycle、Proxy/UI 三段纵向闭环及 `v0.14.0` 合并门槛 |
+| [V0.14 Workspace Application 施工计划](<浏览器云端个人桌面 V0.14 Workspace Application 施工计划.md>) | 已完成并归档 | Registry/Image、Lifecycle、Proxy/UI 三段纵向闭环及 `v0.14.0` 合并门槛 |
 | [V0.14-A BWA Registry 与 Image 验收](<acceptance/V0.14-A BWA Registry 与 Image 验收.md>) | 已通过 | 公开 GHCR、真实 Runtime socket、固定 digest、持久 Schema、空白 Instance 与 secret 边界 |
 | [V0.14 Lifecycle、提交与异常恢复局部设计](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复局部设计.md>) | 实现基线 | 动态 BWA Run、结束分类、正常提交、保存重启、受控关机和异常 Upper 门禁 |
 | [V0.14 Lifecycle、提交与异常恢复规范评审](<浏览器云端个人桌面 V0.14 Lifecycle、提交与异常恢复规范评审.md>) | 评审通过 | 必要性、过度设计删减、状态自洽性、风险和分段施工门 |
@@ -173,6 +173,13 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [V0.14-C BWA 产品闭环验收](<acceptance/V0.14-C BWA 产品闭环验收.md>) | 已通过 | 真实浏览器 iframe、分区会话、保存/停止、Fork、异常恢复、卸载与完整回归 |
 | [Biunivers Workspace Application Protocol v1](<protocols/Biunivers Workspace Application Protocol v1.md>) | V1 已冻结 | OCI label、8080 HTTP UI、健康检查、iframe、Workspace 持久性和权限边界 |
 | [BWA Host 与 Compute Runtime 部署](<runbooks/BWA Host 与 Compute Runtime 部署.md>) | 当前运行手册 | 宿主 Runtime、容器 Host、同路径 bind 数据根、Unix socket、启动停止和故障检查 |
+
+## V0.14.1：单一主人控制面
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [个人计算机软件边界的组织化偿还模型](<个人计算机软件边界的组织化偿还模型.txt>) | 上位原则 | 单一人类主体、受约束软件执行者，以及对象/动作/范围/时间能力边界 |
+| [V0.14.1 单一主人控制模型设计](<浏览器云端个人桌面 V0.14.1 单一主人控制模型设计.md>) | 现行设计 | 删除主人管理员密码，改用受保护 Desktop Origin 控制面，保持第三方应用能力隔离 |
 
 ## 第三方应用生态 V1：发布候选
 

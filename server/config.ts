@@ -2,7 +2,6 @@ import { resolve } from "node:path";
 import { isIP } from "node:net";
 
 export interface ServerConfig {
-  adminToken: string;
   dataDir: string;
   desktopPort: number;
   appPort: number;
@@ -125,13 +124,6 @@ function parseBoolean(
 export function loadServerConfig(
   environment: Environment = process.env,
 ): ServerConfig {
-  const adminToken = required(environment, "BIUNIVERS_ADMIN_TOKEN");
-  if (adminToken === "replace-me" || adminToken.length < 16) {
-    throw new Error(
-      "BIUNIVERS_ADMIN_TOKEN 不能使用示例值且长度至少为 16 个字符",
-    );
-  }
-
   const desktopOrigin = parseOrigin(
     required(environment, "BIUNIVERS_DESKTOP_ORIGIN"),
     "BIUNIVERS_DESKTOP_ORIGIN",
@@ -210,7 +202,6 @@ export function loadServerConfig(
     : undefined;
 
   return {
-    adminToken,
     dataDir,
     desktopPort: parsePort(
       environment.BIUNIVERS_DESKTOP_PORT,

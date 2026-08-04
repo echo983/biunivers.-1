@@ -591,13 +591,12 @@ describe("inspect and install flow", () => {
     ).resolves.toBeInstanceOf(Buffer);
   });
 
-  it("exposes the two-step flow through authenticated management APIs", async () => {
+  it("exposes the two-step flow through the desktop control APIs", async () => {
     const services = await createServices();
     const clientDir = join(services.dataDir, "client");
     await mkdir(clientDir);
     await writeFile(join(clientDir, "index.html"), "<h1>desktop</h1>");
     const config: ServerConfig = {
-      adminToken: "a-secure-token-value",
       dataDir: services.dataDir,
       desktopPort: 8080,
       appPort: 8081,
@@ -616,12 +615,13 @@ describe("inspect and install flow", () => {
       }).listen(0, "127.0.0.1"),
     );
     const headers = {
-      authorization: `Bearer ${config.adminToken}`,
+      origin: config.desktopOrigin,
+      "sec-fetch-site": "same-origin",
       "content-type": "application/json",
     };
 
     const inspectionResponse = await fetch(
-      `${origin}/api/v1/admin/inspections`,
+      `${origin}/api/v1/control/inspections`,
       {
         method: "POST",
         headers,
@@ -636,7 +636,7 @@ describe("inspect and install flow", () => {
       inspectionId: string;
     };
 
-    const installResponse = await fetch(`${origin}/api/v1/admin/apps`, {
+    const installResponse = await fetch(`${origin}/api/v1/control/apps`, {
       method: "POST",
       headers,
       body: JSON.stringify({

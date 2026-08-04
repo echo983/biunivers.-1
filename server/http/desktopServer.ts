@@ -5,7 +5,6 @@ import { AppError } from "../apps/appError.js";
 import type { AppService } from "../apps/appService.js";
 import type { InspectionService } from "../apps/inspectionService.js";
 import { projectInstalledApp } from "../apps/projection.js";
-import { createAdminAuth } from "../auth/adminAuth.js";
 import type { ServerConfig } from "../config.js";
 import {
   FileCapabilityRegistry,
@@ -1646,9 +1645,16 @@ export function createDesktopServer({
     },
   );
 
-  app.use("/api/v1/admin", createAdminAuth(config.adminToken));
+  app.use("/api/v1/control", (request, _response, next) => {
+    try {
+      requireDesktopControlRequest(request, config.desktopOrigin);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  });
 
-  app.get("/api/v1/admin/bwa", (_request, response, next) => {
+  app.get("/api/v1/control/bwa", (_request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       response.set("Cache-Control", "no-store").json(service.status());
@@ -1657,7 +1663,7 @@ export function createDesktopServer({
     }
   });
 
-  app.post("/api/v1/admin/bwa/applications", async (request, response, next) => {
+  app.post("/api/v1/control/bwa/applications", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       const { reference } = objectBody(request.body);
@@ -1672,7 +1678,7 @@ export function createDesktopServer({
     }
   });
 
-  app.post("/api/v1/admin/bwa/instances", async (request, response, next) => {
+  app.post("/api/v1/control/bwa/instances", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       const { applicationId, name, startupPolicy, sourceWorkspaceIdHex } = objectBody(request.body);
@@ -1700,7 +1706,7 @@ export function createDesktopServer({
     }
   });
 
-  app.post("/api/v1/admin/bwa/applications/update", async (request, response, next) => {
+  app.post("/api/v1/control/bwa/applications/update", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       const { applicationId, reference } = objectBody(request.body);
@@ -1715,7 +1721,7 @@ export function createDesktopServer({
     }
   });
 
-  app.post("/api/v1/admin/bwa/applications/rollback", async (request, response, next) => {
+  app.post("/api/v1/control/bwa/applications/rollback", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       const { applicationId } = objectBody(request.body);
@@ -1730,7 +1736,7 @@ export function createDesktopServer({
     }
   });
 
-  app.delete("/api/v1/admin/bwa/applications/:applicationId", (request, response, next) => {
+  app.delete("/api/v1/control/bwa/applications/:applicationId", (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       response.set("Cache-Control", "no-store").json(
@@ -1741,7 +1747,7 @@ export function createDesktopServer({
     }
   });
 
-  app.delete("/api/v1/admin/bwa/instances/:instanceId", async (request, response, next) => {
+  app.delete("/api/v1/control/bwa/instances/:instanceId", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       response.set("Cache-Control", "no-store").json(
@@ -1753,7 +1759,7 @@ export function createDesktopServer({
   });
 
   app.put(
-    "/api/v1/admin/bwa/instances/:instanceId/environment",
+    "/api/v1/control/bwa/instances/:instanceId/environment",
     async (request, response, next) => {
       try {
         const service = requireBwaManager(bwaManager);
@@ -1780,7 +1786,7 @@ export function createDesktopServer({
     ],
   ] as const) {
     app.post(
-      `/api/v1/admin/bwa/instances/:instanceId/${action}`,
+      `/api/v1/control/bwa/instances/:instanceId/${action}`,
       async (request, response, next) => {
         try {
           const service = requireBwaManager(bwaManager);
@@ -1795,7 +1801,7 @@ export function createDesktopServer({
   }
 
   app.post(
-    "/api/v1/admin/bwa/instances/:instanceId/open",
+    "/api/v1/control/bwa/instances/:instanceId/open",
     (request, response, next) => {
       try {
         const service = requireBwaManager(bwaManager);
@@ -1809,7 +1815,7 @@ export function createDesktopServer({
   );
 
   app.post(
-    "/api/v1/admin/bwa/instances/:instanceId/ready",
+    "/api/v1/control/bwa/instances/:instanceId/ready",
     async (request, response, next) => {
       try {
         const service = requireBwaManager(bwaManager);
@@ -1835,7 +1841,7 @@ export function createDesktopServer({
     ],
   ] as const) {
     app.post(
-      `/api/v1/admin/bwa/instances/:instanceId/runs/:runId/${action}`,
+      `/api/v1/control/bwa/instances/:instanceId/runs/:runId/${action}`,
       async (request, response, next) => {
         try {
           const service = requireBwaManager(bwaManager);
@@ -1853,7 +1859,7 @@ export function createDesktopServer({
     );
   }
 
-  app.get("/api/v1/admin/apps", async (_request, response, next) => {
+  app.get("/api/v1/control/apps", async (_request, response, next) => {
     try {
       response.set("Cache-Control", "no-store").json(await appStore.read());
     } catch (error) {
@@ -1861,7 +1867,7 @@ export function createDesktopServer({
     }
   });
 
-  app.get("/api/v1/admin/file-service", async (_request, response, next) => {
+  app.get("/api/v1/control/file-service", async (_request, response, next) => {
     try {
       response.set("Cache-Control", "no-store").json(
         getFileServiceStatus
@@ -1877,7 +1883,7 @@ export function createDesktopServer({
   });
 
   app.post(
-    "/api/v1/admin/file-service/backups",
+    "/api/v1/control/file-service/backups",
     async (_request, response, next) => {
       try {
         if (!fileServiceBackup) {
@@ -1898,7 +1904,7 @@ export function createDesktopServer({
   );
 
   app.post(
-    "/api/v1/admin/file-service/gc-reports",
+    "/api/v1/control/file-service/gc-reports",
     async (_request, response, next) => {
       try {
         if (!fileServiceGcScanner) {
@@ -1919,7 +1925,7 @@ export function createDesktopServer({
   );
 
   if (inspections && appService) {
-    app.post("/api/v1/admin/inspections", async (request, response, next) => {
+    app.post("/api/v1/control/inspections", async (request, response, next) => {
       try {
         const { repository, ref } = request.body as Record<string, unknown>;
         if (typeof repository !== "string" || typeof ref !== "string") {
@@ -1936,7 +1942,7 @@ export function createDesktopServer({
       }
     });
 
-    app.post("/api/v1/admin/apps", async (request, response, next) => {
+    app.post("/api/v1/control/apps", async (request, response, next) => {
       try {
         const { inspectionId, configuration } = request.body as Record<
           string,
@@ -1957,7 +1963,7 @@ export function createDesktopServer({
     });
 
     app.put(
-      "/api/v1/admin/apps/:appId/version",
+      "/api/v1/control/apps/:appId/version",
       async (request, response, next) => {
         try {
           const { inspectionId, configuration } = request.body as Record<
@@ -1985,7 +1991,7 @@ export function createDesktopServer({
     );
 
     app.patch(
-      "/api/v1/admin/apps/:appId",
+      "/api/v1/control/apps/:appId",
       async (request, response, next) => {
         try {
           if (
@@ -2025,7 +2031,7 @@ export function createDesktopServer({
     );
 
     app.delete(
-      "/api/v1/admin/apps/:appId",
+      "/api/v1/control/apps/:appId",
       async (request, response, next) => {
         try {
           await appService.uninstall(request.params.appId);
@@ -2251,6 +2257,25 @@ function requireDesktopOrigin(
     throw new AppError(
       "ORIGIN_FORBIDDEN",
       "窗口实例只能由可信桌面页面创建",
+      403,
+    );
+  }
+}
+
+function requireDesktopControlRequest(
+  request: express.Request,
+  desktopOrigin: string,
+): void {
+  const origin = request.get("origin");
+  const sameOriginNavigationRead =
+    request.method === "GET" && origin === undefined;
+  if (
+    (!sameOriginNavigationRead && origin !== desktopOrigin) ||
+    request.get("sec-fetch-site") !== "same-origin"
+  ) {
+    throw new AppError(
+      "CONTROL_ORIGIN_FORBIDDEN",
+      "控制操作只能由当前 Biunivers 桌面发起",
       403,
     );
   }

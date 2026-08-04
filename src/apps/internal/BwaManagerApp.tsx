@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BwaManagerClient,
   type BwaApplicationSummary,
@@ -9,18 +9,15 @@ import { useDesktopStore } from "../../store/desktopStore";
 import { closeApp, openApp } from "../../windows/windowController";
 
 export function BwaManagerApp() {
-  const [tokenInput, setTokenInput] = useState("");
-  const [token, setToken] = useState<string>();
   const [applications, setApplications] = useState<BwaApplicationSummary[]>([]);
   const [workspaces, setWorkspaces] = useState<BwaWorkspaceOption[]>([]);
   const [reference, setReference] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [notice, setNotice] = useState("");
   const registerRuntimeApp = useDesktopStore((state) => state.registerRuntimeApp);
-  const client = useMemo(() => (token ? new BwaManagerClient(token) : undefined), [token]);
+  const client = useMemo(() => new BwaManagerClient(), []);
 
   const refresh = async (activeClient = client) => {
-    if (!activeClient) return;
     const status = await activeClient.status();
     setApplications(status.applications);
     setWorkspaces(status.workspaces);
@@ -40,44 +37,24 @@ export function BwaManagerApp() {
     }
   };
 
-  const unlock = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setNotice("");
-    try {
-      const candidate = new BwaManagerClient(tokenInput);
-      const status = await candidate.status();
-      setApplications(status.applications);
-      setWorkspaces(status.workspaces);
-      setToken(tokenInput);
-      setTokenInput("");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "解锁失败");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!client) {
-    return (
-      <article className="bwa-manager bwa-manager--locked">
-        <form onSubmit={(event) => void unlock(event)}>
-          <h1>Workspace Application Manager</h1>
-          <p>输入 Biunivers 管理员密码以管理容器应用及其 Workspace 状态。</p>
-          <input
-            aria-label="管理员密码"
-            type="password"
-            value={tokenInput}
-            onChange={(event) => setTokenInput(event.target.value)}
-            autoComplete="current-password"
-            required
-          />
-          <button type="submit" disabled={busy}>解锁</button>
-          {notice && <p className="bwa-manager__notice">{notice}</p>}
-        </form>
-      </article>
-    );
-  }
+  useEffect(() => {
+    let active = true;
+    void client.status().then(
+      (status) => {
+        if (!active) return;
+        setApplications(status.applications);
+        setWorkspaces(status.workspaces);
+      },
+      (error) => {
+        if (active) setNotice(error instanceof Error ? error.message : "加载失败");
+      },
+    ).finally(() => {
+      if (active) setBusy(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
   return (
     <article className="bwa-manager">

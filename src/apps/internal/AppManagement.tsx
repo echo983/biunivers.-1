@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   AppManagementClient,
   AppManagementError,
@@ -159,8 +159,6 @@ function ConfigurationField({
 
 export function AppManagement() {
   const pinApp = useDesktopStore((state) => state.pinApp);
-  const [tokenInput, setTokenInput] = useState("");
-  const [token, setToken] = useState<string | null>(null);
   const [installedApps, setInstalledApps] = useState<InstalledApp[]>([]);
   const [repository, setRepository] = useState("");
   const [ref, setRef] = useState("main");
@@ -169,35 +167,31 @@ export function AppManagement() {
   const [configuration, setConfiguration] = useState<
     Record<string, FormValue>
   >({});
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const client = useMemo(
-    () => (token ? new AppManagementClient(token) : null),
-    [token],
-  );
+  const client = useMemo(() => new AppManagementClient(), []);
 
-  const unlock = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const candidate = new AppManagementClient(tokenInput);
-      const apps = await candidate.list();
-      setInstalledApps(apps);
-      setToken(tokenInput);
-      setTokenInput("");
-    } catch (unlockError) {
-      setError(unlockError);
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    void client.list().then(
+      (apps) => {
+        if (active) setInstalledApps(apps);
+      },
+      (loadError) => {
+        if (active) setError(loadError);
+      },
+    ).finally(() => {
+      if (active) setBusy(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [client]);
 
   const inspect = async (event: FormEvent) => {
     event.preventDefault();
-    if (!client) return;
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -289,7 +283,6 @@ export function AppManagement() {
   };
 
   const toggleStatus = async (app: InstalledApp) => {
-    if (!client) return;
     setBusy(true);
     setError(null);
     try {
@@ -341,49 +334,13 @@ export function AppManagement() {
     }
   };
 
-  if (!client) {
-    return (
-      <section className="app-management" aria-labelledby="app-management-title">
-        <h2 id="app-management-title">应用管理</h2>
-        <p>输入部署时设置的管理员 token 以管理第三方应用。</p>
-        <form onSubmit={unlock}>
-          <label className="app-management__field" htmlFor="admin-token">
-            <span>管理员 token</span>
-            <input
-              id="admin-token"
-              type="password"
-              autoComplete="off"
-              required
-              value={tokenInput}
-              onChange={(event) => setTokenInput(event.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={busy}>
-            {busy ? "正在验证……" : "解锁应用管理"}
-          </button>
-        </form>
-        <ErrorMessage error={error} />
-      </section>
-    );
-  }
-
   return (
     <section className="app-management" aria-labelledby="app-management-title">
       <div className="app-management__heading">
         <div>
           <h2 id="app-management-title">应用管理</h2>
-          <p>管理员凭据只保存在当前设置窗口的内存中。</p>
+          <p>由当前 Biunivers 桌面直接管理第三方应用。</p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setToken(null);
-            setInspection(null);
-            setError(null);
-          }}
-        >
-          锁定
-        </button>
       </div>
 
       <form className="app-management__install" onSubmit={inspect}>
