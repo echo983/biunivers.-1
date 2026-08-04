@@ -2,6 +2,9 @@
 
 本文件供创建或修改第三方 Biunivers 应用的 AI 开发代理使用。
 
+本文件只适用于 Static App。如果目标需要容器、后台进程、secret 或 `/workspace`，停止使用
+本指令，改读 `BWA_DEVELOPER_GUIDE.md` 和 `BWA_AGENTS.md`。不要把两种交付模型拼接在一起。
+
 ## 目标
 
 产出一个公开 GitHub 仓库可直接交付的静态 Web 应用。Biunivers 将固定仓库 commit、提供静态文件，并在 iframe 窗口中打开根目录 `index.html`。

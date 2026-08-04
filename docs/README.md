@@ -1,5 +1,10 @@
 # Biunivers 文档索引
 
+版本号文档和验收记录是对应里程碑的历史快照，保留当时接口、名称和安全模型，不作为当前
+部署命令。当前行为以最新版本设计、`developer-kit/v1`、`protocols/` 冻结规范和 `runbooks/`
+现行手册为准。V0.14.1 已以“单一主人 + Desktop Origin 同源控制面”取代早期管理员 token；
+第三方 Static App 与 BWA 仍不能调用控制面。
+
 ## V0.1：已完成并归档
 
 归档日期：2026-07-28
@@ -185,6 +190,10 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 | 文档 | 状态 | 内容 |
 |---|---|---|
+| [第三方应用开发包 v1](developer-kit/v1/README.md) | 当前交付入口 | Static App 与 BWA 选型、分别开发、发布和验收，不要求阅读宿主内部架构 |
+| [BWA 开发指南](developer-kit/v1/BWA_DEVELOPER_GUIDE.md) | 当前开发指南 | OCI/GHCR、8080 UI、健康检查、Workspace、配置/secret、生命周期与真实验收 |
+| [BWA 发布检查表](developer-kit/v1/BWA_PUBLISH_CHECKLIST.md) | 当前检查表 | 镜像身份、非 root、只读根、代理、持久状态、Fork、更新和 secret 边界 |
+| [BWA AI 开发约束](developer-kit/v1/BWA_AGENTS.md) | 可复制模板 | 防止 AI 混用 Static App 契约、发明私有接口或越过 Workspace/容器边界 |
 | [第三方静态应用开发包 v1](developer-kit/v1/README.md) | 当前开发包 | 面向人类和 AI 的快速上手、协议原文、Schema、静态/资源应用模板、检查表和故障排查 |
 | [Biunivers Static App Protocol v1](developer-kit/v1/BIUNIVERS_APP_PROTOCOL_V1.md) | 草案 | 第三方仓库必须保存的协议原文；定义 `index.html`、iframe、公开配置和宿主责任 |
 | [Biunivers App Manifest v1](<protocols/Biunivers App Manifest v1.md>) | 草案 | `biunivers.app.json` 的最小身份、窗口默认值和配置 schema |

@@ -2,6 +2,10 @@
 
 This repository is a third-party Biunivers static application.
 
+If this repository ships a Biunivers Workspace Application container instead, stop and use
+`BWA_AGENTS.md`. Static App and BWA delivery contracts are mutually exclusive; do not combine their
+required files or assume one receives the other's capabilities.
+
 These instructions apply to AI coding agents and other automated contributors working anywhere in
 this repository.
 
