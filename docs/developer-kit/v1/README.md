@@ -1,8 +1,32 @@
-# Biunivers 第三方静态应用开发包 v1
+# Biunivers 第三方应用开发包 v1
 
-这份开发包帮助人类开发者和 AI 开发代理创建一个能够被 Biunivers 安装并在桌面窗口中运行的第三方应用。
+这份开发包帮助人类开发者和 AI 开发代理创建能够被 Biunivers 安装并在桌面窗口中运行的第三方应用。
 
-如果你只想尽快完成第一个应用，请按“最短路径”操作，不需要先阅读 Biunivers 内部架构文档。
+## 先选择应用类型
+
+| 类型 | 适合 | 交付物 | 状态存放 |
+| --- | --- | --- | --- |
+| Static App | 计算器、编辑器、播放器、图片查看器等浏览器应用 | GitHub public 仓库中的可直接运行静态文件 | 浏览器状态；文件必须经 Resource Session 获得 |
+| Workspace Application（BWA） | 需要后端进程、secret、长任务、原生工具链或项目目录的应用 | 发布到 OCI registry 的单个容器镜像 | Instance 独占绑定的 `/workspace` |
+
+如果应用能完全在浏览器中完成，优先选择 Static App；不要仅为了使用容器而选择 BWA。
+如果需要服务端 secret、后台进程、FFmpeg/编译器/索引器等原生程序，或需要把一个项目目录
+作为可 Fork、可提交的状态运行，选择 BWA。
+
+- Static App：继续阅读本页，并使用 [`AI_DEVELOPER_GUIDE.md`](AI_DEVELOPER_GUIDE.md)；
+- BWA：直接阅读 [`BWA_DEVELOPER_GUIDE.md`](BWA_DEVELOPER_GUIDE.md)，AI 开发者同时把
+  [`BWA_AGENTS.md`](BWA_AGENTS.md) 作为 `AGENTS.md`、把 BWA 协议原文复制到源码仓库根目录，
+  并通过 `.dockerignore` 排除不需要进入镜像的开发文档。
+
+BWA 开发包同时包含冻结的
+[`BIUNIVERS_WORKSPACE_APPLICATION_PROTOCOL_V1.md`](BIUNIVERS_WORKSPACE_APPLICATION_PROTOCOL_V1.md)
+供开发和审查；协议明确规定它不需要进入最终镜像。
+
+两种类型是独立交付模型。BWA 不使用 `biunivers.app.json`，Static App 也不会获得
+`/workspace`、容器环境变量或 secret。
+
+以下内容是 Static App 路径。如果你只想尽快完成第一个静态应用，请按“最短路径”操作，
+不需要先阅读 Biunivers 内部架构文档。
 
 ## 你最终要交付什么
 

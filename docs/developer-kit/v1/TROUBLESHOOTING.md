@@ -1,5 +1,8 @@
 # Biunivers Static App v1 故障排查
 
+本页主体适用于 Static App。BWA 的镜像安装、健康检查、Workspace 与代理故障见本页末尾
+“Workspace Application 故障排查”。
+
 先找到最接近的现象，再按顺序检查。
 
 ## 安装器提示缺少协议
@@ -143,6 +146,49 @@ Open Resource Protocol v1/v1.1 只定义宿主向已声明 Handler 的应用交�
 Biunivers 安装后固定到具体 commit，不会持续跟随 branch 或 tag。
 
 请在 Biunivers 中显式发起更新，并选择包含新内容的 ref。
+
+## Workspace Application 故障排查
+
+### 镜像无法安装
+
+确认镜像已公开发布到 registry，引用格式类似 `ghcr.io/owner/image:tag`，并包含：
+
+```text
+io.biunivers.workspace-application.protocol=1
+```
+
+不要填写 GitHub 仓库 URL、Dockerfile 路径或本地镜像名。宿主会把 tag 固定为 digest；更新
+同一 tag 后仍需在管理界面显式执行更新。
+
+### Instance 启动失败
+
+在普通 Docker 中验证镜像能够以非 root、只读 root filesystem 运行，并确认：
+
+- HTTP 监听 `0.0.0.0:8080`，而不是 `127.0.0.1`；
+- `/health` 无需登录即可快速返回 `2xx`；
+- 持久写入只进入 `/workspace`，临时写入进入 `/tmp`；
+- 启动不依赖 Docker socket、host network、capabilities 或固定 UID；
+- 必需环境变量已在 Instance 配置中填写。
+
+### 界面提示重新打开或代理错误
+
+不要缓存或分享 Instance bootstrap URL。关闭旧窗口，从 Biunivers 重新打开 Instance。应用
+生成链接、表单和 WebSocket 地址时使用当前代理 origin 或转发头，浏览器不能访问容器私有 IP。
+
+### 重启后数据消失
+
+只有 `/workspace` 是主要持久状态。容器 root、`/tmp`、内存和浏览器连接不会进入 Workspace
+HEAD。应用先 flush 自身事务，再由用户执行停止、保存重启或其他受控提交。
+
+### 停止很慢
+
+宿主会给容器正常终止窗口，让应用 flush 后提交 COW 改动。确保 PID 1 能接收或转发
+SIGTERM，不要用吞掉信号的 shell 包裹主进程。
+
+### 出现待处理的异常改动
+
+异常退出后宿主不会自动发布 Upper。用户必须选择发布或丢弃；处理前新的 Run 会被阻止。
+这是数据保护门禁，不应由应用绕过。
 # Open Resource 与 Resource Session 常见问题
 
 ## 应用安装成功但不出现在“打开方式”

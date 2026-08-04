@@ -1,5 +1,8 @@
 # Biunivers Static App v1 发布检查表
 
+本表只适用于 Static App。Workspace Application 使用
+[`BWA_PUBLISH_CHECKLIST.md`](BWA_PUBLISH_CHECKLIST.md)。
+
 发布或更新前逐项确认。
 
 ## 仓库
