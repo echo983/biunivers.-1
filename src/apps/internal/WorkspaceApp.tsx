@@ -196,7 +196,7 @@ export function WorkspaceApp() {
     <article className="workspace-app">
       <aside>
         <header>
-          <h1>工作空间</h1>
+          <h1>工作空间管理</h1>
           <button
             type="button"
             disabled={working}
