@@ -211,7 +211,7 @@ export class BwaManagerControlService {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const inspection = parseRuntimeInspection(await this.#runtime.inspect(runIdHex));
       if (!inspection.running && !inspection.restarting) {
-        const logTail = await this.#runtime.logs(runIdHex).then(parseLogTail, () => "");
+        const logTail = await this.#readStartupLogs(runIdHex);
         const summary = startupSummary(logTail, "应用在就绪前退出。");
         await this.#recordStartupFailure({
           instanceIdHex, runIdHex, stage: "APPLICATION_START",
@@ -230,12 +230,21 @@ export class BwaManagerControlService {
       }
       await new Promise((resolve) => setTimeout(resolve, 1_000));
     }
-    const logTail = await this.#runtime.logs(runIdHex).then(parseLogTail, () => "");
+    const logTail = await this.#readStartupLogs(runIdHex);
     const summary = startupSummary(logTail, "应用未能在 30 秒内就绪。");
     await this.#recordStartupFailure({
       instanceIdHex, runIdHex, stage: "HEALTH_CHECK", exitCode: null, summary, logTail,
     });
     throw new BwaManagerControlError("INSTANCE_NOT_READY", summary);
+  }
+
+  async #readStartupLogs(runIdHex: string): Promise<string> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const logTail = await this.#runtime.logs(runIdHex).then(parseLogTail, () => "");
+      if (logTail || attempt === 4) return logTail;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return "";
   }
 
   async #recordStartupFailure(input: {

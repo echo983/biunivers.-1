@@ -101,9 +101,9 @@ describe("BwaManagerControlService", () => {
       inspect: vi.fn().mockResolvedValue({
         container: { running: false, restarting: false, exitCode: 7 },
       }),
-      logs: vi.fn().mockResolvedValue(
-        "internal detail\nBWA_STARTUP_ERROR: 缺少模型接口配置。\n",
-      ),
+      logs: vi.fn()
+        .mockResolvedValueOnce("")
+        .mockResolvedValue("internal detail\nBWA_STARTUP_ERROR: 缺少模型接口配置。\n"),
     };
     const service = new BwaManagerControlService({
       appOrigin: "http://localhost:8081",
@@ -131,5 +131,6 @@ describe("BwaManagerControlService", () => {
       summary: "缺少模型接口配置。",
     }));
     expect(runtime.resolveBwaEndpoint).not.toHaveBeenCalled();
+    expect(runtime.logs).toHaveBeenCalledTimes(2);
   });
 });
