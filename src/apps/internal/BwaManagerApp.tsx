@@ -259,6 +259,7 @@ function ApplicationCard({
           key={instance.instanceIdHex}
           instance={instance}
           applicationEnvironment={application.environment}
+          workspace={workspaces.find((item) => item.workspaceIdHex === instance.workspaceIdHex)}
           client={client}
           busy={busy}
           execute={execute}
@@ -269,9 +270,10 @@ function ApplicationCard({
   );
 }
 
-function InstanceCard({ instance, applicationEnvironment, client, busy, execute, onOpen }: {
+function InstanceCard({ instance, applicationEnvironment, workspace, client, busy, execute, onOpen }: {
   instance: BwaInstanceSummary;
   applicationEnvironment: BwaApplicationSummary["environment"];
+  workspace?: BwaWorkspaceOption;
   client: BwaManagerClient;
   busy: boolean;
   execute: (operation: () => Promise<unknown>, success: string) => Promise<void>;
@@ -292,6 +294,11 @@ function InstanceCard({ instance, applicationEnvironment, client, busy, execute,
         <div>
           <strong>{instance.displayName}</strong>
           <small>{running ? "运行中" : unresolved ? `需要处置：${unresolved.run.state}` : "已停止"}</small>
+          <small>
+            Workspace：{workspace
+              ? `${workspace.name} · revision ${workspace.revision}`
+              : instance.workspaceIdHex.slice(0, 8)}
+          </small>
         </div>
         <div className="bwa-manager__actions">
           <button type="button" disabled={busy || running} onClick={() => void execute(() => client.action(instance.instanceIdHex, "start"), "Instance 已启动")}>启动</button>
