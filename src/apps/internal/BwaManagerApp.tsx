@@ -161,6 +161,9 @@ function ApplicationCard({
         <div>
           <h2>{application.title}</h2>
           <code>{application.applicationId}</code>
+          <small className="bwa-manager__image-identity">
+            版本 {application.imageVersion ?? "未声明"} · {shortDigest(application.installedDigest)}
+          </small>
           {application.description && <p>{application.description}</p>}
         </div>
         <div className="bwa-manager__actions">
@@ -366,4 +369,8 @@ function parseEnvironment(value: string): Record<string, string> {
     if (separator < 1) throw new Error(`环境变量格式无效：${line}`);
     return [line.slice(0, separator).trim(), line.slice(separator + 1)];
   }));
+}
+
+function shortDigest(value: string): string {
+  return value.startsWith("sha256:") ? `sha256:${value.slice(7, 19)}` : value.slice(0, 19);
 }

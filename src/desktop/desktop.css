@@ -1684,6 +1684,7 @@
 .bwa-manager h1 { font-size: 20px; }
 .bwa-manager h2 { font-size: 17px; }
 .bwa-manager code { overflow-wrap: anywhere; color: #596273; }
+.bwa-manager__image-identity { display: block; margin-top: 4px; color: #596273; }
 .bwa-manager button,
 .bwa-manager input,
 .bwa-manager select,
