@@ -125,6 +125,7 @@ export function BwaManagerApp() {
                   transient: true,
                 });
                 queueMicrotask(() => openApp(appId));
+                setNotice("");
               } catch (error) {
                 setNotice(error instanceof Error ? error.message : "打开失败");
               } finally {
