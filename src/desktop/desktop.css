@@ -1754,6 +1754,8 @@
 .bwa-manager__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .bwa-manager__recovery { display: flex; gap: 8px; margin-top: 10px; padding: 8px; border-radius: 5px; background: #fff0dd; }
 .bwa-manager__startup-failure { display: grid; gap: 5px; margin-top: 10px; padding: 10px; border: 1px solid #d8a0a0; border-radius: 5px; background: #fff0f0; color: #5f2020; }
+.bwa-manager__startup-failure-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bwa-manager__startup-failure-heading button { padding: 3px 7px; }
 .bwa-manager__startup-failure small { color: #7a4a4a; }
 .bwa-manager__startup-failure pre { max-height: 180px; overflow: auto; margin: 7px 0 0; padding: 8px; border-radius: 4px; background: #211d1d; color: #f5eaea; white-space: pre-wrap; overflow-wrap: anywhere; }
 .bwa-manager__environment { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }

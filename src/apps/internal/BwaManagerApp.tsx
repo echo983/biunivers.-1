@@ -252,7 +252,9 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
   const running = instance.runs.some(({ run }) => run.state === "RUNNING");
   const unresolved = [...instance.runs].reverse().find(({ run }) =>
     run.state === "FAILED" || run.state === "CONFLICT");
-  const startupFailure = [...instance.runs].reverse().find((item) => item.startupFailure)?.startupFailure;
+  const latestRun = instance.runs.at(-1);
+  const startupFailure = latestRun?.startupFailure;
+  const [dismissedFailureRunId, setDismissedFailureRunId] = useState<string | null>(null);
   const [showEnvironment, setShowEnvironment] = useState(false);
   const [ordinary, setOrdinary] = useState(() => formatEnvironment(instance, false));
   const [sensitive, setSensitive] = useState(() => formatEnvironment(instance, true));
@@ -284,9 +286,16 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           >移除</button>
         </div>
       </header>
-      {startupFailure && (
+      {startupFailure && latestRun.run.runIdHex !== dismissedFailureRunId && (
         <div className="bwa-manager__startup-failure" role="alert">
-          <strong>启动失败</strong>
+          <div className="bwa-manager__startup-failure-heading">
+            <strong>启动失败</strong>
+            <button
+              type="button"
+              aria-label="关闭启动失败提示"
+              onClick={() => setDismissedFailureRunId(latestRun.run.runIdHex)}
+            >关闭</button>
+          </div>
           <span>{startupFailure.summary}</span>
           <small>
             阶段：{startupStageLabel(startupFailure.stage)}
