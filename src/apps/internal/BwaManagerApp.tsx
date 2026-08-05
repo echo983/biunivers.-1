@@ -230,7 +230,7 @@ function ApplicationCard({
             );
             setInstanceName("");
             setSourceWorkspaceIdHex("");
-          }, "Instance 创建完成");
+          }, "Instance 与独立 Workspace 已创建");
         }}
       >
         <input
@@ -241,14 +241,15 @@ function ApplicationCard({
           required
         />
         <select
-          aria-label="初始 Workspace"
+          aria-label="Workspace 来源"
+          title="Workspace 来源：新建空白状态，或从已有 Workspace 的当前 revision 派生"
           value={sourceWorkspaceIdHex}
           onChange={(event) => setSourceWorkspaceIdHex(event.target.value)}
         >
-          <option value="">空白 Workspace</option>
+          <option value="">新建空白 Workspace</option>
           {workspaces.map((workspace) => (
             <option key={workspace.workspaceIdHex} value={workspace.workspaceIdHex}>
-              {workspace.name} · revision {workspace.revision}
+              从「{workspace.name}」Fork · revision {workspace.revision}
             </option>
           ))}
         </select>
