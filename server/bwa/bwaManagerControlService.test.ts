@@ -17,6 +17,7 @@ describe("BwaManagerControlService", () => {
       listBwaApplications: vi.fn().mockReturnValue([
         { applicationId: "ghcr.io/example/probe", enabled: true },
       ]),
+      listBwaApplicationEnvironment: vi.fn().mockReturnValue([]),
       listBwaInstances: vi.fn().mockReturnValue([
         { instanceIdHex, applicationId: "ghcr.io/example/probe" },
       ]),

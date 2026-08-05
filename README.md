@@ -6,10 +6,13 @@ Resource Session、Open Resource v1.1 多资源交付、桌面快捷入口、原
 WebDAV 文件交换。
 文件管理器可把目录或多选项目导出为不压缩 ZIP；Wormhole 可供 rclone 和原生 WebDAV
 客户端挂载或主动同步，但不承担实时同步。
+Workspace Application 支持应用级默认环境与 Instance 覆盖；文件管理器可以把 main 中
+选定的文件或递归目录原子添加到已有 Workspace，内容 FID 复用且状态保持相互独立。
 
 ## 项目状态
 
-`v0.1.0` 至 `v0.14.0` 已按里程碑归档；`v0.14.0` 完成 Workspace Application 闭环。
+`v0.1.0` 至 `v0.14.0` 已按里程碑归档；当前 `v0.14.1` 分支继续补齐 Workspace
+Application 的公共配置复用和 Workspace 内容补充体验。
 各版本需求、技术设计、施工计划和真实验收证据统一收录在 [`docs/`](docs/)。
 
 当前定位是单一主人、单实例的个人部署版本。公网使用时必须在 Biunivers 前增加 VPN、

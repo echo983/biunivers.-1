@@ -33,6 +33,7 @@ export interface BwaApplicationSummary {
   sourceUrl: string | null;
   imageVersion: string | null;
   enabled: boolean;
+  environment: Array<{ name: string; value: string | null; sensitive: boolean }>;
   instances: BwaInstanceSummary[];
 }
 
@@ -117,6 +118,17 @@ export class BwaManagerClient {
     sensitive: Record<string, string>,
   ) {
     return await this.request(`/instances/${instanceIdHex}/environment`, {
+      method: "PUT",
+      body: { ordinary, sensitive },
+    });
+  }
+
+  async replaceApplicationEnvironment(
+    applicationId: string,
+    ordinary: Record<string, string>,
+    sensitive: Record<string, string>,
+  ) {
+    return await this.request(`/applications/${encodeURIComponent(applicationId)}/environment`, {
       method: "PUT",
       body: { ordinary, sensitive },
     });

@@ -3,7 +3,8 @@ import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 6;
+const BWA_APPLICATION_ENVIRONMENT_SCHEMA_VERSION = 5;
 const BWA_LIFECYCLE_SCHEMA_VERSION = 4;
 const BWA_SCHEMA_VERSION = 3;
 const WORKSPACE_SCHEMA_VERSION = 2;
@@ -28,6 +29,12 @@ export interface RefCasInput {
   newHeadFidHex: string;
   newRevision: number;
   updatedAtMs: number;
+}
+
+export interface RefGuardInput {
+  refId: string;
+  expectedHeadFidHex: string;
+  expectedRevision: number;
 }
 
 export interface FilesystemSnapshot {
@@ -416,12 +423,29 @@ export class SqliteRefStore {
   }
 
   compareAndSwap(input: RefCasInput): FilesystemRef {
+    return this.compareAndSwapGuarded(input);
+  }
+
+  compareAndSwapGuarded(
+    input: RefCasInput,
+    guard?: RefGuardInput,
+    writableWorkspaceIdHex?: string,
+  ): FilesystemRef {
     validateRefId(input.refId);
     validateFid(input.expectedHeadFidHex);
     validateFid(input.newHeadFidHex);
     validateSafeInteger(input.expectedRevision, "expected revision");
     validateSafeInteger(input.newRevision, "new revision");
     validateTimestamp(input.updatedAtMs);
+    if (guard) {
+      validateRefId(guard.refId);
+      validateFid(guard.expectedHeadFidHex);
+      validateSafeInteger(guard.expectedRevision, "guard expected revision");
+      if (guard.refId === input.refId) {
+        throw new RefStoreError("INVALID_REF_VALUE", "A Ref cannot guard its own CAS.");
+      }
+    }
+    if (writableWorkspaceIdHex) validateId(writableWorkspaceIdHex, "workspace ID");
     if (input.newRevision !== input.expectedRevision + 1) {
       throw new RefStoreError(
         "INVALID_REF_VALUE",
@@ -430,6 +454,27 @@ export class SqliteRefStore {
     }
 
     const transaction = this.#database.transaction(() => {
+      if (writableWorkspaceIdHex) {
+        const workspace = this.getWorkspace(writableWorkspaceIdHex);
+        const unresolved = this.listWorkspaceRuns(writableWorkspaceIdHex).some(
+          (run) => run.state === "FAILED" || run.state === "CONFLICT",
+        );
+        if (workspace.refId !== input.refId || workspace.activeWriteRunIdHex !== null || unresolved) {
+          throw new RefStoreError("WORKSPACE_ACTIVE", "Workspace is not available for control-plane writes.");
+        }
+      }
+      if (guard) {
+        const guarded = this.getRef(guard.refId);
+        if (
+          guarded.headFidHex !== guard.expectedHeadFidHex ||
+          guarded.revision !== guard.expectedRevision
+        ) {
+          throw new RefStoreError(
+            "REF_CONFLICT",
+            `Ref ${guard.refId} changed before ${input.refId} could be published.`,
+          );
+        }
+      }
       const result = this.#database
         .prepare(
           `UPDATE filesystem_refs
@@ -1590,6 +1635,42 @@ export class SqliteRefStore {
     }));
   }
 
+  replaceBwaApplicationEnvironment(
+    applicationId: string,
+    variables: readonly BwaEnvironmentVariable[],
+  ): BwaEnvironmentVariable[] {
+    validateApplicationId(applicationId);
+    validateBwaEnvironment(variables);
+    return this.#database.transaction(() => {
+      this.getBwaApplication(applicationId);
+      this.#database.prepare(
+        "DELETE FROM bwa_application_environment WHERE application_id = ?",
+      ).run(applicationId);
+      const insert = this.#database.prepare(
+        `INSERT INTO bwa_application_environment (application_id, name, value, sensitive)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const variable of variables) {
+        insert.run(applicationId, variable.name, variable.value, variable.sensitive ? 1 : 0);
+      }
+      return this.listBwaApplicationEnvironment(applicationId);
+    })();
+  }
+
+  listBwaApplicationEnvironment(applicationId: string): BwaEnvironmentVariable[] {
+    validateApplicationId(applicationId);
+    this.getBwaApplication(applicationId);
+    const rows = this.#database.prepare(
+      `SELECT name, value, sensitive FROM bwa_application_environment
+       WHERE application_id = ? ORDER BY name`,
+    ).all(applicationId) as BwaEnvironmentRow[];
+    return rows.map((row) => ({
+      name: row.name,
+      value: row.value,
+      sensitive: row.sensitive === 1,
+    }));
+  }
+
   deleteBwaInstancePreservingWorkspace(instanceIdHex: string): WorkspaceRecord {
     validateId(instanceIdHex, "BWA instance ID");
     return this.#database.transaction(() => {
@@ -1783,6 +1864,7 @@ function createSchema(database: Database.Database): void {
     ) STRICT;
     ${workspaceSchemaSql()}
     ${bwaSchemaSql()}
+    ${bwaApplicationEnvironmentSchemaSql()}
     ${bwaLifecycleSchemaSql()}
     ${bwaStartupFailureSchemaSql()}
     CREATE TABLE file_service_meta (
@@ -1790,7 +1872,7 @@ function createSchema(database: Database.Database): void {
       value BLOB NOT NULL
     ) STRICT;
     INSERT INTO file_service_meta(key, value)
-    VALUES ('schema_version', X'00000005');
+    VALUES ('schema_version', X'00000006');
     PRAGMA user_version = ${SCHEMA_VERSION};
     COMMIT;
   `);
@@ -1805,7 +1887,8 @@ function migrateSchema(database: Database.Database): void {
     version !== LEGACY_SCHEMA_VERSION &&
     version !== WORKSPACE_SCHEMA_VERSION &&
     version !== BWA_SCHEMA_VERSION &&
-    version !== BWA_LIFECYCLE_SCHEMA_VERSION
+    version !== BWA_LIFECYCLE_SCHEMA_VERSION &&
+    version !== BWA_APPLICATION_ENVIRONMENT_SCHEMA_VERSION
   ) {
     throw new RefStoreError(
       "REFSTORE_CORRUPT",
@@ -1818,9 +1901,10 @@ function migrateSchema(database: Database.Database): void {
       ${version === LEGACY_SCHEMA_VERSION ? workspaceSchemaSql() : ""}
       ${version <= WORKSPACE_SCHEMA_VERSION ? bwaSchemaSql() : ""}
       ${version <= BWA_SCHEMA_VERSION ? bwaLifecycleSchemaSql() : ""}
-      ${bwaStartupFailureSchemaSql()}
+      ${version <= BWA_LIFECYCLE_SCHEMA_VERSION ? bwaStartupFailureSchemaSql() : ""}
+      ${bwaApplicationEnvironmentSchemaSql()}
       UPDATE file_service_meta
-      SET value = X'00000005'
+      SET value = X'00000006'
       WHERE key = 'schema_version';
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
@@ -1922,6 +2006,23 @@ function bwaSchemaSql(): string {
   `;
 }
 
+function bwaApplicationEnvironmentSchemaSql(): string {
+  return `
+    CREATE TABLE bwa_application_environment (
+      application_id TEXT NOT NULL
+        REFERENCES bwa_applications(application_id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      value TEXT,
+      sensitive INTEGER NOT NULL CHECK(sensitive IN (0, 1)),
+      PRIMARY KEY(application_id, name),
+      CHECK(
+        (sensitive = 0 AND value IS NOT NULL) OR
+        (sensitive = 1 AND value IS NULL)
+      )
+    ) STRICT;
+  `;
+}
+
 function bwaLifecycleSchemaSql(): string {
   return `
     CREATE TABLE bwa_run_bindings (
@@ -1978,6 +2079,7 @@ function verifyDatabase(database: Database.Database): void {
     "workspace_runs",
     "bwa_applications",
     "bwa_instances",
+    "bwa_application_environment",
     "bwa_environment",
     "bwa_run_bindings",
     "file_service_meta",

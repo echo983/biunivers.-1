@@ -19,6 +19,7 @@ import type {
   DockerBwaNetworkAdapter,
 } from "./dockerBwaNetworkAdapter.js";
 import {
+  RunDirectoryError,
   RunDirectoryManager,
   type RunPaths,
   type RuntimeManifest,
@@ -344,7 +345,17 @@ export class ComputeRuntimeCoordinator {
     if (typeof preserveUpper !== "boolean") {
       throw new Error("Destroy requires an explicit Upper preservation policy.");
     }
-    let manifest = await this.#directories.inspect(runIdHex);
+    let manifest: RuntimeManifest;
+    try {
+      manifest = await this.#directories.inspect(runIdHex);
+    } catch (error) {
+      if (error instanceof RunDirectoryError && error.code === "RUN_DIRECTORY_NOT_FOUND") {
+        this.#activeRunIds.delete(runIdHex);
+        this.#bwaLaunches.delete(runIdHex);
+        return;
+      }
+      throw error;
+    }
     if (manifest.state === "RUNNING" || manifest.state === "FROZEN") {
       manifest = await this.stop(runIdHex);
     } else if (manifest.state === "PREPARED") {

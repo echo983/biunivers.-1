@@ -49,7 +49,13 @@ import {
   type FileSelection,
 } from "./fileSelection";
 import { EntryIdenticon } from "../../components/EntryIdenticon";
-import { createWorkspace } from "../../api/workspaceClient";
+import {
+  addMainEntriesToWorkspace,
+  createWorkspace,
+  listWorkspaceFiles,
+  listWorkspaces,
+  type WorkspaceSummary,
+} from "../../api/workspaceClient";
 
 interface FileManagerBrowserProps {
   instanceToken: string;
@@ -72,6 +78,7 @@ type ToolbarIconName =
   | "open-with"
   | "add-desktop"
   | "workspace"
+  | "add-workspace"
   | "refresh"
   | "list-view"
   | "icon-view";
@@ -141,6 +148,7 @@ export function FileManagerBrowser({
     mode: "move" | "copy";
     entries: FileEntry[];
   }>();
+  const [workspaceImportEntries, setWorkspaceImportEntries] = useState<FileEntry[]>();
   const [notice, setNotice] = useState<string>();
   const [transfer, setTransfer] = useState<TransferState>();
   const [openWith, setOpenWith] = useState<OpenWithState>();
@@ -828,6 +836,15 @@ export function FileManagerBrowser({
             </button>
             <button
               type="button"
+              aria-label="添加到工作空间"
+              title="将选中项目添加到已有工作空间"
+              disabled={selectedEntries.length === 0 || working}
+              onClick={() => setWorkspaceImportEntries(selectedEntries)}
+            >
+              <ToolbarIcon kind="add-workspace" />
+            </button>
+            <button
+              type="button"
               aria-label="添加到桌面"
               title="添加到桌面"
               disabled={
@@ -1321,6 +1338,30 @@ export function FileManagerBrowser({
         />
       )}
 
+      {listing && workspaceImportEntries && (
+        <WorkspaceContentImportDialog
+          instanceToken={instanceToken}
+          entries={workspaceImportEntries}
+          mainRevision={listing.revision}
+          working={working}
+          onCancel={() => setWorkspaceImportEntries(undefined)}
+          onConfirm={(workspace, destinationEntryId) => {
+            setWorking(true);
+            setError(undefined);
+            setNotice(undefined);
+            void addMainEntriesToWorkspace(instanceToken, workspace.workspaceIdHex, {
+              selectedEntryIds: workspaceImportEntries.map((entry) => entry.entryId),
+              destinationEntryId,
+              mainRevision: listing.revision,
+              workspaceRevision: workspace.revision,
+            }).then((result) => {
+              setWorkspaceImportEntries(undefined);
+              setNotice(`已向工作空间“${workspace.name}”添加 ${result.roots.length} 个项目。`);
+            }).catch((reason: unknown) => setError(messageOf(reason))).finally(() => setWorking(false));
+          }}
+        />
+      )}
+
       {openWith && (
         <OpenWithDialog
           state={openWith}
@@ -1423,6 +1464,98 @@ function OpenWithDialog({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+function WorkspaceContentImportDialog({
+  instanceToken,
+  entries,
+  mainRevision,
+  working,
+  onCancel,
+  onConfirm,
+}: {
+  instanceToken: string;
+  entries: FileEntry[];
+  mainRevision: number;
+  working: boolean;
+  onCancel: () => void;
+  onConfirm: (workspace: WorkspaceSummary, destinationEntryId: string) => void;
+}) {
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>();
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [directoryId, setDirectoryId] = useState<string>();
+  const [listing, setListing] = useState<DirectoryListing>();
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void listWorkspaces(instanceToken).then((value) => {
+      if (!active) return;
+      setWorkspaces(value);
+      setWorkspaceId(value[0]?.workspaceIdHex ?? "");
+    }).catch((reason: unknown) => active && setError(messageOf(reason)));
+    return () => { active = false; };
+  }, [instanceToken]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    let active = true;
+    void listWorkspaceFiles(instanceToken, workspaceId, directoryId)
+      .then((value) => active && setListing(value))
+      .catch((reason: unknown) => active && setError(messageOf(reason)));
+    return () => { active = false; };
+  }, [directoryId, instanceToken, workspaceId]);
+
+  const navigate = (nextDirectoryId?: string) => {
+    setListing(undefined);
+    setError("");
+    setDirectoryId(nextDirectoryId);
+  };
+
+  const workspace = workspaces?.find((item) => item.workspaceIdHex === workspaceId);
+  return (
+    <div className="file-manager-dialog" role="dialog" aria-modal="true" aria-label={`添加 ${entries.length} 项到工作空间`}>
+      <section>
+        <h2>添加到工作空间</h2>
+        <p>复制选中项目的固定内容；同名项目将自动改名。</p>
+        <label>
+          工作空间
+          <select value={workspaceId} disabled={working} onChange={(event) => {
+            setListing(undefined);
+            setError("");
+            setDirectoryId(undefined);
+            setWorkspaceId(event.target.value);
+          }}>
+            {(workspaces ?? []).map((item) => <option key={item.workspaceIdHex} value={item.workspaceIdHex}>{item.name}</option>)}
+          </select>
+        </label>
+        {listing && (
+          <nav aria-label="工作空间目标文件夹">
+            {(listing.breadcrumbs ?? [listing.parent]).map((item, index) => (
+              <span key={item.entryId}>
+                {index > 0 ? " / " : ""}
+                <button type="button" disabled={working} onClick={() => navigate(index === 0 ? undefined : item.entryId)}>
+                  {index === 0 ? "/" : item.name}
+                </button>
+              </span>
+            ))}
+          </nav>
+        )}
+        {error && <p role="alert">{error}</p>}
+        {!listing && !error && <p role="status">正在读取工作空间…</p>}
+        <ul className="file-manager-dialog__directories">
+          {listing?.entries.filter((item) => item.kind === "directory").map((item) => (
+            <li key={item.entryId}><button type="button" disabled={working} onClick={() => navigate(item.entryId)}>📁 {item.name}</button></li>
+          ))}
+        </ul>
+        <p>main revision：{mainRevision} · Workspace revision：{listing?.revision ?? "…"}</p>
+        <div>
+          <button type="button" disabled={working} onClick={onCancel}>取消</button>
+          <button type="button" disabled={working || !workspace || !listing} onClick={() => workspace && listing && onConfirm(workspace, listing.parent.entryId)}>添加到这里</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1811,6 +1944,14 @@ function ToolbarIcon({ kind }: { kind: ToolbarIconName }) {
       "M7 4h10v3",
       "M12 12v5",
       "M9.5 14.5h5",
+    ],
+    "add-workspace": [
+      "M3 7h7l2 2h9v11H3z",
+      "M7 4h10v3",
+      "M12 12v5",
+      "M9.5 14.5h5",
+      "M19 3v4",
+      "M17 5h4",
     ],
     refresh: [
       "M20 7v5h-5",

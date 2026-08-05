@@ -68,6 +68,7 @@ export class BwaManagerControlService {
       })),
       applications: this.#refStore.listBwaApplications().map((application) => ({
         ...application,
+        environment: this.#refStore.listBwaApplicationEnvironment(application.applicationId),
         instances: this.#refStore
           .listBwaInstances(application.applicationId)
           .map((instance) => ({
@@ -116,9 +117,17 @@ export class BwaManagerControlService {
     return { workspace };
   }
 
-  uninstall(applicationId: string) {
-    this.#registry.uninstall(applicationId);
+  async uninstall(applicationId: string) {
+    await this.#registry.uninstall(applicationId);
     return { applicationId };
+  }
+
+  async replaceApplicationEnvironment(
+    applicationId: string,
+    ordinary: Record<string, string>,
+    sensitive: Record<string, string>,
+  ) {
+    return await this.#registry.replaceApplicationEnvironment(applicationId, ordinary, sensitive);
   }
 
   async replaceEnvironment(

@@ -15,7 +15,7 @@ afterEach(async () => {
 });
 
 describe("WorkspaceControlService", () => {
-  it("separates file-manager creation from Workspace management authority", async () => {
+  it("allows file-manager creation and content import without granting Workspace administration", async () => {
     const root = await mkdtemp(join(tmpdir(), "biunivers-workspace-control-"));
     roots.push(root);
     const refStore = await SqliteRefStore.initialize(join(root, "refs.sqlite"));
@@ -62,6 +62,7 @@ describe("WorkspaceControlService", () => {
       revision: 4,
       roots: [],
     });
+    const addFromMain = vi.fn().mockResolvedValue({ revision: 5, roots: [] });
     const service = new WorkspaceControlService({
       repository: {} as ImmutableObjectRepository,
       refStore,
@@ -71,6 +72,7 @@ describe("WorkspaceControlService", () => {
       diff: { compare },
       textDiff: { compare: compareText },
       importer: { execute: executeImport },
+      contentImporter: { execute: addFromMain },
     });
 
     const created = await service.create(files.instanceToken, {
@@ -86,9 +88,7 @@ describe("WorkspaceControlService", () => {
       }),
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     expect(service.list(workspaces.instanceToken)).toEqual([]);
-    expect(() => service.list(files.instanceToken)).toThrowError(
-      expect.objectContaining({ code: "PERMISSION_DENIED" }),
-    );
+    expect(service.list(files.instanceToken)).toEqual([]);
     expect(() => service.list(thirdParty.instanceToken)).toThrowError(
       expect.objectContaining({ code: "PERMISSION_DENIED" }),
     );
@@ -129,6 +129,16 @@ describe("WorkspaceControlService", () => {
     await expect(
       service.importToMain(thirdParty.instanceToken, importInput),
     ).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
+    const contentInput = {
+      workspaceIdHex: "11".repeat(16),
+      selectedEntryIdsHex: ["66".repeat(16)],
+      destinationEntryIdHex: "77".repeat(16),
+      workspaceRevision: 4,
+      mainRevision: 3,
+    };
+    await expect(service.addFromMain(files.instanceToken, contentInput)).resolves.toMatchObject({ revision: 5 });
+    expect(addFromMain).toHaveBeenCalledWith(contentInput);
+    await expect(service.addFromMain(thirdParty.instanceToken, contentInput)).rejects.toMatchObject({ code: "PERMISSION_DENIED" });
     refStore.close();
   });
 });

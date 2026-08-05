@@ -29,6 +29,7 @@ import {
   WorkspaceImportService,
   type WorkspaceImportResult,
 } from "./workspaceImportService.js";
+import { WorkspaceContentImportService } from "./workspaceContentImportService.js";
 
 const FILES_APP_ID = "system.files";
 const WORKSPACES_APP_ID = "system.workspaces";
@@ -46,6 +47,7 @@ interface WorkspaceControlServiceOptions {
   diff?: Pick<WorkspaceDiffService, "compare">;
   textDiff?: Pick<WorkspaceTextDiffService, "compare">;
   importer?: Pick<WorkspaceImportService, "execute">;
+  contentImporter?: Pick<WorkspaceContentImportService, "execute">;
   now?: () => number;
 }
 
@@ -57,6 +59,7 @@ export class WorkspaceControlService {
   readonly #diff: Pick<WorkspaceDiffService, "compare">;
   readonly #textDiff: Pick<WorkspaceTextDiffService, "compare">;
   readonly #importer: Pick<WorkspaceImportService, "execute">;
+  readonly #contentImporter: Pick<WorkspaceContentImportService, "execute">;
   readonly #now: () => number;
 
   constructor(options: WorkspaceControlServiceOptions) {
@@ -89,6 +92,11 @@ export class WorkspaceControlService {
         refStore: options.refStore,
         writerId: options.writerId,
       });
+    this.#contentImporter = options.contentImporter ?? new WorkspaceContentImportService({
+      repository: options.repository,
+      refStore: options.refStore,
+      writerId: options.writerId,
+    });
     this.#now = options.now ?? Date.now;
   }
 
@@ -118,7 +126,7 @@ export class WorkspaceControlService {
   }
 
   list(instanceToken: string): WorkspaceSummary[] {
-    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    this.#authorize(instanceToken, WORKSPACES_APP_ID, FILES_APP_ID);
     return this.#refStore.listWorkspaces().map((workspace) => ({
       ...workspace,
       revision: this.#refStore.getRef(workspace.refId).revision,
@@ -158,7 +166,7 @@ export class WorkspaceControlService {
     breadcrumbs: PublicFileEntry[];
     entries: PublicFileEntry[];
   }> {
-    this.#authorize(instanceToken, WORKSPACES_APP_ID);
+    this.#authorize(instanceToken, WORKSPACES_APP_ID, FILES_APP_ID);
     const workspace = this.#refStore.getWorkspace(workspaceIdHex);
     const index = await loadCurrentEntryIndex(
       this.#repository,
@@ -207,12 +215,20 @@ export class WorkspaceControlService {
     return await this.#importer.execute(input);
   }
 
-  #authorize(instanceToken: string, requiredAppId: string): void {
+  async addFromMain(
+    instanceToken: string,
+    input: Parameters<WorkspaceContentImportService["execute"]>[0],
+  ) {
+    this.#authorize(instanceToken, FILES_APP_ID);
+    return await this.#contentImporter.execute(input);
+  }
+
+  #authorize(instanceToken: string, ...allowedAppIds: string[]): void {
     const identity = this.#capabilities.authorizeInstance(instanceToken);
-    if (identity.appId !== requiredAppId) {
+    if (!allowedAppIds.includes(identity.appId)) {
       throw new FileCapabilityError(
         "PERMISSION_DENIED",
-        `This operation is restricted to ${requiredAppId}.`,
+        `This operation is restricted to ${allowedAppIds.join(" or ")}.`,
       );
     }
   }

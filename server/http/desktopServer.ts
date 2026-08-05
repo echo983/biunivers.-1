@@ -77,6 +77,7 @@ type WorkspaceControlExecutor = Pick<
   | "diff"
   | "textDiff"
   | "importToMain"
+  | "addFromMain"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -99,6 +100,7 @@ type BwaManagerControlExecutor = Pick<
   | "rollback"
   | "deleteInstance"
   | "uninstall"
+  | "replaceApplicationEnvironment"
   | "replaceEnvironment"
   | "start"
   | "stop"
@@ -415,6 +417,36 @@ export function createDesktopServer({
               conflictPolicy: body.conflictPolicy,
             }),
           );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/workspaces/:workspaceId/add-from-main",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(request, config, workspaceControl);
+        const body = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(body.selectedEntryIds) ||
+          body.selectedEntryIds.some((value) => typeof value !== "string") ||
+          typeof body.destinationEntryId !== "string" ||
+          !Number.isSafeInteger(body.mainRevision) ||
+          !Number.isSafeInteger(body.workspaceRevision)
+        ) {
+          throw new AppError("REQUEST_INVALID", "添加到 Workspace 参数无效");
+        }
+        response.status(201).set("Cache-Control", "no-store").json(
+          await service.addFromMain(instanceToken, {
+            workspaceIdHex: request.params.workspaceId,
+            selectedEntryIdsHex: body.selectedEntryIds as string[],
+            destinationEntryIdHex: body.destinationEntryId,
+            mainRevision: body.mainRevision as number,
+            workspaceRevision: body.workspaceRevision as number,
+          }),
+        );
       } catch (error) {
         next(error);
       }
@@ -1736,11 +1768,11 @@ export function createDesktopServer({
     }
   });
 
-  app.delete("/api/v1/control/bwa/applications/:applicationId", (request, response, next) => {
+  app.delete("/api/v1/control/bwa/applications/:applicationId", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       response.set("Cache-Control", "no-store").json(
-        service.uninstall(request.params.applicationId),
+        await service.uninstall(request.params.applicationId),
       );
     } catch (error) {
       next(error);
@@ -1757,6 +1789,25 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  app.put(
+    "/api/v1/control/bwa/applications/:applicationId/environment",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        const { ordinary, sensitive } = objectBody(request.body);
+        response.set("Cache-Control", "no-store").json(
+          await service.replaceApplicationEnvironment(
+            request.params.applicationId,
+            stringRecord(ordinary, "ordinary"),
+            stringRecord(sensitive, "sensitive"),
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.put(
     "/api/v1/control/bwa/instances/:instanceId/environment",
