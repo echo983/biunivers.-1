@@ -324,6 +324,11 @@ describe("ComputeRuntimeCoordinator", () => {
     expect(await readFile(upperFile, "utf8")).toBe("keep");
   });
 
+  it("treats destroying a Run that never reached Runtime preparation as complete", async () => {
+    const setupResult = await setup();
+    await expect(setupResult.coordinator.destroy(runIdHex, false)).resolves.toBeUndefined();
+  });
+
   it("cleans an active Run on daemon shutdown and preserves Upper", async () => {
     const setupResult = await setup();
     await setupResult.coordinator.prepare({
