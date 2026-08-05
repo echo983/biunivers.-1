@@ -58,14 +58,14 @@ afterEach(async () => {
 });
 
 describe("SqliteRefStore", () => {
-  it("creates schema v5 and atomically migrates existing v1 through v4 databases", async () => {
+  it("creates schema v6 and atomically migrates existing v1 through v5 databases", async () => {
     const freshPath = await databasePath();
     const fresh = await SqliteRefStore.initialize(freshPath);
     fresh.close();
     expect(readSchema(freshPath)).toEqual({
-      version: 5,
+      version: 6,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
+      bwaTables: ["bwa_application_environment", "bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
     });
 
     const legacyPath = await databasePath();
@@ -74,9 +74,9 @@ describe("SqliteRefStore", () => {
     expect(migrated.getRef("main")).toEqual(initial);
     migrated.close();
     expect(readSchema(legacyPath)).toEqual({
-      version: 5,
+      version: 6,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
+      bwaTables: ["bwa_application_environment", "bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
     });
 
     const v2Path = await databasePath();
@@ -88,9 +88,9 @@ describe("SqliteRefStore", () => {
     expect(migratedV2.getRef("main")).toEqual(initial);
     migratedV2.close();
     expect(readSchema(v2Path)).toEqual({
-      version: 5,
+      version: 6,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
+      bwaTables: ["bwa_application_environment", "bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
     });
 
     const v3Path = await databasePath();
@@ -102,9 +102,9 @@ describe("SqliteRefStore", () => {
     expect(migratedV3.getRef("main")).toEqual(initial);
     migratedV3.close();
     expect(readSchema(v3Path)).toEqual({
-      version: 5,
+      version: 6,
       workspaceTables: ["workspace_records", "workspace_runs"],
-      bwaTables: ["bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
+      bwaTables: ["bwa_application_environment", "bwa_applications", "bwa_environment", "bwa_instances", "bwa_run_bindings", "bwa_startup_failures"],
     });
 
     const v4Path = await databasePath();
@@ -113,7 +113,17 @@ describe("SqliteRefStore", () => {
     downgradeSchemaToV4(v4Path);
     const migratedV4 = await SqliteRefStore.openExisting(v4Path);
     migratedV4.close();
-    expect(readSchema(v4Path)).toMatchObject({ version: 5 });
+    expect(readSchema(v4Path)).toMatchObject({ version: 6 });
+
+    const v5Path = await databasePath();
+    const v5 = await SqliteRefStore.initialize(v5Path);
+    v5.createRef(initial);
+    v5.close();
+    downgradeSchemaToV5(v5Path);
+    const migratedV5 = await SqliteRefStore.openExisting(v5Path);
+    expect(migratedV5.getRef("main")).toEqual(initial);
+    migratedV5.close();
+    expect(readSchema(v5Path)).toMatchObject({ version: 6 });
   });
 
   it("rejects an unsupported future schema without changing its version", async () => {
@@ -921,6 +931,7 @@ function downgradeSchemaToV2(path: string): void {
   const database = new Database(path);
   database.pragma("foreign_keys = OFF");
   database.exec(`
+    DROP TABLE bwa_application_environment;
     DROP TABLE bwa_startup_failures;
     DROP TABLE bwa_run_bindings;
     DROP TABLE bwa_environment;
@@ -936,6 +947,7 @@ function downgradeSchemaToV3(path: string): void {
   const database = new Database(path);
   database.pragma("foreign_keys = OFF");
   database.exec(`
+    DROP TABLE bwa_application_environment;
     DROP TABLE bwa_startup_failures;
     DROP TABLE bwa_run_bindings;
     UPDATE file_service_meta SET value = X'00000003' WHERE key = 'schema_version';
@@ -948,9 +960,21 @@ function downgradeSchemaToV4(path: string): void {
   const database = new Database(path);
   database.pragma("foreign_keys = OFF");
   database.exec(`
+    DROP TABLE bwa_application_environment;
     DROP TABLE bwa_startup_failures;
     UPDATE file_service_meta SET value = X'00000004' WHERE key = 'schema_version';
     PRAGMA user_version = 4;
+  `);
+  database.close();
+}
+
+function downgradeSchemaToV5(path: string): void {
+  const database = new Database(path);
+  database.pragma("foreign_keys = OFF");
+  database.exec(`
+    DROP TABLE bwa_application_environment;
+    UPDATE file_service_meta SET value = X'00000005' WHERE key = 'schema_version';
+    PRAGMA user_version = 5;
   `);
   database.close();
 }

@@ -99,6 +99,7 @@ type BwaManagerControlExecutor = Pick<
   | "rollback"
   | "deleteInstance"
   | "uninstall"
+  | "replaceApplicationEnvironment"
   | "replaceEnvironment"
   | "start"
   | "stop"
@@ -1736,11 +1737,11 @@ export function createDesktopServer({
     }
   });
 
-  app.delete("/api/v1/control/bwa/applications/:applicationId", (request, response, next) => {
+  app.delete("/api/v1/control/bwa/applications/:applicationId", async (request, response, next) => {
     try {
       const service = requireBwaManager(bwaManager);
       response.set("Cache-Control", "no-store").json(
-        service.uninstall(request.params.applicationId),
+        await service.uninstall(request.params.applicationId),
       );
     } catch (error) {
       next(error);
@@ -1757,6 +1758,25 @@ export function createDesktopServer({
       next(error);
     }
   });
+
+  app.put(
+    "/api/v1/control/bwa/applications/:applicationId/environment",
+    async (request, response, next) => {
+      try {
+        const service = requireBwaManager(bwaManager);
+        const { ordinary, sensitive } = objectBody(request.body);
+        response.set("Cache-Control", "no-store").json(
+          await service.replaceApplicationEnvironment(
+            request.params.applicationId,
+            stringRecord(ordinary, "ordinary"),
+            stringRecord(sensitive, "sensitive"),
+          ),
+        );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
 
   app.put(
     "/api/v1/control/bwa/instances/:instanceId/environment",

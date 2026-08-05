@@ -6,8 +6,9 @@ const INSTANCE_ID_PATTERN = /^[0-9a-f]{32}$/;
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 
 interface SecretDocument {
-  schemaVersion: 1;
+  schemaVersion: 2;
   values: Record<string, Record<string, string>>;
+  applicationValues: Record<string, Record<string, string>>;
 }
 
 export class BwaSecretStore {
@@ -26,7 +27,7 @@ export class BwaSecretStore {
       await chmod(this.#path, 0o600);
     } catch (error) {
       if (!isNodeError(error, "ENOENT")) throw error;
-      await this.#write({ schemaVersion: 1, values: {} });
+      await this.#write({ schemaVersion: 2, values: {}, applicationValues: {} });
     }
   }
 
@@ -54,6 +55,33 @@ export class BwaSecretStore {
       output[name] = stored[name]!;
     }
     return output;
+  }
+
+  async replaceApplication(applicationId: string, values: Record<string, string>): Promise<void> {
+    validateApplicationId(applicationId);
+    validateValues(values);
+    const document = await this.#read();
+    if (Object.keys(values).length === 0) delete document.applicationValues[applicationId];
+    else document.applicationValues[applicationId] = { ...values };
+    await this.#write(document);
+  }
+
+  async readApplication(applicationId: string, names: readonly string[]): Promise<Record<string, string>> {
+    validateApplicationId(applicationId);
+    for (const name of names) validateName(name);
+    const stored = (await this.#read()).applicationValues[applicationId] ?? {};
+    const output: Record<string, string> = {};
+    for (const name of names) {
+      if (!Object.hasOwn(stored, name)) throw new Error(`Sensitive variable ${name} has no stored value.`);
+      output[name] = stored[name]!;
+    }
+    return output;
+  }
+
+  async deleteApplication(applicationId: string): Promise<void> {
+    validateApplicationId(applicationId);
+    const document = await this.#read();
+    if (delete document.applicationValues[applicationId]) await this.#write(document);
   }
 
   async deleteInstance(instanceIdHex: string): Promise<void> {
@@ -118,16 +146,16 @@ function validateDocument(value: unknown): SecretDocument {
   }
   const document = value as Record<string, unknown>;
   if (
-    document.schemaVersion !== 1 ||
+    ![1, 2].includes(document.schemaVersion as number) ||
     !document.values ||
     typeof document.values !== "object" ||
     Array.isArray(document.values) ||
-    Object.keys(document).some((key) => !["schemaVersion", "values"].includes(key))
+    Object.keys(document).some((key) => !["schemaVersion", "values", "applicationValues"].includes(key))
   ) {
     throw new Error("BWA secret store is corrupt.");
   }
   const values = document.values as Record<string, unknown>;
-  const validated: SecretDocument = { schemaVersion: 1, values: {} };
+  const validated: SecretDocument = { schemaVersion: 2, values: {}, applicationValues: {} };
   for (const [instanceId, variables] of Object.entries(values)) {
     validateInstanceId(instanceId);
     if (!variables || typeof variables !== "object" || Array.isArray(variables)) {
@@ -135,6 +163,16 @@ function validateDocument(value: unknown): SecretDocument {
     }
     validateValues(variables as Record<string, unknown>);
     validated.values[instanceId] = { ...(variables as Record<string, string>) };
+  }
+  const applicationValues = document.applicationValues ?? {};
+  if (!applicationValues || typeof applicationValues !== "object" || Array.isArray(applicationValues)) {
+    throw new Error("BWA secret store is corrupt.");
+  }
+  for (const [applicationId, variables] of Object.entries(applicationValues as Record<string, unknown>)) {
+    validateApplicationId(applicationId);
+    if (!variables || typeof variables !== "object" || Array.isArray(variables)) throw new Error("BWA secret store is corrupt.");
+    validateValues(variables as Record<string, unknown>);
+    validated.applicationValues[applicationId] = { ...(variables as Record<string, string>) };
   }
   return validated;
 }
@@ -161,6 +199,12 @@ function validateName(name: string): void {
 function validateInstanceId(value: string): void {
   if (!INSTANCE_ID_PATTERN.test(value) || value === "0".repeat(32)) {
     throw new Error("BWA Instance ID is invalid.");
+  }
+}
+
+function validateApplicationId(value: string): void {
+  if (!/^ghcr\.io\/[a-z0-9]+(?:[._-][a-z0-9]+)*\/[a-z0-9]+(?:[._/-][a-z0-9]+)*$/.test(value)) {
+    throw new Error("BWA Application ID is invalid.");
   }
 }
 

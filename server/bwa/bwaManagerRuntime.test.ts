@@ -37,7 +37,7 @@ describe("BwaManagerRuntime", () => {
       expect(manager.httpProxy).toBeTypeOf("function");
       expect(manager.websocketProxy).toBeTypeOf("function");
       expect(JSON.parse(await readFile(join(root, "private", "bwa-secrets.json"), "utf8")))
-        .toEqual({ schemaVersion: 1, values: {} });
+        .toEqual({ schemaVersion: 2, values: {}, applicationValues: {} });
     } finally {
       manager.close();
     }

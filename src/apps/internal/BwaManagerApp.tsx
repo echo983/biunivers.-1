@@ -156,6 +156,9 @@ function ApplicationCard({
 }) {
   const [instanceName, setInstanceName] = useState("");
   const [sourceWorkspaceIdHex, setSourceWorkspaceIdHex] = useState("");
+  const [showEnvironment, setShowEnvironment] = useState(false);
+  const [ordinary, setOrdinary] = useState(() => formatVariables(application.environment, false));
+  const [sensitive, setSensitive] = useState(() => formatVariables(application.environment, true));
   return (
     <section className="bwa-manager__application">
       <header>
@@ -184,6 +187,7 @@ function ApplicationCard({
             disabled={busy || !application.previousDigest}
             onClick={() => void execute(() => client.rollback(application.applicationId), "已回退到上一镜像")}
           >回退</button>
+          <button type="button" disabled={busy} onClick={() => setShowEnvironment((value) => !value)}>默认环境</button>
           <button
             type="button"
             disabled={busy || application.instances.length > 0}
@@ -196,6 +200,24 @@ function ApplicationCard({
           >卸载</button>
         </div>
       </header>
+      {showEnvironment && (
+        <form className="bwa-manager__environment" onSubmit={(event) => {
+          event.preventDefault();
+          void execute(async () => {
+            await client.replaceApplicationEnvironment(
+              application.applicationId,
+              parseEnvironment(ordinary),
+              parseEnvironment(sensitive),
+            );
+            setSensitive("");
+            setShowEnvironment(false);
+          }, "应用默认环境已保存，将由 Instance 在下次启动时继承");
+        }}>
+          <label><span>默认普通变量（每行 KEY=value）</span><textarea value={ordinary} onChange={(event) => setOrdinary(event.target.value)} /></label>
+          <label><span>默认 Secret（保存时必须重新填写全部值）</span><textarea value={sensitive} onChange={(event) => setSensitive(event.target.value)} /></label>
+          <button type="submit" disabled={busy}>保存默认环境</button>
+        </form>
+      )}
       <form
         className="bwa-manager__new-instance"
         onSubmit={(event) => {
@@ -236,6 +258,7 @@ function ApplicationCard({
         <InstanceCard
           key={instance.instanceIdHex}
           instance={instance}
+          applicationEnvironment={application.environment}
           client={client}
           busy={busy}
           execute={execute}
@@ -246,8 +269,9 @@ function ApplicationCard({
   );
 }
 
-function InstanceCard({ instance, client, busy, execute, onOpen }: {
+function InstanceCard({ instance, applicationEnvironment, client, busy, execute, onOpen }: {
   instance: BwaInstanceSummary;
+  applicationEnvironment: BwaApplicationSummary["environment"];
   client: BwaManagerClient;
   busy: boolean;
   execute: (operation: () => Promise<unknown>, success: string) => Promise<void>;
@@ -339,6 +363,11 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
             );
           }}
         >
+          {applicationEnvironment.length > 0 && (
+            <p className="bwa-manager__environment-inherited">
+              继承应用默认值：{applicationEnvironment.map((item) => item.name).join("、")}。在此填写同名变量即可覆盖。
+            </p>
+          )}
           <label><span>普通变量（每行 KEY=value）</span><textarea value={ordinary} onChange={(event) => setOrdinary(event.target.value)} /></label>
           <label><span>Secret（保存时必须重新填写全部值）</span><textarea value={sensitive} onChange={(event) => setSensitive(event.target.value)} /></label>
           <button type="submit" disabled={busy}>保存环境变量</button>
@@ -358,7 +387,14 @@ function startupStageLabel(stage: NonNullable<BwaRunSummary["startupFailure"]>["
 }
 
 function formatEnvironment(instance: BwaInstanceSummary, sensitive: boolean): string {
-  return instance.environment
+  return formatVariables(instance.environment, sensitive);
+}
+
+function formatVariables(
+  variables: Array<{ name: string; value: string | null; sensitive: boolean }>,
+  sensitive: boolean,
+): string {
+  return variables
     .filter((item) => item.sensitive === sensitive)
     .map((item) => `${item.name}=${item.value ?? ""}`)
     .join("\n");

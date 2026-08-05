@@ -53,24 +53,39 @@ describe("BwaRegistryService", () => {
       displayName: "Probe state",
     });
     expect(instance.instanceIdHex).toBe(instanceIdHex);
+    await registry.replaceApplicationEnvironment(
+      application.applicationId,
+      { MODE: "default", REGION: "eu" },
+      { API_TOKEN: "application-secret", UNUSED_SECRET: "not-read" },
+    );
     await registry.replaceEnvironment(
       instanceIdHex,
-      { MODE: "safe" },
+      { MODE: "safe", UNUSED_SECRET: "ordinary-override" },
       { API_TOKEN: "never-in-sqlite" },
     );
     expect(await registry.resolveEnvironment(instanceIdHex)).toEqual({
       API_TOKEN: "never-in-sqlite",
       MODE: "safe",
+      REGION: "eu",
+      UNUSED_SECRET: "ordinary-override",
     });
     expect(refStore.listBwaEnvironment(instanceIdHex)).toEqual([
       { name: "API_TOKEN", value: null, sensitive: true },
       { name: "MODE", value: "safe", sensitive: false },
+      { name: "UNUSED_SECRET", value: "ordinary-override", sensitive: false },
+    ]);
+    expect(refStore.listBwaApplicationEnvironment(application.applicationId)).toEqual([
+      { name: "API_TOKEN", value: null, sensitive: true },
+      { name: "MODE", value: "default", sensitive: false },
+      { name: "REGION", value: "eu", sensitive: false },
+      { name: "UNUSED_SECRET", value: null, sensitive: true },
     ]);
     expect(await registry.verifyInstalled(application.applicationId)).toMatchObject({ digest });
     refStore.close();
 
     const bytes = await import("node:fs/promises").then(({ readFile }) => readFile(databasePath));
     expect(bytes.includes(Buffer.from("never-in-sqlite"))).toBe(false);
+    expect(bytes.includes(Buffer.from("application-secret"))).toBe(false);
     const reopened = await SqliteRefStore.openExisting(databasePath);
     expect(reopened.getBwaApplication(application.applicationId).defaultInstanceIdHex).toBe(
       instanceIdHex,

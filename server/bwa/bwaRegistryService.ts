@@ -249,21 +249,50 @@ export class BwaRegistryService {
     return this.#refStore.replaceBwaEnvironment(instanceIdHex, variables);
   }
 
+  async replaceApplicationEnvironment(
+    applicationId: string,
+    ordinary: Record<string, string>,
+    sensitive: Record<string, string>,
+  ): Promise<BwaEnvironmentVariable[]> {
+    validateEnvironmentInput(ordinary, sensitive);
+    const variables = environmentVariables(ordinary, sensitive);
+    await this.#secrets.replaceApplication(applicationId, sensitive);
+    return this.#refStore.replaceBwaApplicationEnvironment(applicationId, variables);
+  }
+
   async resolveEnvironment(instanceIdHex: string): Promise<Record<string, string>> {
-    const variables = this.#refStore.listBwaEnvironment(instanceIdHex);
-    const sensitiveNames = variables.filter((item) => item.sensitive).map((item) => item.name);
-    let sensitive: Record<string, string>;
+    const instance = this.#refStore.getBwaInstance(instanceIdHex);
+    const defaults = this.#refStore.listBwaApplicationEnvironment(instance.applicationId);
+    const overrides = this.#refStore.listBwaEnvironment(instanceIdHex);
+    const effective = new Map<string, BwaEnvironmentVariable & { scope: "application" | "instance" }>(
+      defaults.map((item) => [item.name, { ...item, scope: "application" }]),
+    );
+    for (const item of overrides) effective.set(item.name, { ...item, scope: "instance" as const });
+    const appSecretNames = [...effective.values()].filter((item) => item.sensitive && item.scope === "application").map((item) => item.name);
+    const instanceSecretNames = [...effective.values()].filter((item) => item.sensitive && item.scope === "instance").map((item) => item.name);
+    let appSecrets: Record<string, string>;
+    let instanceSecrets: Record<string, string>;
     try {
-      sensitive = await this.#secrets.read(instanceIdHex, sensitiveNames);
+      [appSecrets, instanceSecrets] = await Promise.all([
+        this.#secrets.readApplication(instance.applicationId, appSecretNames),
+        this.#secrets.read(instanceIdHex, instanceSecretNames),
+      ]);
     } catch {
       throw new BwaRegistryError(
         "SECRET_VALUE_MISSING",
         "One or more sensitive variables have no stored value.",
       );
     }
-    return Object.fromEntries(
-      variables.map((item) => [item.name, item.sensitive ? sensitive[item.name]! : item.value!]),
+    const resolved = Object.fromEntries(
+      [...effective.values()].map((item) => [
+        item.name,
+        item.sensitive
+          ? (item.scope === "application" ? appSecrets[item.name]! : instanceSecrets[item.name]!)
+          : item.value!,
+      ]),
     );
+    validateEnvironmentInput(resolved, {});
+    return resolved;
   }
 
   async deleteInstancePreservingWorkspace(instanceIdHex: string) {
@@ -272,8 +301,9 @@ export class BwaRegistryService {
     return workspace;
   }
 
-  uninstall(applicationId: string): void {
+  async uninstall(applicationId: string): Promise<void> {
     this.#refStore.deleteBwaApplication(applicationId);
+    await this.#secrets.deleteApplication(applicationId);
   }
 
   async pruneOrphanSecrets(): Promise<number> {
@@ -291,6 +321,16 @@ export class BwaRegistryService {
     if (!Number.isSafeInteger(now) || now < 0) throw new Error("BWA timestamp is invalid.");
     return now;
   }
+}
+
+function environmentVariables(
+  ordinary: Record<string, string>,
+  sensitive: Record<string, string>,
+): BwaEnvironmentVariable[] {
+  return [
+    ...Object.entries(ordinary).map(([name, value]) => ({ name, value, sensitive: false })),
+    ...Object.keys(sensitive).map((name) => ({ name, value: null, sensitive: true })),
+  ];
 }
 
 async function pullAndInspect(
