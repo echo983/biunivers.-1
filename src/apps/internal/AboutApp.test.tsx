@@ -18,7 +18,7 @@ describe("AboutApp", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 原子导回",
+        "PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 双向受控导入",
       ),
     ).toBeVisible();
     expect(
@@ -26,7 +26,7 @@ describe("AboutApp", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Static App v1 · Workspace Application v1 · Open Resource v1/v1.1",
+        "Static App v1 · Workspace Application v1 · 默认环境与实例覆盖",
       ),
     ).toBeVisible();
   });

@@ -22,6 +22,11 @@ BWA 开发包同时包含冻结的
 [`BIUNIVERS_WORKSPACE_APPLICATION_PROTOCOL_V1.md`](BIUNIVERS_WORKSPACE_APPLICATION_PROTOCOL_V1.md)
 供开发和审查；协议明确规定它不需要进入最终镜像。
 
+当前宿主允许用户为 BWA Application 保存公共默认环境，并在 Instance 上配置差异覆盖。
+这是宿主管理体验，不改变 Workspace Application Protocol v1：镜像仍只接收一次启动所需的
+最终环境。用户也可从可信文件管理器向 Workspace 补充 main 中明确选择的内容；BWA 本身
+仍不能浏览或指定 main 文件。
+
 两种类型是独立交付模型。BWA 不使用 `biunivers.app.json`，Static App 也不会获得
 `/workspace`、容器环境变量或 secret。
 

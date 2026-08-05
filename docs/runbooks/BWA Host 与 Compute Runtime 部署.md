@@ -100,6 +100,15 @@ Unix socket 107 字节路径上限。Upper 仍需保留到正常提交或显式�
 不得提交该目录、环境文件、Runtime token、S3 key 或 BWA secret。备份仍以 File Service
 RefStore 备份和 S3 不可变对象为准；Runtime cache、socket 和容器本身不是持久数据。
 
+### Application 默认环境与 Instance 覆盖
+
+工作空间应用管理器支持两级启动配置：Application 保存公共默认值，Instance 保存同名覆盖
+或额外变量。最终环境只在创建新 Run 时合并；修改配置不会热更新运行中的容器。Application
+与 Instance secret 均保存在私有 `bwa-secrets.json`，不会进入 RefStore 或 Workspace。
+
+恢复或迁移数据根时，缺少该私有文件会使依赖 secret 的 BWA 启动失败，但不会损坏 Workspace
+HEAD。应从独立受保护备份恢复 secret，不能用日志、README 或 Git 仓库代替。
+
 ## 5. 故障检查
 
 ```bash

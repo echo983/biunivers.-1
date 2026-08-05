@@ -188,6 +188,16 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [BWA 默认环境与 Workspace 内容补充](<design/BWA 默认环境与 Workspace 内容补充.md>) | 已完成并归档 | Application 默认环境、Instance 覆盖、main 选择集向既有 Workspace 原子补充 |
 | [BWA 默认环境与 Workspace 内容补充验收](<acceptance/BWA 默认环境与 Workspace 内容补充验收.md>) | 已通过 | 默认配置继承、实例隔离、递归导入、自动改名、并发守卫和真实界面验收 |
 
+## V0.15：BWA 配置复用与 Workspace 内容补充
+
+归档版本：`v0.15.0`
+
+| 文档 | 状态 | 说明 |
+| --- | --- | --- |
+| [V0.15 里程碑说明](<acceptance/V0.15 BWA 配置与 Workspace 内容补充里程碑.md>) | 已归档 | Application 默认环境、Instance 覆盖、RefStore v6、main 向 Workspace 原子补充和质量门禁 |
+| [BWA 默认环境与 Workspace 内容补充设计](<design/BWA 默认环境与 Workspace 内容补充.md>) | 已完成 | 最小继承模型、secret 分域、固定 Run 环境、双 Ref CAS 和非目标 |
+| [BWA 默认环境与 Workspace 内容补充验收](<acceptance/BWA 默认环境与 Workspace 内容补充验收.md>) | 已通过 | 真实界面、Codex 模型覆盖、递归目录、自动改名、权限和并发保护 |
+
 ## 第三方应用生态 V1：发布候选
 
 | 文档 | 状态 | 内容 |

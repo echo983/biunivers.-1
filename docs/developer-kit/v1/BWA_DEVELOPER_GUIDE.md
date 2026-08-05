@@ -125,8 +125,12 @@ Upper；只有宿主成功提交后才产生新的 Workspace HEAD。
 
 ## 7. 配置与 secret
 
-用户为每个 Instance 设置普通环境变量和敏感变量，它们在下一次启动或保存重启时注入。
-应用 README 应列出变量名称、是否必需、是否敏感、非 secret 示例和生效时机。
+用户可以在 Application 上保存公共的默认普通变量和 secret，Instance 只配置差异项；同名
+Instance 配置优先。最终环境在下一次启动或保存重启时合并并固定注入，已经运行的容器不会
+热更新。应用 README 应列出变量名称、是否必需、是否敏感、非 secret 示例和生效时机。
+
+应用不能感知某个值来自 Application 默认项还是 Instance 覆盖项，也不应依赖该来源。
+删除 Instance 覆盖后，宿主会在下次启动时重新使用 Application 默认值。
 
 secret 不得进入页面、日志、健康响应、Workspace、OCI label 或诊断输出；应用不得要求宿主
 管理凭据或任意宿主环境变量。
@@ -154,7 +158,9 @@ docker push ghcr.io/<owner>/<image>:1.0.0
 ## 10. 安装、实例与更新
 
 用户在“工作空间应用”中输入镜像 tag。宿主读取 labels、解析 digest 后注册应用。随后创建
-Instance，可从空白 Workspace 或已有 Workspace 的 Fork 开始，填写环境变量并启动。
+Instance，可从空白 Workspace 或已有 Workspace 的 Fork 开始，继承 Application 默认环境，
+按需填写 Instance 覆盖后启动。用户还可以在可信文件管理器中把 main 的明确选择集添加到
+已有 Workspace；这不会让 BWA 获得 main 的目录枚举或主动文件选择能力。
 
 发布新镜像后由用户显式更新；正在运行或存在未处置异常 Upper 时宿主可以拒绝更新。tag
 漂移不会静默替换已经安装的 digest。
@@ -170,6 +176,7 @@ Instance，可从空白 Workspace 或已有 Workspace 的 Fork 开始，填写�
 5. 正常停止能提交，异常退出不会自动污染 HEAD；
 6. secret 不进入日志、页面、镜像和 Workspace；
 7. SIGTERM 能在宿主终止窗口内完成。
+8. Application 默认环境可供新 Instance 直接使用，Instance 覆盖不污染其他状态。
 
 ## 12. V1 不提供
 

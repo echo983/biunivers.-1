@@ -168,7 +168,11 @@ io.biunivers.workspace-application.protocol=1
 - `/health` 无需登录即可快速返回 `2xx`；
 - 持久写入只进入 `/workspace`，临时写入进入 `/tmp`；
 - 启动不依赖 Docker socket、host network、capabilities 或固定 UID；
-- 必需环境变量已在 Instance 配置中填写。
+- 必需环境变量已在 Application 默认环境或当前 Instance 覆盖中填写；
+- 修改配置后已经停止并重新启动，或执行保存重启。
+
+若多个 Instance 使用相同 endpoint、模型名或凭据，应把公共值保存在 Application 默认环境；
+Instance 只保存同名覆盖或额外变量。应用只能看到合并后的最终环境，无法也不需要判断来源。
 
 ### 界面提示重新打开或代理错误
 

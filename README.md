@@ -1,6 +1,6 @@
 # Biunivers 浏览器云端个人桌面
 
-一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.14.1` 已具备窗口与
+一个部署在个人 VPS 或家用服务器上的轻量浏览器桌面。当前版本 `v0.15.0` 已具备窗口与
 自由布局桌面、第三方静态应用安装、不可变文件服务、文件管理器、资源关联打开、可续租
 Resource Session、Open Resource v1.1 多资源交付、桌面快捷入口、原子批量文件操作和按需
 WebDAV 文件交换。
@@ -11,8 +11,8 @@ Workspace Application 支持应用级默认环境与 Instance 覆盖；文件管
 
 ## 项目状态
 
-`v0.1.0` 至 `v0.14.0` 已按里程碑归档；当前 `v0.14.1` 分支继续补齐 Workspace
-Application 的公共配置复用和 Workspace 内容补充体验。
+`v0.1.0` 至 `v0.15.0` 已按里程碑归档；`v0.15.0` 补齐 Workspace Application 的公共
+配置复用和 main 向既有 Workspace 的受控内容补充。
 各版本需求、技术设计、施工计划和真实验收证据统一收录在 [`docs/`](docs/)。
 
 当前定位是单一主人、单实例的个人部署版本。公网使用时必须在 Biunivers 前增加 VPN、
@@ -108,12 +108,12 @@ https://desktop.example.com/services/example/
 
 ## Docker
 
-V0.14.1 使用 Node.js 单容器提供桌面、控制 API、第三方应用静态文件、可选 File Service
+V0.15.0 使用 Node.js 单容器提供桌面、控制 API、第三方应用静态文件、可选 File Service
 和按需开启的 Wormhole。
 构建并运行：
 
 ```bash
-docker build -t biunivers:v0.14.1 .
+docker build -t biunivers:v0.15.0 .
 docker run --rm \
   -p 8080:8080 \
   -p 8081:8081 \
@@ -121,7 +121,7 @@ docker run --rm \
   -e BIUNIVERS_APP_ORIGIN="http://localhost:8081" \
   -v biunivers-data:/data \
   --name biunivers \
-  biunivers:v0.14.1
+  biunivers:v0.15.0
 ```
 
 桌面访问 `http://localhost:8080`。Desktop 和 App Origin 的健康检查地址均为 `/health`。

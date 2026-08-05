@@ -41,6 +41,8 @@
 ## 配置、secret 与网络
 
 - [ ] README 列出全部必需/可选环境变量及敏感性
+- [ ] 公共配置可放在 Application 默认环境，应用不依赖默认/覆盖项的宿主来源
+- [ ] Instance 只覆盖差异项时仍能正确启动，删除覆盖后可以恢复默认行为
 - [ ] 缺少必需变量时给出明确且无泄密的错误
 - [ ] secret 不进入日志、页面、健康响应、Workspace 或镜像层
 - [ ] 不要求 Biunivers 管理凭据或任意宿主环境变量
@@ -51,6 +53,8 @@
 
 - [ ] 用 tag 在 Biunivers 完成安装并确认固定 digest
 - [ ] 创建空白 Instance、启动并打开 UI
+- [ ] 第二个新 Instance 可以直接继承 Application 默认配置
+- [ ] 一个 Instance 的普通变量覆盖不会改变其他 Instance
 - [ ] 保存重启、停止、再次启动均通过
 - [ ] 从已有 Workspace Fork 后状态独立
 - [ ] 更新新 digest 和回退均经过显式用户操作
