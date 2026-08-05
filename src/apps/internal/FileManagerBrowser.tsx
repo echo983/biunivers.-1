@@ -1500,18 +1500,19 @@ function WorkspaceContentImportDialog({
   }, [instanceToken]);
 
   useEffect(() => {
-    if (!workspaceId) {
-      setListing(undefined);
-      return;
-    }
+    if (!workspaceId) return;
     let active = true;
-    setListing(undefined);
-    setError("");
     void listWorkspaceFiles(instanceToken, workspaceId, directoryId)
       .then((value) => active && setListing(value))
       .catch((reason: unknown) => active && setError(messageOf(reason)));
     return () => { active = false; };
   }, [directoryId, instanceToken, workspaceId]);
+
+  const navigate = (nextDirectoryId?: string) => {
+    setListing(undefined);
+    setError("");
+    setDirectoryId(nextDirectoryId);
+  };
 
   const workspace = workspaces?.find((item) => item.workspaceIdHex === workspaceId);
   return (
@@ -1522,6 +1523,8 @@ function WorkspaceContentImportDialog({
         <label>
           工作空间
           <select value={workspaceId} disabled={working} onChange={(event) => {
+            setListing(undefined);
+            setError("");
             setDirectoryId(undefined);
             setWorkspaceId(event.target.value);
           }}>
@@ -1533,7 +1536,7 @@ function WorkspaceContentImportDialog({
             {(listing.breadcrumbs ?? [listing.parent]).map((item, index) => (
               <span key={item.entryId}>
                 {index > 0 ? " / " : ""}
-                <button type="button" disabled={working} onClick={() => setDirectoryId(index === 0 ? undefined : item.entryId)}>
+                <button type="button" disabled={working} onClick={() => navigate(index === 0 ? undefined : item.entryId)}>
                   {index === 0 ? "/" : item.name}
                 </button>
               </span>
@@ -1544,7 +1547,7 @@ function WorkspaceContentImportDialog({
         {!listing && !error && <p role="status">正在读取工作空间…</p>}
         <ul className="file-manager-dialog__directories">
           {listing?.entries.filter((item) => item.kind === "directory").map((item) => (
-            <li key={item.entryId}><button type="button" disabled={working} onClick={() => setDirectoryId(item.entryId)}>📁 {item.name}</button></li>
+            <li key={item.entryId}><button type="button" disabled={working} onClick={() => navigate(item.entryId)}>📁 {item.name}</button></li>
           ))}
         </ul>
         <p>main revision：{mainRevision} · Workspace revision：{listing?.revision ?? "…"}</p>

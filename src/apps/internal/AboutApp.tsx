@@ -15,6 +15,7 @@ export function AboutApp() {
         当前版本已具备自由布局桌面、窗口、原子批量文件操作、目录 ZIP 导出、
         Wormhole 文件交换、固定快照 Workspace、隔离计算与 COW 提交、
         变更审阅和原子导回、Workspace Application 容器应用与平行状态，
+        应用默认环境与 Instance 覆盖、main 向既有 Workspace 的原子内容补充，
         Open Resource v1.1 多资源交付、第三方静态应用闭环，以及单一主人控制面。
       </p>
       <dl>
@@ -31,11 +32,11 @@ export function AboutApp() {
         </div>
         <div>
           <dt>工作空间</dt>
-          <dd>PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 原子导回</dd>
+          <dd>PVLogFS · 隔离 Run · COW 提交 · Fork · Diff · 双向受控导入</dd>
         </div>
         <div>
           <dt>应用</dt>
-          <dd>Static App v1 · Workspace Application v1 · Open Resource v1/v1.1</dd>
+          <dd>Static App v1 · Workspace Application v1 · 默认环境与实例覆盖</dd>
         </div>
         <div>
           <dt>窗口</dt>
