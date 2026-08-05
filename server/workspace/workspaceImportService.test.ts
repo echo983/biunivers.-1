@@ -17,6 +17,7 @@ import type {
 import { RefStoreError } from "../files/sqliteRefStore.js";
 import { WorkspaceDeriver } from "./workspaceDeriver.js";
 import { WorkspaceImportService } from "./workspaceImportService.js";
+import { WorkspaceContentImportService } from "./workspaceContentImportService.js";
 
 const roots: string[] = [];
 
@@ -146,6 +147,7 @@ async function setup() {
     refStore: genesis.store,
     mainTransactions,
     mainRootEntryIdHex: genesis.rootEntryIdHex,
+    mainProjectEntryIdHex: project.entryIdHex,
     importsEntryIdHex: imports.entryIdHex,
     workspaceIdHex: derived.workspace.workspaceIdHex,
     workspaceProjectEntryIdHex: workspaceProject.entryIdHex,
@@ -156,6 +158,67 @@ async function setup() {
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true })));
+});
+
+describe("WorkspaceContentImportService", () => {
+  it("atomically adds a recursive main selection with new IDs, reused FIDs, and automatic renaming", async () => {
+    const fixture = await setup();
+    const workspace = fixture.refStore.getWorkspace(fixture.workspaceIdHex);
+    const workspaceBefore = fixture.refStore.getRef(workspace.refId);
+    const mainBefore = fixture.refStore.getRef("main");
+    const targetBefore = await loadCurrentEntryIndex(fixture.repository, fixture.refStore, workspace.refId);
+    const importIds = ids(0xa0, 16);
+    const service = new WorkspaceContentImportService({
+      repository: fixture.repository,
+      refStore: fixture.refStore,
+      writerId: "content-import-test",
+      randomId: () => importIds.shift()!,
+    });
+
+    const result = await service.execute({
+      workspaceIdHex: fixture.workspaceIdHex,
+      selectedEntryIdsHex: [fixture.mainProjectEntryIdHex],
+      destinationEntryIdHex: targetBefore.rootEntryIdHex,
+      mainRevision: mainBefore.revision,
+      workspaceRevision: workspaceBefore.revision,
+    });
+
+    expect(result.revision).toBe(workspaceBefore.revision + 1);
+    expect(result.roots[0]?.name).toBe("project (main)");
+    const target = await loadCurrentEntryIndex(fixture.repository, fixture.refStore, workspace.refId);
+    const imported = target.listChildren(target.rootEntryIdHex).find((entry) => entry.name === "project (main)")!;
+    expect(imported.entryIdHex).not.toBe(fixture.mainProjectEntryIdHex);
+    const source = await loadCurrentEntryIndex(fixture.repository, fixture.refStore, "main");
+    expect(target.listChildren(imported.entryIdHex)[0]?.content).toEqual(
+      source.listChildren(fixture.mainProjectEntryIdHex)[0]?.content,
+    );
+    expect(fixture.refStore.getRef("main")).toEqual(mainBefore);
+  });
+
+  it("does not publish when main changes before the guarded Workspace CAS", async () => {
+    const fixture = await setup();
+    const workspace = fixture.refStore.getWorkspace(fixture.workspaceIdHex);
+    const workspaceBefore = fixture.refStore.getRef(workspace.refId);
+    const mainBefore = fixture.refStore.getRef("main");
+    const target = await loadCurrentEntryIndex(fixture.repository, fixture.refStore, workspace.refId);
+    await fixture.mainTransactions.createDirectory({
+      parentEntryIdHex: fixture.mainRootEntryIdHex,
+      name: "concurrent",
+    });
+    const service = new WorkspaceContentImportService({
+      repository: fixture.repository,
+      refStore: fixture.refStore,
+      writerId: "content-import-test",
+    });
+    await expect(service.execute({
+      workspaceIdHex: fixture.workspaceIdHex,
+      selectedEntryIdsHex: [fixture.mainProjectEntryIdHex],
+      destinationEntryIdHex: target.rootEntryIdHex,
+      mainRevision: mainBefore.revision,
+      workspaceRevision: workspaceBefore.revision,
+    })).rejects.toMatchObject<Partial<RefStoreError>>({ code: "REF_CONFLICT" });
+    expect(fixture.refStore.getRef(workspace.refId)).toEqual(workspaceBefore);
+  });
 });
 
 describe("WorkspaceImportService", () => {

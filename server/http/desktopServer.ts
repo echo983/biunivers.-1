@@ -77,6 +77,7 @@ type WorkspaceControlExecutor = Pick<
   | "diff"
   | "textDiff"
   | "importToMain"
+  | "addFromMain"
 >;
 type OpenResourceResolverExecutor = Pick<
   OpenResourceResolver,
@@ -416,6 +417,36 @@ export function createDesktopServer({
               conflictPolicy: body.conflictPolicy,
             }),
           );
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
+  app.post(
+    "/api/v1/internal/workspaces/:workspaceId/add-from-main",
+    async (request, response, next) => {
+      try {
+        const { service, instanceToken } = requireWorkspaceControl(request, config, workspaceControl);
+        const body = request.body as Record<string, unknown>;
+        if (
+          !Array.isArray(body.selectedEntryIds) ||
+          body.selectedEntryIds.some((value) => typeof value !== "string") ||
+          typeof body.destinationEntryId !== "string" ||
+          !Number.isSafeInteger(body.mainRevision) ||
+          !Number.isSafeInteger(body.workspaceRevision)
+        ) {
+          throw new AppError("REQUEST_INVALID", "添加到 Workspace 参数无效");
+        }
+        response.status(201).set("Cache-Control", "no-store").json(
+          await service.addFromMain(instanceToken, {
+            workspaceIdHex: request.params.workspaceId,
+            selectedEntryIdsHex: body.selectedEntryIds as string[],
+            destinationEntryIdHex: body.destinationEntryId,
+            mainRevision: body.mainRevision as number,
+            workspaceRevision: body.workspaceRevision as number,
+          }),
+        );
       } catch (error) {
         next(error);
       }

@@ -162,6 +162,26 @@ export function importWorkspaceEntries(
   );
 }
 
+export function addMainEntriesToWorkspace(
+  instanceToken: string,
+  workspaceIdHex: string,
+  input: {
+    selectedEntryIds: string[];
+    destinationEntryId: string;
+    mainRevision: number;
+    workspaceRevision: number;
+  },
+): Promise<{
+  revision: number;
+  roots: Array<{ sourceEntryIdHex: string; newEntryIdHex: string; name: string }>;
+}> {
+  return request(
+    `/api/v1/internal/workspaces/${workspaceIdHex}/add-from-main`,
+    instanceToken,
+    { method: "POST", body: JSON.stringify(input) },
+  );
+}
+
 async function request<T>(
   path: string,
   instanceToken: string,

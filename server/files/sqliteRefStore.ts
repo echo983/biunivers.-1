@@ -31,6 +31,12 @@ export interface RefCasInput {
   updatedAtMs: number;
 }
 
+export interface RefGuardInput {
+  refId: string;
+  expectedHeadFidHex: string;
+  expectedRevision: number;
+}
+
 export interface FilesystemSnapshot {
   snapshotIdHex: string;
   refId: string;
@@ -417,12 +423,29 @@ export class SqliteRefStore {
   }
 
   compareAndSwap(input: RefCasInput): FilesystemRef {
+    return this.compareAndSwapGuarded(input);
+  }
+
+  compareAndSwapGuarded(
+    input: RefCasInput,
+    guard?: RefGuardInput,
+    writableWorkspaceIdHex?: string,
+  ): FilesystemRef {
     validateRefId(input.refId);
     validateFid(input.expectedHeadFidHex);
     validateFid(input.newHeadFidHex);
     validateSafeInteger(input.expectedRevision, "expected revision");
     validateSafeInteger(input.newRevision, "new revision");
     validateTimestamp(input.updatedAtMs);
+    if (guard) {
+      validateRefId(guard.refId);
+      validateFid(guard.expectedHeadFidHex);
+      validateSafeInteger(guard.expectedRevision, "guard expected revision");
+      if (guard.refId === input.refId) {
+        throw new RefStoreError("INVALID_REF_VALUE", "A Ref cannot guard its own CAS.");
+      }
+    }
+    if (writableWorkspaceIdHex) validateId(writableWorkspaceIdHex, "workspace ID");
     if (input.newRevision !== input.expectedRevision + 1) {
       throw new RefStoreError(
         "INVALID_REF_VALUE",
@@ -431,6 +454,27 @@ export class SqliteRefStore {
     }
 
     const transaction = this.#database.transaction(() => {
+      if (writableWorkspaceIdHex) {
+        const workspace = this.getWorkspace(writableWorkspaceIdHex);
+        const unresolved = this.listWorkspaceRuns(writableWorkspaceIdHex).some(
+          (run) => run.state === "FAILED" || run.state === "CONFLICT",
+        );
+        if (workspace.refId !== input.refId || workspace.activeWriteRunIdHex !== null || unresolved) {
+          throw new RefStoreError("WORKSPACE_ACTIVE", "Workspace is not available for control-plane writes.");
+        }
+      }
+      if (guard) {
+        const guarded = this.getRef(guard.refId);
+        if (
+          guarded.headFidHex !== guard.expectedHeadFidHex ||
+          guarded.revision !== guard.expectedRevision
+        ) {
+          throw new RefStoreError(
+            "REF_CONFLICT",
+            `Ref ${guard.refId} changed before ${input.refId} could be published.`,
+          );
+        }
+      }
       const result = this.#database
         .prepare(
           `UPDATE filesystem_refs

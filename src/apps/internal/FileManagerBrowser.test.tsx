@@ -58,6 +58,59 @@ afterEach(() => {
 });
 
 describe("FileManagerBrowser", () => {
+  it("adds a selected main file to an existing Workspace", async () => {
+    const user = userEvent.setup();
+    const fileId = "4".repeat(32);
+    const workspaceId = "5".repeat(32);
+    const workspaceRootId = "6".repeat(32);
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith("/api/v1/host/files")) {
+        return Response.json({
+          revision: 7,
+          rootEntryId: rootId,
+          parent: { entryId: rootId, name: "", kind: "directory", mtimeMs: 0 },
+          entries: [{ entryId: fileId, name: "brief.md", kind: "file", size: 12, mtimeMs: 0 }],
+        });
+      }
+      if (url === "/api/v1/internal/workspaces") {
+        return Response.json({ workspaces: [{ workspaceIdHex: workspaceId, name: "Agent project", revision: 3 }] });
+      }
+      if (url === `/api/v1/internal/workspaces/${workspaceId}/files`) {
+        return Response.json({
+          revision: 3,
+          rootEntryId: workspaceRootId,
+          parent: { entryId: workspaceRootId, name: "", kind: "directory", mtimeMs: 0 },
+          breadcrumbs: [{ entryId: workspaceRootId, name: "", kind: "directory", mtimeMs: 0 }],
+          entries: [],
+        });
+      }
+      if (url === `/api/v1/internal/workspaces/${workspaceId}/add-from-main` && init?.method === "POST") {
+        return Response.json({ revision: 4, roots: [{ sourceEntryIdHex: fileId, newEntryIdHex: "7".repeat(32), name: "brief.md" }] }, { status: 201 });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<FileManagerBrowser instanceToken={"a".repeat(43)} />);
+
+    await user.click(await screen.findByText("brief.md"));
+    await user.click(screen.getByRole("button", { name: "添加到工作空间" }));
+    const dialog = await screen.findByRole("dialog", { name: "添加 1 项到工作空间" });
+    expect(within(dialog).getByRole("combobox")).toHaveValue(workspaceId);
+    await user.click(await within(dialog).findByRole("button", { name: "添加到这里" }));
+    expect(await screen.findByText("已向工作空间“Agent project”添加 1 个项目。")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/internal/workspaces/${workspaceId}/add-from-main`,
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          selectedEntryIds: [fileId], destinationEntryId: workspaceRootId,
+          mainRevision: 7, workspaceRevision: 3,
+        }),
+      }),
+    );
+  });
+
   it("switches between list and icon views and persists the preference", async () => {
     const user = userEvent.setup();
     const fileId = "4".repeat(32);

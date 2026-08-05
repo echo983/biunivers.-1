@@ -802,6 +802,41 @@ describe("SqliteRefStore", () => {
     first.close();
   });
 
+  it("publishes a target Ref only while its source guard still matches", async () => {
+    const path = await databasePath();
+    const store = await SqliteRefStore.initialize(path);
+    store.createRef(initial);
+    const target = {
+      ...initial,
+      refId: "workspace-target",
+      lineageIdHex: "31".repeat(16),
+      headFidHex: "32".repeat(16),
+    };
+    store.createRef(target);
+    store.compareAndSwap({
+      refId: "main",
+      expectedHeadFidHex: initial.headFidHex,
+      expectedRevision: 0,
+      newHeadFidHex: "33".repeat(16),
+      newRevision: 1,
+      updatedAtMs: initial.updatedAtMs + 1,
+    });
+    expect(() => store.compareAndSwapGuarded({
+      refId: target.refId,
+      expectedHeadFidHex: target.headFidHex,
+      expectedRevision: 0,
+      newHeadFidHex: "34".repeat(16),
+      newRevision: 1,
+      updatedAtMs: initial.updatedAtMs + 2,
+    }, {
+      refId: "main",
+      expectedHeadFidHex: initial.headFidHex,
+      expectedRevision: 0,
+    })).toThrowError(expect.objectContaining({ code: "REF_CONFLICT" }) as RefStoreError);
+    expect(store.getRef(target.refId)).toEqual(target);
+    store.close();
+  });
+
   it("rejects revision gaps before entering the publication transaction", async () => {
     const path = await databasePath();
     const store = await SqliteRefStore.initialize(path);

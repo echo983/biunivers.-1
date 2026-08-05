@@ -11,6 +11,7 @@ import {
   RefStoreError,
   SqliteRefStore,
   type FilesystemRef,
+  type RefGuardInput,
 } from "./sqliteRefStore.js";
 
 interface TransactionServiceOptions {
@@ -248,6 +249,8 @@ export class FileSystemTransactions {
     operations: BatchFileSystemOperation[];
     expectedRevision: number;
     timestampMs?: number;
+    guardRef?: RefGuardInput;
+    writableWorkspaceIdHex?: string;
   }): Promise<PublishedFileSystemTransaction> {
     if (input.operations.length === 0 || input.operations.length > 10_000) {
       throw integrityFailure("Batch operation count must be 1 to 10000.");
@@ -272,6 +275,8 @@ export class FileSystemTransactions {
       combined,
       input.operations[0].entryIdHex,
       timestamp,
+      input.guardRef,
+      input.writableWorkspaceIdHex,
     );
   }
 
@@ -320,6 +325,8 @@ export class FileSystemTransactions {
     segmentBytes: Uint8Array,
     entryIdHex: string,
     timestamp: number,
+    guardRef?: RefGuardInput,
+    writableWorkspaceIdHex?: string,
   ): Promise<PublishedFileSystemTransaction> {
     this.#core.validateSegment(segmentBytes);
     const nextCheckpointBytes = this.#core.applySegment(
@@ -347,14 +354,17 @@ export class FileSystemTransactions {
     );
 
     await this.#beforePublish?.();
-    const ref = this.#refStore.compareAndSwap({
+    const cas = {
       refId: this.#refId,
       expectedHeadFidHex: state.ref.headFidHex,
       expectedRevision: state.ref.revision,
       newHeadFidHex: head.key.fidHex,
       newRevision: state.ref.revision + 1,
       updatedAtMs: timestamp,
-    });
+    };
+    const ref = guardRef || writableWorkspaceIdHex
+      ? this.#refStore.compareAndSwapGuarded(cas, guardRef, writableWorkspaceIdHex)
+      : this.#refStore.compareAndSwap(cas);
     return {
       ref,
       entryIdHex,
