@@ -322,7 +322,15 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           onSubmit={(event) => {
             event.preventDefault();
             void execute(
-              () => client.replaceEnvironment(instance.instanceIdHex, parseEnvironment(ordinary), parseEnvironment(sensitive)),
+              async () => {
+                await client.replaceEnvironment(
+                  instance.instanceIdHex,
+                  parseEnvironment(ordinary),
+                  parseEnvironment(sensitive),
+                );
+                setSensitive("");
+                setShowEnvironment(false);
+              },
               "环境变量已保存，将在下次启动时生效",
             );
           }}
