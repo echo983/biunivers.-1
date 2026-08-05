@@ -13,6 +13,7 @@ type RuntimeExecutor = Pick<
   | "prepareBwa"
   | "start"
   | "inspect"
+  | "logs"
   | "freeze"
   | "thaw"
   | "stop"
@@ -123,6 +124,8 @@ export class ComputeRuntimeServer {
         result = await this.#runtime.start(request.runIdHex);
       } else if (request.operation === "inspect") {
         result = await this.#runtime.inspect(request.runIdHex);
+      } else if (request.operation === "logs") {
+        result = await this.#runtime.logs(request.runIdHex);
       } else if (request.operation === "freeze") {
         result = await this.#runtime.freeze(request.runIdHex);
       } else if (request.operation === "thaw") {
@@ -196,6 +199,7 @@ type RuntimeRequest =
       operation:
         | "start"
         | "inspect"
+        | "logs"
         | "freeze"
         | "thaw"
         | "stop"

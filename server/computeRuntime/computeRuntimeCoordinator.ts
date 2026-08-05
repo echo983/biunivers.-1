@@ -44,7 +44,7 @@ export interface RuntimeInspection {
 type MountExecutor = Pick<MountSupervisor, "prepare" | "inspect" | "cleanup">;
 type OciExecutor = Pick<
   DockerOciAdapter,
-  "create" | "start" | "freeze" | "thaw" | "inspect" | "stop" | "remove"
+  "create" | "start" | "freeze" | "thaw" | "inspect" | "logs" | "stop" | "remove"
 >;
 type BwaEndpointResolver = Pick<DockerBwaNetworkAdapter, "resolve">;
 
@@ -201,6 +201,15 @@ export class ComputeRuntimeCoordinator {
       manifest,
       container: await this.#oci.inspect(plan, limits),
     };
+  }
+
+  async logs(runIdHex: string): Promise<string> {
+    const manifest = await this.#directories.inspect(runIdHex);
+    if (!manifest.runtimeIdentity || (manifest.state !== "RUNNING" && manifest.state !== "FROZEN")) {
+      throw new Error("Only an active container Run has logs.");
+    }
+    const { plan, limits } = this.#execution(manifest);
+    return await this.#oci.logs(plan, limits);
   }
 
   async resolveBwaEndpoint(runIdHex: string): Promise<BwaRuntimeEndpoint> {

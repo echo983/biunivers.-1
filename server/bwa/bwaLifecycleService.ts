@@ -93,6 +93,31 @@ export class BwaLifecycleService {
     });
   }
 
+  async failStartup(
+    instanceIdHex: string,
+    runIdHex: string,
+    errorCode: string,
+  ): Promise<WorkspaceRunRecord> {
+    return await this.#exclusive(instanceIdHex, async () => {
+      const active = this.#activeRun(instanceIdHex);
+      if (!active || active.runIdHex !== runIdHex) {
+        const current = this.#refStore.getWorkspaceRun(runIdHex);
+        if (current.state === "FAILED") return current;
+        throw new BwaLifecycleError("INSTANCE_NOT_RUNNING", "BWA startup Run is no longer active.");
+      }
+      let destroyed = true;
+      try {
+        await this.#runtime.destroy(runIdHex, false);
+      } catch {
+        destroyed = false;
+      }
+      this.#failRunIfActive(runIdHex, errorCode);
+      this.#refStore.setBwaInstanceDesiredState(instanceIdHex, "STOPPED", this.#timestamp());
+      if (!destroyed) return this.#refStore.getWorkspaceRun(runIdHex);
+      return this.#refStore.discardFailedWorkspaceRun(runIdHex, this.#timestamp());
+    });
+  }
+
   async publishFailedUpper(instanceIdHex: string, runIdHex: string): Promise<WorkspaceRunRecord> {
     return await this.#exclusive(instanceIdHex, async () => {
       this.#requireFailedRun(instanceIdHex, runIdHex);

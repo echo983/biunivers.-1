@@ -3,7 +3,8 @@ import { access, link, mkdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
+const BWA_LIFECYCLE_SCHEMA_VERSION = 4;
 const BWA_SCHEMA_VERSION = 3;
 const WORKSPACE_SCHEMA_VERSION = 2;
 const LEGACY_SCHEMA_VERSION = 1;
@@ -169,6 +170,21 @@ export interface BwaRunBindingRecord {
   executorDigest: string;
   stopReason: BwaStopReason | null;
   createdAtMs: number;
+}
+
+export type BwaStartupFailureStage =
+  | "IMAGE_PREPARE"
+  | "RUNTIME_PREPARE"
+  | "APPLICATION_START"
+  | "HEALTH_CHECK";
+
+export interface BwaStartupFailureRecord {
+  runIdHex: string;
+  stage: BwaStartupFailureStage;
+  exitCode: number | null;
+  summary: string;
+  logTail: string;
+  failedAtMs: number;
 }
 
 export interface CreateBwaWorkspaceRunInput {
@@ -1484,6 +1500,36 @@ export class SqliteRefStore {
     });
   }
 
+  setBwaStartupFailure(input: BwaStartupFailureRecord): BwaStartupFailureRecord {
+    validateId(input.runIdHex, "Run ID");
+    validateBwaStartupFailure(input);
+    this.getBwaRunBinding(input.runIdHex);
+    this.#database.prepare(
+      `INSERT INTO bwa_startup_failures
+         (run_id, stage, exit_code, summary, log_tail, failed_at_ms)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET
+         stage = excluded.stage,
+         exit_code = excluded.exit_code,
+         summary = excluded.summary,
+         log_tail = excluded.log_tail,
+         failed_at_ms = excluded.failed_at_ms`,
+    ).run(
+      fromHex(input.runIdHex), input.stage, input.exitCode,
+      input.summary, input.logTail, input.failedAtMs,
+    );
+    return this.getBwaStartupFailure(input.runIdHex)!;
+  }
+
+  getBwaStartupFailure(runIdHex: string): BwaStartupFailureRecord | null {
+    validateId(runIdHex, "Run ID");
+    const row = this.#database.prepare(
+      `SELECT run_id, stage, exit_code, summary, log_tail, failed_at_ms
+       FROM bwa_startup_failures WHERE run_id = ?`,
+    ).get(fromHex(runIdHex)) as BwaStartupFailureRow | undefined;
+    return row ? mapBwaStartupFailure(row) : null;
+  }
+
   setBwaRunStopReason(
     runIdHex: string,
     stopReason: BwaStopReason,
@@ -1699,6 +1745,15 @@ interface BwaRunBindingRow {
   created_at_ms: number;
 }
 
+interface BwaStartupFailureRow {
+  run_id: Buffer;
+  stage: BwaStartupFailureStage;
+  exit_code: number | null;
+  summary: string;
+  log_tail: string;
+  failed_at_ms: number;
+}
+
 function configureDatabase(database: Database.Database): void {
   database.pragma("journal_mode = WAL");
   database.pragma("synchronous = FULL");
@@ -1729,12 +1784,13 @@ function createSchema(database: Database.Database): void {
     ${workspaceSchemaSql()}
     ${bwaSchemaSql()}
     ${bwaLifecycleSchemaSql()}
+    ${bwaStartupFailureSchemaSql()}
     CREATE TABLE file_service_meta (
       key TEXT PRIMARY KEY,
       value BLOB NOT NULL
     ) STRICT;
     INSERT INTO file_service_meta(key, value)
-    VALUES ('schema_version', X'00000004');
+    VALUES ('schema_version', X'00000005');
     PRAGMA user_version = ${SCHEMA_VERSION};
     COMMIT;
   `);
@@ -1748,7 +1804,8 @@ function migrateSchema(database: Database.Database): void {
   if (
     version !== LEGACY_SCHEMA_VERSION &&
     version !== WORKSPACE_SCHEMA_VERSION &&
-    version !== BWA_SCHEMA_VERSION
+    version !== BWA_SCHEMA_VERSION &&
+    version !== BWA_LIFECYCLE_SCHEMA_VERSION
   ) {
     throw new RefStoreError(
       "REFSTORE_CORRUPT",
@@ -1760,9 +1817,10 @@ function migrateSchema(database: Database.Database): void {
       BEGIN IMMEDIATE;
       ${version === LEGACY_SCHEMA_VERSION ? workspaceSchemaSql() : ""}
       ${version <= WORKSPACE_SCHEMA_VERSION ? bwaSchemaSql() : ""}
-      ${bwaLifecycleSchemaSql()}
+      ${version <= BWA_SCHEMA_VERSION ? bwaLifecycleSchemaSql() : ""}
+      ${bwaStartupFailureSchemaSql()}
       UPDATE file_service_meta
-      SET value = X'00000004'
+      SET value = X'00000005'
       WHERE key = 'schema_version';
       PRAGMA user_version = ${SCHEMA_VERSION};
       COMMIT;
@@ -1879,6 +1937,22 @@ function bwaLifecycleSchemaSql(): string {
     ) STRICT;
     CREATE INDEX bwa_run_bindings_instance
       ON bwa_run_bindings(instance_id, created_at_ms);
+  `;
+}
+
+function bwaStartupFailureSchemaSql(): string {
+  return `
+    CREATE TABLE bwa_startup_failures (
+      run_id BLOB PRIMARY KEY
+        REFERENCES bwa_run_bindings(run_id) ON DELETE CASCADE,
+      stage TEXT NOT NULL CHECK(stage IN (
+        'IMAGE_PREPARE', 'RUNTIME_PREPARE', 'APPLICATION_START', 'HEALTH_CHECK'
+      )),
+      exit_code INTEGER CHECK(exit_code IS NULL OR exit_code BETWEEN 0 AND 255),
+      summary TEXT NOT NULL CHECK(length(summary) BETWEEN 1 AND 512),
+      log_tail TEXT NOT NULL CHECK(length(log_tail) <= 16384),
+      failed_at_ms INTEGER NOT NULL CHECK(failed_at_ms >= 0)
+    ) STRICT;
   `;
 }
 
@@ -2010,6 +2084,29 @@ function mapBwaRunBinding(row: BwaRunBindingRow): BwaRunBindingRecord {
     stopReason: row.stop_reason,
     createdAtMs: row.created_at_ms,
   };
+}
+
+function mapBwaStartupFailure(row: BwaStartupFailureRow): BwaStartupFailureRecord {
+  return {
+    runIdHex: toHex(row.run_id),
+    stage: row.stage,
+    exitCode: row.exit_code,
+    summary: row.summary,
+    logTail: row.log_tail,
+    failedAtMs: row.failed_at_ms,
+  };
+}
+
+function validateBwaStartupFailure(input: BwaStartupFailureRecord): void {
+  if (!( ["IMAGE_PREPARE", "RUNTIME_PREPARE", "APPLICATION_START", "HEALTH_CHECK"] as const).includes(input.stage)) {
+    throw invalid("BWA startup failure stage is invalid.");
+  }
+  if (input.exitCode !== null && (!Number.isSafeInteger(input.exitCode) || input.exitCode < 0 || input.exitCode > 255)) {
+    throw invalid("BWA startup failure exit code is invalid.");
+  }
+  validateBoundedText(input.summary, "BWA startup failure summary", 512, false);
+  validateBoundedText(input.logTail, "BWA startup failure log tail", 16_384, true);
+  validateTimestamp(input.failedAtMs);
 }
 
 function validateBwaStopReason(value: BwaStopReason): void {

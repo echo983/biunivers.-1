@@ -4,6 +4,13 @@ export interface BwaRunSummary {
     state: string;
     errorCode?: string | null;
   };
+  startupFailure?: {
+    stage: "IMAGE_PREPARE" | "RUNTIME_PREPARE" | "APPLICATION_START" | "HEALTH_CHECK";
+    exitCode: number | null;
+    summary: string;
+    logTail: string;
+    failedAtMs: number;
+  } | null;
 }
 
 export interface BwaInstanceSummary {

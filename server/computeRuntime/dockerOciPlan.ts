@@ -12,6 +12,7 @@ export interface DockerOciPlan {
   thawArguments: string[];
   stopArguments: string[];
   inspectArguments: string[];
+  logsArguments: string[];
   removeArguments: string[];
 }
 
@@ -71,6 +72,7 @@ export function buildDockerOciPlan(input: {
       "{{json .State}}",
       containerName,
     ],
+    logsArguments: ["logs", "--tail", "200", containerName],
     removeArguments: ["rm", "--force", containerName],
   };
 }

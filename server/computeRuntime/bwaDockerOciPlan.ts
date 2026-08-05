@@ -98,6 +98,7 @@ export function buildBwaDockerOciPlan(input: {
       "{{json .State}}",
       containerName,
     ],
+    logsArguments: ["logs", "--tail", "200", containerName],
     removeArguments: ["rm", "--force", containerName],
   };
 }

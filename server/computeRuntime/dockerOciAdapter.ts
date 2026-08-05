@@ -105,6 +105,14 @@ export class DockerOciAdapter {
     return validateState(value);
   }
 
+  async logs(
+    plan: DockerOciPlan,
+    limits: { timeoutMs: number; outputBytesLimit: number },
+  ): Promise<string> {
+    const result = await this.#run(plan, plan.logsArguments, limits);
+    return `${result.stdout}${result.stderr}`.slice(-16_384);
+  }
+
   async stop(
     plan: DockerOciPlan,
     limits: { timeoutMs: number; outputBytesLimit: number },

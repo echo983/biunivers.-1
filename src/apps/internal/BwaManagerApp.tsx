@@ -3,6 +3,7 @@ import {
   BwaManagerClient,
   type BwaApplicationSummary,
   type BwaInstanceSummary,
+  type BwaRunSummary,
   type BwaWorkspaceOption,
 } from "../../api/bwaManagerClient";
 import { useDesktopStore } from "../../store/desktopStore";
@@ -31,6 +32,7 @@ export function BwaManagerApp() {
       await refresh();
       setNotice(success);
     } catch (error) {
+      await refresh().catch(() => undefined);
       setNotice(error instanceof Error ? error.message : "操作失败");
     } finally {
       setBusy(false);
@@ -250,6 +252,7 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
   const running = instance.runs.some(({ run }) => run.state === "RUNNING");
   const unresolved = [...instance.runs].reverse().find(({ run }) =>
     run.state === "FAILED" || run.state === "CONFLICT");
+  const startupFailure = [...instance.runs].reverse().find((item) => item.startupFailure)?.startupFailure;
   const [showEnvironment, setShowEnvironment] = useState(false);
   const [ordinary, setOrdinary] = useState(() => formatEnvironment(instance, false));
   const [sensitive, setSensitive] = useState(() => formatEnvironment(instance, true));
@@ -281,6 +284,22 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           >移除</button>
         </div>
       </header>
+      {startupFailure && (
+        <div className="bwa-manager__startup-failure" role="alert">
+          <strong>启动失败</strong>
+          <span>{startupFailure.summary}</span>
+          <small>
+            阶段：{startupStageLabel(startupFailure.stage)}
+            {startupFailure.exitCode === null ? "" : ` · 退出码：${startupFailure.exitCode}`}
+          </small>
+          {startupFailure.logTail && (
+            <details>
+              <summary>查看日志</summary>
+              <pre>{startupFailure.logTail}</pre>
+            </details>
+          )}
+        </div>
+      )}
       {unresolved && (
         <div className="bwa-manager__recovery">
           <span>异常改动尚未处理。</span>
@@ -306,6 +325,15 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
       )}
     </article>
   );
+}
+
+function startupStageLabel(stage: NonNullable<BwaRunSummary["startupFailure"]>["stage"]): string {
+  return ({
+    IMAGE_PREPARE: "准备镜像",
+    RUNTIME_PREPARE: "准备运行环境",
+    APPLICATION_START: "启动应用",
+    HEALTH_CHECK: "等待应用就绪",
+  } as const)[stage];
 }
 
 function formatEnvironment(instance: BwaInstanceSummary, sensitive: boolean): string {

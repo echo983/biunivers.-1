@@ -15,6 +15,7 @@ const plan: DockerOciPlan = {
   thawArguments: ["unpause", "biunivers-run-test"],
   stopArguments: ["stop", "--time", "10", "biunivers-run-test"],
   inspectArguments: ["inspect", "--format", "{{json .State}}", "biunivers-run-test"],
+  logsArguments: ["logs", "--tail", "200", "biunivers-run-test"],
   removeArguments: ["rm", "--force", "biunivers-run-test"],
 };
 const limits = { timeoutMs: 1000, outputBytesLimit: 4096 };
@@ -62,6 +63,7 @@ describe("DockerOciAdapter", () => {
         }),
         stderr: "",
       },
+      { stdout: "line one\n", stderr: "line two\n" },
       { stdout: "", stderr: "" },
       { stdout: "", stderr: "" },
     );
@@ -75,6 +77,7 @@ describe("DockerOciAdapter", () => {
       running: true,
       pid: 123,
     });
+    await expect(adapter.logs(plan, limits)).resolves.toBe("line one\nline two\n");
     await adapter.stop(plan, limits);
     await adapter.remove(plan, limits);
     expect(executor.calls.map((call) => call.arguments_[0])).toEqual([
@@ -83,6 +86,7 @@ describe("DockerOciAdapter", () => {
       "pause",
       "unpause",
       "inspect",
+      "logs",
       "stop",
       "rm",
     ]);
