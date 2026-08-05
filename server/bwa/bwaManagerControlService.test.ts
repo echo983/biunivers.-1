@@ -130,5 +130,6 @@ describe("BwaManagerControlService", () => {
       exitCode: 7,
       summary: "缺少模型接口配置。",
     }));
+    expect(runtime.resolveBwaEndpoint).not.toHaveBeenCalled();
   });
 });

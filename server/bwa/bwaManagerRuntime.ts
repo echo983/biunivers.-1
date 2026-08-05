@@ -102,6 +102,7 @@ export class BwaManagerRuntime {
       sessions,
       runtime,
     };
+    const startingRunIds = new Set<string>();
     const manager = new BwaManagerRuntime({
       registry,
       lifecycle,
@@ -110,6 +111,7 @@ export class BwaManagerRuntime {
         refStore: options.refStore,
         runtime,
         lifecycle,
+        startingRunIds,
       }),
       httpProxy: createBwaRuntimeProxy(proxyOptions),
       websocketProxy: createBwaWebSocketProxy(proxyOptions),
@@ -121,6 +123,7 @@ export class BwaManagerRuntime {
         sessions,
         updates,
         runtime,
+        startingRunIds,
       }),
     });
     manager.#startSupervisor();

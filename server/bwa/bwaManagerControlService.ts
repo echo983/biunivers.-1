@@ -31,6 +31,7 @@ export class BwaManagerControlService {
     logs(runIdHex: string): Promise<unknown>;
   };
   readonly #fetch: typeof fetch;
+  readonly #startingRunIds: Set<string>;
 
   constructor(options: {
     appOrigin: string;
@@ -45,6 +46,7 @@ export class BwaManagerControlService {
       logs(runIdHex: string): Promise<unknown>;
     };
     fetch?: typeof fetch;
+    startingRunIds?: Set<string>;
   }) {
     this.#appOrigin = options.appOrigin;
     this.#refStore = options.refStore;
@@ -54,6 +56,7 @@ export class BwaManagerControlService {
     this.#updates = options.updates;
     this.#runtime = options.runtime;
     this.#fetch = options.fetch ?? fetch;
+    this.#startingRunIds = options.startingRunIds ?? new Set();
   }
 
   status() {
@@ -150,7 +153,12 @@ export class BwaManagerControlService {
       }
       throw new BwaManagerControlError("INSTANCE_START_FAILED", summary);
     }
-    await this.#waitUntilReady(instanceIdHex, run.runIdHex);
+    this.#startingRunIds.add(run.runIdHex);
+    try {
+      await this.#waitUntilReady(instanceIdHex, run.runIdHex);
+    } finally {
+      this.#startingRunIds.delete(run.runIdHex);
+    }
     return run;
   }
 
@@ -199,14 +207,7 @@ export class BwaManagerControlService {
   }
 
   async #waitUntilReady(instanceIdHex: string, runIdHex: string): Promise<void> {
-    const endpoint = await this.#runtime.resolveBwaEndpoint(runIdHex);
-    if (!endpoint || typeof endpoint !== "object") {
-      throw new Error("BWA Runtime endpoint is invalid.");
-    }
-    const value = endpoint as Record<string, unknown>;
-    if (typeof value.address !== "string" || value.port !== 8080) {
-      throw new Error("BWA Runtime endpoint is invalid.");
-    }
+    let endpoint: { address: string; port: 8080 } | undefined;
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const inspection = parseRuntimeInspection(await this.#runtime.inspect(runIdHex));
       if (!inspection.running && !inspection.restarting) {
@@ -218,8 +219,9 @@ export class BwaManagerControlService {
         });
         throw new BwaManagerControlError("INSTANCE_START_FAILED", summary);
       }
+      if (!endpoint) endpoint = parseRuntimeEndpoint(await this.#runtime.resolveBwaEndpoint(runIdHex));
       try {
-        const response = await this.#fetch(`http://${value.address}:8080/health`, {
+        const response = await this.#fetch(`http://${endpoint.address}:8080/health`, {
           signal: AbortSignal.timeout(1_000),
         });
         if (response.ok) return;
@@ -262,6 +264,15 @@ export class BwaManagerControlService {
   async discardFailedUpper(instanceIdHex: string, runIdHex: string) {
     return await this.#lifecycle.discardFailedUpper(instanceIdHex, runIdHex);
   }
+}
+
+function parseRuntimeEndpoint(value: unknown): { address: string; port: 8080 } {
+  if (!value || typeof value !== "object") throw new Error("BWA Runtime endpoint is invalid.");
+  const endpoint = value as Record<string, unknown>;
+  if (typeof endpoint.address !== "string" || endpoint.port !== 8080) {
+    throw new Error("BWA Runtime endpoint is invalid.");
+  }
+  return { address: endpoint.address, port: 8080 };
 }
 
 function parseRuntimeInspection(value: unknown): {
