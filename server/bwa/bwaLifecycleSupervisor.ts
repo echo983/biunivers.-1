@@ -15,16 +15,19 @@ export class BwaLifecycleSupervisor {
   readonly #refStore: SqliteRefStore;
   readonly #runtime: RuntimeInspector;
   readonly #lifecycle: Pick<BwaLifecycleService, "finalizeExited">;
+  readonly #startingRunIds: ReadonlySet<string>;
   #current?: Promise<BwaSupervisorReport>;
 
   constructor(options: {
     refStore: SqliteRefStore;
     runtime: RuntimeInspector;
     lifecycle: Pick<BwaLifecycleService, "finalizeExited">;
+    startingRunIds?: ReadonlySet<string>;
   }) {
     this.#refStore = options.refStore;
     this.#runtime = options.runtime;
     this.#lifecycle = options.lifecycle;
+    this.#startingRunIds = options.startingRunIds ?? new Set();
   }
 
   async reconcileOnce(): Promise<BwaSupervisorReport> {
@@ -46,7 +49,7 @@ export class BwaLifecycleSupervisor {
       .flatMap((instance) =>
         this.#refStore
           .listBwaRunBindings(instance.instanceIdHex)
-          .filter(({ run }) => run.state === "RUNNING")
+          .filter(({ run }) => run.state === "RUNNING" && !this.#startingRunIds.has(run.runIdHex))
           .map(({ run }) => ({ instanceIdHex: instance.instanceIdHex, runIdHex: run.runIdHex })),
       );
     for (const item of active) {

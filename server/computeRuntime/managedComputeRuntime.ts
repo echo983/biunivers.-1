@@ -89,6 +89,10 @@ export class ManagedComputeRuntime {
     return await this.#runtime.inspect(runIdHex);
   }
 
+  async logs(runIdHex: string) {
+    return await this.#runtime.logs(runIdHex);
+  }
+
   async resolveBwaEndpoint(runIdHex: string) {
     const run = this.#refStore.getWorkspaceRun(runIdHex);
     if (run.state !== "RUNNING" || run.executorId !== "bwa.workspace-application.v1") {

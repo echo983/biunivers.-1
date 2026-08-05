@@ -24,6 +24,7 @@ describe("ComputeRuntimeServer", () => {
       prepareBwa: vi.fn().mockResolvedValue({ state: "PREPARED" }),
       start: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       inspect: vi.fn().mockResolvedValue({ manifest: { state: "RUNNING" } }),
+      logs: vi.fn().mockResolvedValue("BWA_STARTUP_ERROR: missing config\n"),
       freeze: vi.fn().mockResolvedValue({ state: "FROZEN" }),
       thaw: vi.fn().mockResolvedValue({ state: "RUNNING" }),
       stop: vi.fn().mockResolvedValue({ state: "STOPPED" }),
@@ -96,6 +97,14 @@ describe("ComputeRuntimeServer", () => {
       }),
     ).toEqual({ ok: true, result: { state: "RUNNING" } });
     expect(runtime.start).toHaveBeenCalledWith("22".repeat(16));
+    expect(
+      await exchange(socketPath, {
+        tokenHex,
+        operation: "logs",
+        runIdHex: "22".repeat(16),
+      }),
+    ).toEqual({ ok: true, result: "BWA_STARTUP_ERROR: missing config\n" });
+    expect(runtime.logs).toHaveBeenCalledWith("22".repeat(16));
 
     const denied = await exchange(socketPath, {
       tokenHex: "99".repeat(32),
@@ -169,6 +178,7 @@ describe("ComputeRuntimeServer", () => {
       prepareBwa: vi.fn(),
       start: vi.fn(),
       inspect: vi.fn(),
+      logs: vi.fn(),
       freeze: vi.fn(),
       thaw: vi.fn(),
       stop: vi.fn(),

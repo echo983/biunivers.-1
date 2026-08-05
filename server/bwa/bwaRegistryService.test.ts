@@ -103,6 +103,28 @@ describe("BwaRegistryService", () => {
     refStore.close();
   });
 
+  it("reports an unavailable image as an actionable registry error", async () => {
+    const root = await mkdtemp(join(tmpdir(), "biunivers-bwa-registry-"));
+    roots.push(root);
+    const refStore = await SqliteRefStore.initialize(join(root, "refstore.sqlite"));
+    const secrets = new BwaSecretStore(join(root, "private", "bwa-secrets.json"));
+    await secrets.initialize();
+    const registry = new BwaRegistryService({
+      refStore,
+      secrets,
+      images: {
+        pullAndInspect: vi.fn().mockRejectedValue(new Error("manifest unknown")),
+        inspectInstalled: vi.fn(),
+      },
+    });
+
+    await expect(registry.install("ghcr.io/echo983/missing:next")).rejects.toMatchObject({
+      code: "IMAGE_UNAVAILABLE",
+      message: "镜像无法拉取或检查；请确认 tag 已发布且宿主有仓库访问权限。",
+    });
+    refStore.close();
+  });
+
   it("updates and rolls back one digest only while every Instance is safely stopped", async () => {
     const root = await mkdtemp(join(tmpdir(), "biunivers-bwa-registry-"));
     roots.push(root);

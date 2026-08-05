@@ -17,14 +17,16 @@ export class BwaRegistryError extends Error {
   constructor(
     public readonly code:
       | "BWA_PROTOCOL_UNSUPPORTED"
+      | "IMAGE_UNAVAILABLE"
       | "IMAGE_INSPECTION_INVALID"
       | "APPLICATION_DISABLED"
       | "SECRET_VALUE_MISSING"
       | "APPLICATION_IMAGE_MISMATCH"
       | "ROLLBACK_UNAVAILABLE",
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "BwaRegistryError";
   }
 }
@@ -75,7 +77,7 @@ export class BwaRegistryService {
   }
 
   async install(reference: string): Promise<BwaApplicationRecord> {
-    const inspection = await this.#images.pullAndInspect(reference);
+    const inspection = await pullAndInspect(this.#images, reference);
     const metadata = validateInspection(inspection);
     const now = this.#timestamp();
     return this.#refStore.createBwaApplication({
@@ -107,7 +109,7 @@ export class BwaRegistryService {
 
   async update(applicationId: string, reference: string): Promise<BwaApplicationRecord> {
     const current = this.#refStore.getBwaApplication(applicationId);
-    const inspection = await this.#images.pullAndInspect(reference);
+    const inspection = await pullAndInspect(this.#images, reference);
     const metadata = validateInspection(inspection);
     if (inspection.canonicalRepository !== applicationId) {
       throw new BwaRegistryError(
@@ -288,6 +290,21 @@ export class BwaRegistryService {
     const now = this.#now();
     if (!Number.isSafeInteger(now) || now < 0) throw new Error("BWA timestamp is invalid.");
     return now;
+  }
+}
+
+async function pullAndInspect(
+  images: BwaImageClient,
+  reference: string,
+): Promise<BwaImageInspection> {
+  try {
+    return await images.pullAndInspect(reference);
+  } catch (error) {
+    throw new BwaRegistryError(
+      "IMAGE_UNAVAILABLE",
+      "镜像无法拉取或检查；请确认 tag 已发布且宿主有仓库访问权限。",
+      { cause: error },
+    );
   }
 }
 

@@ -41,6 +41,25 @@ describe("BwaLifecycleSupervisor", () => {
     expect((await supervisor.reconcileOnce()).finalized).toEqual([]);
     expect(finalizeExited).not.toHaveBeenCalled();
   });
+
+  it("leaves startup Runs to the Manager readiness check", async () => {
+    const inspect = vi.fn();
+    const finalizeExited = vi.fn();
+    const supervisor = new BwaLifecycleSupervisor({
+      refStore: activeStore(),
+      runtime: { inspect },
+      lifecycle: { finalizeExited },
+      startingRunIds: new Set([runIdHex]),
+    });
+
+    await expect(supervisor.reconcileOnce()).resolves.toEqual({
+      inspected: [],
+      finalized: [],
+      failed: [],
+    });
+    expect(inspect).not.toHaveBeenCalled();
+    expect(finalizeExited).not.toHaveBeenCalled();
+  });
 });
 
 function activeStore(): SqliteRefStore {

@@ -30,6 +30,7 @@ describe("BwaManagerControlService", () => {
       listBwaRunBindings: vi.fn(() => [
         { run: { runIdHex: "22".repeat(16), state: runState.value } },
       ]),
+      getBwaStartupFailure: vi.fn().mockReturnValue(null),
     } as unknown as SqliteRefStore;
     const sessions = new BwaBrowserSessionRegistry({
       now: () => 1_000,
@@ -40,6 +41,10 @@ describe("BwaManagerControlService", () => {
         address: "172.30.0.8",
         port: 8080,
       }),
+      inspect: vi.fn().mockResolvedValue({
+        container: { running: true, restarting: false, exitCode: 0 },
+      }),
+      logs: vi.fn().mockResolvedValue(""),
     };
     const fetchHealth = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
     const service = new BwaManagerControlService({
@@ -78,5 +83,54 @@ describe("BwaManagerControlService", () => {
       "http://172.30.0.8:8080/health",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it("records a declared startup error, discards the failed startup Run, and returns it to the user", async () => {
+    const runIdHex = "33".repeat(16);
+    const setBwaStartupFailure = vi.fn((value) => value);
+    const refStore = {
+      setBwaStartupFailure,
+      listBwaRunBindings: vi.fn().mockReturnValue([]),
+    } as unknown as SqliteRefStore;
+    const lifecycle = {
+      start: vi.fn().mockResolvedValue({ runIdHex, state: "RUNNING" }),
+      failStartup: vi.fn().mockResolvedValue({ runIdHex, state: "DISCARDED" }),
+    } as unknown as BwaLifecycleService;
+    const runtime = {
+      resolveBwaEndpoint: vi.fn().mockResolvedValue({ address: "172.30.0.9", port: 8080 }),
+      inspect: vi.fn().mockResolvedValue({
+        container: { running: false, restarting: false, exitCode: 7 },
+      }),
+      logs: vi.fn()
+        .mockResolvedValueOnce("")
+        .mockResolvedValue("internal detail\nBWA_STARTUP_ERROR: 缺少模型接口配置。\n"),
+    };
+    const service = new BwaManagerControlService({
+      appOrigin: "http://localhost:8081",
+      refStore,
+      registry: {} as BwaRegistryService,
+      lifecycle,
+      sessions: new BwaBrowserSessionRegistry(),
+      updates: {} as BwaApplicationUpdateService,
+      runtime,
+    });
+
+    await expect(service.start(instanceIdHex)).rejects.toMatchObject({
+      code: "INSTANCE_START_FAILED",
+      message: "缺少模型接口配置。",
+    });
+    expect(lifecycle.failStartup).toHaveBeenCalledWith(
+      instanceIdHex,
+      runIdHex,
+      "BWA_APPLICATION_START_FAILED",
+    );
+    expect(setBwaStartupFailure).toHaveBeenCalledWith(expect.objectContaining({
+      runIdHex,
+      stage: "APPLICATION_START",
+      exitCode: 7,
+      summary: "缺少模型接口配置。",
+    }));
+    expect(runtime.resolveBwaEndpoint).not.toHaveBeenCalled();
+    expect(runtime.logs).toHaveBeenCalledTimes(2);
   });
 });

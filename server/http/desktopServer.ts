@@ -2090,7 +2090,9 @@ export function createDesktopServer({
       }
       if (error instanceof BwaRegistryError) {
         const status =
-          error.code === "APPLICATION_DISABLED" ||
+          error.code === "IMAGE_UNAVAILABLE"
+            ? 502
+            : error.code === "APPLICATION_DISABLED" ||
           error.code === "APPLICATION_IMAGE_MISMATCH" ||
           error.code === "ROLLBACK_UNAVAILABLE"
             ? 409

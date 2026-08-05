@@ -14,6 +14,7 @@
 - [ ] HTTP 监听 `0.0.0.0:8080`
 - [ ] `GET /` 提供完整图形界面
 - [ ] `GET /health` 无副作用、无需登录且就绪时返回 `2xx`
+- [ ] 必需配置缺失时以 `BWA_STARTUP_ERROR:` 输出不含 secret 的可操作摘要后退出
 - [ ] 支持宿主指定的非 root UID/GID 和只读 root filesystem
 - [ ] 主要持久写入只进入 `/workspace`，临时写入进入 `/tmp`
 - [ ] 不要求 privileged、capabilities、host network、Docker socket 或 published port

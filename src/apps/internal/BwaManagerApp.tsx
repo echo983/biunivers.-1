@@ -3,6 +3,7 @@ import {
   BwaManagerClient,
   type BwaApplicationSummary,
   type BwaInstanceSummary,
+  type BwaRunSummary,
   type BwaWorkspaceOption,
 } from "../../api/bwaManagerClient";
 import { useDesktopStore } from "../../store/desktopStore";
@@ -31,6 +32,7 @@ export function BwaManagerApp() {
       await refresh();
       setNotice(success);
     } catch (error) {
+      await refresh().catch(() => undefined);
       setNotice(error instanceof Error ? error.message : "操作失败");
     } finally {
       setBusy(false);
@@ -123,6 +125,7 @@ export function BwaManagerApp() {
                   transient: true,
                 });
                 queueMicrotask(() => openApp(appId));
+                setNotice("");
               } catch (error) {
                 setNotice(error instanceof Error ? error.message : "打开失败");
               } finally {
@@ -159,6 +162,9 @@ function ApplicationCard({
         <div>
           <h2>{application.title}</h2>
           <code>{application.applicationId}</code>
+          <small className="bwa-manager__image-identity">
+            版本 {application.imageVersion ?? "未声明"} · {shortDigest(application.installedDigest)}
+          </small>
           {application.description && <p>{application.description}</p>}
         </div>
         <div className="bwa-manager__actions">
@@ -250,6 +256,9 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
   const running = instance.runs.some(({ run }) => run.state === "RUNNING");
   const unresolved = [...instance.runs].reverse().find(({ run }) =>
     run.state === "FAILED" || run.state === "CONFLICT");
+  const latestRun = instance.runs.at(-1);
+  const startupFailure = latestRun?.startupFailure;
+  const [dismissedFailureRunId, setDismissedFailureRunId] = useState<string | null>(null);
   const [showEnvironment, setShowEnvironment] = useState(false);
   const [ordinary, setOrdinary] = useState(() => formatEnvironment(instance, false));
   const [sensitive, setSensitive] = useState(() => formatEnvironment(instance, true));
@@ -281,6 +290,29 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           >移除</button>
         </div>
       </header>
+      {startupFailure && latestRun.run.runIdHex !== dismissedFailureRunId && (
+        <div className="bwa-manager__startup-failure" role="alert">
+          <div className="bwa-manager__startup-failure-heading">
+            <strong>启动失败</strong>
+            <button
+              type="button"
+              aria-label="关闭启动失败提示"
+              onClick={() => setDismissedFailureRunId(latestRun.run.runIdHex)}
+            >关闭</button>
+          </div>
+          <span>{startupFailure.summary}</span>
+          <small>
+            阶段：{startupStageLabel(startupFailure.stage)}
+            {startupFailure.exitCode === null ? "" : ` · 退出码：${startupFailure.exitCode}`}
+          </small>
+          {startupFailure.logTail && (
+            <details>
+              <summary>查看日志</summary>
+              <pre>{startupFailure.logTail}</pre>
+            </details>
+          )}
+        </div>
+      )}
       {unresolved && (
         <div className="bwa-manager__recovery">
           <span>异常改动尚未处理。</span>
@@ -294,7 +326,15 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
           onSubmit={(event) => {
             event.preventDefault();
             void execute(
-              () => client.replaceEnvironment(instance.instanceIdHex, parseEnvironment(ordinary), parseEnvironment(sensitive)),
+              async () => {
+                await client.replaceEnvironment(
+                  instance.instanceIdHex,
+                  parseEnvironment(ordinary),
+                  parseEnvironment(sensitive),
+                );
+                setSensitive("");
+                setShowEnvironment(false);
+              },
               "环境变量已保存，将在下次启动时生效",
             );
           }}
@@ -306,6 +346,15 @@ function InstanceCard({ instance, client, busy, execute, onOpen }: {
       )}
     </article>
   );
+}
+
+function startupStageLabel(stage: NonNullable<BwaRunSummary["startupFailure"]>["stage"]): string {
+  return ({
+    IMAGE_PREPARE: "准备镜像",
+    RUNTIME_PREPARE: "准备运行环境",
+    APPLICATION_START: "启动应用",
+    HEALTH_CHECK: "等待应用就绪",
+  } as const)[stage];
 }
 
 function formatEnvironment(instance: BwaInstanceSummary, sensitive: boolean): string {
@@ -321,4 +370,8 @@ function parseEnvironment(value: string): Record<string, string> {
     if (separator < 1) throw new Error(`环境变量格式无效：${line}`);
     return [line.slice(0, separator).trim(), line.slice(separator + 1)];
   }));
+}
+
+function shortDigest(value: string): string {
+  return value.startsWith("sha256:") ? `sha256:${value.slice(7, 19)}` : value.slice(0, 19);
 }
