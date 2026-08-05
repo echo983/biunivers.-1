@@ -331,6 +331,7 @@ function parseRequest(value: unknown): RuntimeRequest {
     ![
       "start",
       "inspect",
+      "logs",
       "freeze",
       "thaw",
       "stop",
