@@ -287,6 +287,7 @@ if [[ -e "$release_target" ]]; then
 else
   mv "$extracted" "$release_target"
 fi
+chmod -R a+rX "$release_target"
 
 activate_release() {
   ln -sfn "releases/$version" "$opt_root/current.new"
@@ -336,6 +337,7 @@ if [[ "$stage_only" == true ]]; then
   exit 0
 fi
 
+chmod 0755 "$opt_root" "$opt_root/releases" "$state_root" "$cache_root"
 chown -R biunivers:biunivers "$state_root" "$cache_root"
 chown root:biunivers "$config_root"
 chown root:biunivers "$config_root/biunivers.env" "$config_root/runtime-token" "$release_record"
@@ -347,8 +349,9 @@ fi
 
 if [[ ! -e "$database" ]]; then
   mkdir -p "$(dirname "$database")"
-  chown biunivers:biunivers "$(dirname "$database")"
-  if ! runuser -u biunivers -- \
+  chown -R biunivers:biunivers "$(dirname "$database")"
+  chmod 0755 "$(dirname "$database")"
+  if ! runuser -u biunivers --env HOME="$state_root" --env TMPDIR=/tmp -- \
     "$release_target/node/bin/node" \
     --env-file="$config_root/biunivers.env" \
     "$release_target/app/dist/server/files/fileServiceGenesisCli.js"; then
@@ -357,7 +360,7 @@ if [[ ! -e "$database" ]]; then
     exit 1
   fi
 else
-  if ! runuser -u biunivers -- \
+  if ! runuser -u biunivers --env HOME="$state_root" --env TMPDIR=/tmp -- \
     "$release_target/node/bin/node" \
     --env-file="$config_root/biunivers.env" \
     "$release_target/app/dist/server/files/fileServiceVerifyCli.js"; then

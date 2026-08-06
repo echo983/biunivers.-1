@@ -294,6 +294,7 @@ if [[ -e "$new_release" ]]; then
 else
   mv "$extracted" "$new_release"
 fi
+chmod -R a+rX "$new_release"
 
 data_bytes="$(du -sb "$data_root" | awk '{ print $1 }')"
 available_bytes="$(df -B1 --output=avail "$state_root" | tail -n 1 | tr -d '[:space:]')"
