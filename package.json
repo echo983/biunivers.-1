@@ -16,6 +16,8 @@
     "test:pvlog": "cargo test --manifest-path crates/pvlog-core/Cargo.toml && node scripts/verify-pvlog-vectors.mjs",
     "build:pvlog-wasm": "wasm-pack build crates/pvlog-core --target nodejs --out-dir ../../generated/pvlog-core-wasm",
     "test:e2e": "playwright test",
+    "test:debian-release": "bash scripts/verify-debian-release.sh",
+    "build:debian-release": "bash scripts/build-debian-release.sh",
     "preview": "vite preview",
     "start": "node dist/server/index.js",
     "start:compute-runtime": "node dist/server/computeRuntime/computeRuntimeCli.js"

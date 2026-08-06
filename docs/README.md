@@ -200,12 +200,12 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 
 ## V0.16：Debian 单机部署
 
-当前处于施工前设计阶段。目标是把已经实测的宿主 Compute Runtime、容器 Host 和持久数据
-边界包装为 GitHub 稳定 Release、systemd 服务及可失败回滚的 Debian 安装路径。
+当前处于施工阶段。Runtime Release 构建器、Host/Runtime 包装器和 systemd unit 已落地；目标是
+把已经实测的执行边界继续包装为 GitHub 稳定 Release、安装器及可失败回滚的 Debian 路径。
 
 | 文档 | 状态 | 内容 |
 | --- | --- | --- |
-| [V0.16 Debian 单机部署设计](<design/Biunivers V0.16 Debian 单机部署设计.md>) | 当前设计 | 支持范围、目录布局、systemd 拓扑、Release 资产、安装、更新和失败回滚边界 |
+| [V0.16 Debian 单机部署设计](<design/Biunivers V0.16 Debian 单机部署设计.md>) | 施工中 | 支持范围、目录布局、systemd 拓扑、Release 资产、安装、更新和失败回滚边界 |
 
 ## 第三方应用生态 V1：发布候选
 

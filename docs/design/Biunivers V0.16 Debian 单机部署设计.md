@@ -1,6 +1,6 @@
 # Biunivers V0.16 Debian 单机部署设计
 
-状态：施工前设计  
+状态：施工中
 日期：2026-08-06  
 目标版本：V0.16
 
@@ -124,15 +124,18 @@ SHA256SUMS
 ```text
 ghcr.io/echo983/biunivers:v0.16.0
 ghcr.io/echo983/biunivers@sha256:<digest>
+ghcr.io/echo983/biunivers-runtime-diagnostic:v0.16.0
+ghcr.io/echo983/biunivers-runtime-diagnostic@sha256:<digest>
 ```
 
 Runtime 压缩包在与 Debian 兼容的 glibc x86_64 构建环境中产生，包含固定 Node 24 runtime、
 已经构建的 server 产物、generated 产物、production dependencies（包括原生模块）、PVLogFS
-和 COW scanner。目标机器不需要 npm、Cargo、Rust 或 wasm-pack。Host 镜像进入 GHCR，安装时
-拉取 tag 后核对 Release 声明的 digest，实际 systemd 配置固定使用 digest。
+和 COW scanner。目标机器不需要 npm、Cargo、Rust 或 wasm-pack。Host 与 Runtime 诊断执行器
+镜像进入 GHCR，安装时拉取 tag 后核对 Release 声明的 digest，实际 systemd 配置固定使用
+digest。诊断执行器也是 Compute Runtime 的必需依赖，不能留给部署者临时构建。
 
-`release.json` 至少记录版本、架构、Node 版本、Host digest、RefStore schema 范围和构建 commit。
-它是安装和诊断元数据，不再引入另一套应用清单协议。
+`release.json` 至少记录版本、架构、Node 版本、Host digest、诊断执行器 digest、RefStore schema
+范围和构建 commit。它是安装和诊断元数据，不再引入另一套应用清单协议。
 
 初始脚本下载仍有信任引导问题。正式文档优先给出“下载固定 tag 的安装器、核对
 `SHA256SUMS`、再以 root 执行”的三步命令；可同时提供 `curl | sudo bash` 作为明确标注风险的
@@ -147,12 +150,14 @@ Runtime 压缩包在与 Debian 兼容的 glibc x86_64 构建环境中产生，�
 3. 通过 Debian apt 安装 `docker.io`、`fuse3`、`fuse-overlayfs`、`curl`、`ca-certificates`、
    `zstd` 等必要包；
 4. 下载指定稳定版本的 Runtime 包和校验文件并验证 SHA-256；
-5. 拉取 Host tag、核对 digest；
+5. 拉取 Host 与诊断执行器 tag、核对两个 digest；
 6. 创建系统用户、目录、令牌和 systemd unit；
 7. 若用户传入 `--env-file`，校验权限后安装为 `biunivers.env`；否则生成不含真实 secret 的模板，
    明确提示填写后再启动；
-8. 执行 `systemctl daemon-reload`，启动两个服务；
-9. 等待 `/health` 和 File Service 状态；失败时输出对应 `journalctl` 命令并返回非零。
+8. 新数据目录在服务启动前执行一次显式 genesis 初始化，完成后固定改回
+   `BIUNIVERS_FILE_INITIALIZE=false`；已有 RefStore 不得再次初始化；
+9. 执行 `systemctl daemon-reload`，启动两个服务；
+10. 等待 `/health` 和 File Service 状态；失败时输出对应 `journalctl` 命令并返回非零。
 
 默认只监听 loopback，避免一个没有入口访问控制的桌面被意外暴露到公网。部署者完成反向代理、
 HTTPS 和访问控制后，才按配置扩大监听范围。
@@ -168,7 +173,7 @@ Release，忽略 prerelease、draft 和 `main`。
 更新事务：
 
 1. 下载并验证新 Release，不触碰当前版本；
-2. 拉取并核对新 Host digest；
+2. 拉取并核对新 Host 与诊断执行器 digest；
 3. 拒绝不兼容的架构或显式不支持的 RefStore schema；
 4. 受控停止 Host，再受控停止 Runtime；
 5. 离线备份 `/var/lib/biunivers/data` 与 `/etc/biunivers` 的相关状态，并保留 Runtime Upper；
@@ -231,3 +236,17 @@ S3 内容不可变，新版本在失败门禁期间留下的孤立对象不会�
 
 V0.16 先交付一个可重复安装、systemd 可管理、失败可恢复的 Debian 单机路径。已有真实需求
 出现后，再决定是否把相同 Release 产物包装成 `.deb` 或扩展到其他平台。
+
+## 11. 当前施工进度
+
+第一段已经落地：
+
+- `scripts/build-debian-release.sh` 构建固定 Node 24、production dependencies、PVLogFS、COW
+  scanner、Runtime server 和 `release.json`；
+- 构建时在包内真实加载 `better-sqlite3` 与 `hash-wasm`，阻止原生模块 ABI 不匹配的包发布；
+- `deploy/bin` 提供 Runtime 与 Host 启动包装器，token 不进入 unit 和命令行；
+- `deploy/systemd` 固定 Host 先停、Runtime 后停的依赖关系；
+- `scripts/verify-debian-release.sh` 检查 shell、systemd unit 和 Host 特权边界。
+
+下一段实现安装器、release record 生成、目录权限初始化和干净 Debian 验证；之后再接 GitHub tag
+发布流水线及更新事务。

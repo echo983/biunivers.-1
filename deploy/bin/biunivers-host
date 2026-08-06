@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly CONFIG_ROOT="${BIUNIVERS_CONFIG_ROOT:-/etc/biunivers}"
+readonly STATE_ROOT="${BIUNIVERS_STATE_ROOT:-/var/lib/biunivers}"
+readonly RUN_ROOT="${BIUNIVERS_RUN_ROOT:-/run/biunivers}"
+readonly RELEASE_FILE="$CONFIG_ROOT/release"
+readonly TOKEN_FILE="$CONFIG_ROOT/runtime-token"
+readonly CONTAINER_NAME="${BIUNIVERS_HOST_CONTAINER_NAME:-biunivers-host}"
+
+if [[ ! -r "$RELEASE_FILE" ]]; then
+  echo "Biunivers release record is missing: $RELEASE_FILE" >&2
+  exit 1
+fi
+if [[ ! -r "$TOKEN_FILE" ]]; then
+  echo "Biunivers Runtime token is missing: $TOKEN_FILE" >&2
+  exit 1
+fi
+
+# The installer owns this shell-format file. Values are validated again below.
+# shellcheck disable=SC1090
+source "$RELEASE_FILE"
+: "${BIUNIVERS_HOST_IMAGE:?BIUNIVERS_HOST_IMAGE is missing from $RELEASE_FILE}"
+if [[ ! "$BIUNIVERS_HOST_IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "BIUNIVERS_HOST_IMAGE must be an immutable GHCR sha256 reference." >&2
+  exit 1
+fi
+
+token="$(tr -d '[:space:]' < "$TOKEN_FILE")"
+if [[ ! "$token" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Biunivers Runtime token is invalid." >&2
+  exit 1
+fi
+
+desktop_bind="${BIUNIVERS_DESKTOP_BIND:-127.0.0.1}"
+app_bind="${BIUNIVERS_APP_BIND:-127.0.0.1}"
+desktop_port="${BIUNIVERS_DESKTOP_PORT:-8080}"
+app_port="${BIUNIVERS_APP_PORT:-8081}"
+runtime_socket="${BIUNIVERS_RUNTIME_SOCKET:-$RUN_ROOT/runtime.sock}"
+data_dir="${BIUNIVERS_DATA_DIR:-$STATE_ROOT/data}"
+
+if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
+  state="$(docker inspect --format '{{.State.Running}}' "$CONTAINER_NAME")"
+  if [[ "$state" == "true" ]]; then
+    echo "Container $CONTAINER_NAME is already running." >&2
+    exit 1
+  fi
+  docker rm "$CONTAINER_NAME" >/dev/null
+fi
+
+exec docker run --rm \
+  --name "$CONTAINER_NAME" \
+  --network biunivers-bwa \
+  --user "$(id -u):$(id -g)" \
+  --env-file "$CONFIG_ROOT/biunivers.env" \
+  -e BIUNIVERS_DATA_DIR="$data_dir" \
+  -e BIUNIVERS_FILE_INITIALIZE=false \
+  -e BIUNIVERS_BWA_ENABLED=true \
+  -e BIUNIVERS_RUNTIME_SOCKET="$runtime_socket" \
+  -e BIUNIVERS_RUNTIME_AUTH_TOKEN="$token" \
+  -p "$desktop_bind:$desktop_port:$desktop_port" \
+  -p "$app_bind:$app_port:$app_port" \
+  --mount "type=bind,src=$STATE_ROOT,dst=$STATE_ROOT" \
+  --mount "type=bind,src=$RUN_ROOT,dst=$RUN_ROOT" \
+  "$BIUNIVERS_HOST_IMAGE"

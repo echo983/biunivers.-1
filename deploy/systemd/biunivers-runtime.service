@@ -1,0 +1,29 @@
+[Unit]
+Description=Biunivers Compute Runtime
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=biunivers
+Group=biunivers
+SupplementaryGroups=docker
+EnvironmentFile=/etc/biunivers/biunivers.env
+ExecStart=/opt/biunivers/current/deploy/bin/biunivers-runtime
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+RuntimeDirectory=biunivers
+RuntimeDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/biunivers /var/cache/biunivers /run/biunivers
+
+[Install]
+WantedBy=multi-user.target
