@@ -106,6 +106,7 @@ config_root="$(root_path /etc/biunivers)"
 state_root="$(root_path /var/lib/biunivers)"
 cache_root="$(root_path /var/cache/biunivers)"
 unit_root="$(root_path /etc/systemd/system)"
+database="$state_root/data/file-service/file-service.sqlite"
 release_name="biunivers-runtime-$version-linux-x64"
 asset_name="$release_name.tar.zst"
 
@@ -250,8 +251,14 @@ diagnostic_reference="${diagnostic_tag%:*}@$diagnostic_digest"
 current_link="$opt_root/current"
 if [[ -e "$current_link" || -L "$current_link" ]]; then
   if [[ ! -L "$current_link" || "$(readlink "$current_link")" != "releases/$version" ]]; then
-    echo "Another Biunivers version is already active; use biunivers-update instead of the installer." >&2
-    exit 1
+    if [[ "$stage_only" != true && ! -e "$database" ]] && \
+      ! systemctl is-active --quiet biunivers-host.service && \
+      ! systemctl is-active --quiet biunivers-runtime.service; then
+      echo "Recovering an incomplete installation that never created a RefStore."
+    else
+      echo "Another Biunivers version is already active; use biunivers-update instead of the installer." >&2
+      exit 1
+    fi
   fi
 fi
 
@@ -280,8 +287,11 @@ if [[ -e "$release_target" ]]; then
 else
   mv "$extracted" "$release_target"
 fi
-ln -sfn "releases/$version" "$opt_root/current.new"
-mv -Tf "$opt_root/current.new" "$opt_root/current"
+
+activate_release() {
+  ln -sfn "releases/$version" "$opt_root/current.new"
+  mv -Tf "$opt_root/current.new" "$opt_root/current"
+}
 
 if [[ -n "$environment_source" ]]; then
   install -m 0640 "$environment_source" "$config_root/biunivers.env"
@@ -321,6 +331,7 @@ install -m 0755 "$release_target/deploy/bin/biunivers-update" \
   "$command_root/biunivers-update"
 
 if [[ "$stage_only" == true ]]; then
+  activate_release
   echo "Biunivers $version staged successfully below $install_root."
   exit 0
 fi
@@ -334,7 +345,6 @@ if ! grep -Eq '^[[:space:]]*user_allow_other([[:space:]]*(#.*)?)?$' /etc/fuse.co
   printf '\nuser_allow_other\n' >> /etc/fuse.conf
 fi
 
-database="$state_root/data/file-service/file-service.sqlite"
 if [[ ! -e "$database" ]]; then
   mkdir -p "$(dirname "$database")"
   chown biunivers:biunivers "$(dirname "$database")"
@@ -356,6 +366,9 @@ else
     exit 1
   fi
 fi
+
+# The active version changes only after S3 and RefStore validation succeeds.
+activate_release
 
 systemctl daemon-reload
 systemctl enable biunivers-host.service >/dev/null

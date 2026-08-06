@@ -52,13 +52,20 @@ cp crates/workspace-cow/target/release/biunivers-workspace-cow-scan "$release_di
 cp -a deploy/. "$release_dir/deploy/"
 
 (
-  cd "$release_dir/app"
-  "$release_dir/node/bin/node" --input-type=module <<'NODE'
-import Database from "better-sqlite3";
-await import("hash-wasm");
+  cd "$staging"
+  RELEASE_APP="$release_dir/app" "$release_dir/node/bin/node" --input-type=module <<'NODE'
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+const require = createRequire(pathToFileURL(`${process.env.RELEASE_APP}/package.json`));
+const Database = require("better-sqlite3");
+require("hash-wasm");
+const { loadPvlogCore } = await import(
+  pathToFileURL(`${process.env.RELEASE_APP}/dist/server/files/pvlogCore.js`)
+);
 const database = new Database(":memory:");
 database.prepare("SELECT 1").get();
 database.close();
+if (loadPvlogCore().abiVersion() !== 1) throw new Error("PVLog Core ABI smoke test failed.");
 NODE
 )
 
