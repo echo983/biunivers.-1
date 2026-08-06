@@ -1,8 +1,15 @@
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { loadPvlogCore } from "./pvlogCore.js";
+import { loadPvlogCore, resolvePvlogCoreModulePath } from "./pvlogCore.js";
 
 describe("packaged PVLog Core WASM", () => {
+  it("resolves independently of the process working directory", () => {
+    const resolved = resolvePvlogCoreModulePath();
+    expect(existsSync(resolved)).toBe(true);
+    expect(resolved).toMatch(/generated\/pvlog-core-wasm\/pvlog_core\.js$/);
+  });
+
   it("loads ABI v1 and validates every frozen object vector", async () => {
     const core = loadPvlogCore();
     const document = JSON.parse(

@@ -1,5 +1,7 @@
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface PvlogCore {
   abiVersion(): number;
@@ -126,12 +128,7 @@ export function loadPvlogCore(): PvlogCore {
   if (cached) {
     return cached;
   }
-  const modulePath = join(
-    process.cwd(),
-    "generated",
-    "pvlog-core-wasm",
-    "pvlog_core.js",
-  );
+  const modulePath = resolvePvlogCoreModulePath();
   const loaded = createRequire(import.meta.url)(modulePath) as PvlogCore;
   if (loaded.abiVersion() !== 1) {
     throw new Error(
@@ -140,4 +137,22 @@ export function loadPvlogCore(): PvlogCore {
   }
   cached = loaded;
   return loaded;
+}
+
+export function resolvePvlogCoreModulePath(
+  moduleUrl = import.meta.url,
+): string {
+  const moduleDirectory = dirname(fileURLToPath(moduleUrl));
+  const relativePath = "generated/pvlog-core-wasm/pvlog_core.js";
+  const candidates = [
+    resolve(moduleDirectory, "../../../", relativePath),
+    resolve(moduleDirectory, "../../", relativePath),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) {
+    throw new Error(
+      `PVLog Core WASM module is missing; checked: ${candidates.join(", ")}`,
+    );
+  }
+  return found;
 }
