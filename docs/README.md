@@ -206,6 +206,7 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | 文档 | 状态 | 内容 |
 | --- | --- | --- |
 | [V0.16 Debian 单机部署设计](<design/Biunivers V0.16 Debian 单机部署设计.md>) | 施工中 | 支持范围、目录布局、systemd 拓扑、Release 资产、安装、更新和失败回滚边界 |
+| [Debian 单机安装](<runbooks/Debian 单机安装.md>) | 施工期手册 | 本地 Release 构建、配置、安装、systemd 管理、诊断和隔离 staging 验证 |
 
 ## 第三方应用生态 V1：发布候选
 

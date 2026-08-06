@@ -9,12 +9,14 @@ for file in \
   deploy/systemd/biunivers-runtime.service \
   deploy/systemd/biunivers-host.service \
   deploy/biunivers.env.example \
+  deploy/install.sh \
   scripts/build-debian-release.sh; do
   [[ -f "$file" ]] || { echo "Missing deployment file: $file" >&2; exit 1; }
 done
 
 bash -n deploy/bin/biunivers-runtime
 bash -n deploy/bin/biunivers-host
+bash -n deploy/install.sh
 bash -n scripts/build-debian-release.sh
 
 grep -q '^User=biunivers$' deploy/systemd/biunivers-runtime.service
@@ -22,6 +24,11 @@ grep -q '^User=biunivers$' deploy/systemd/biunivers-host.service
 grep -q '^Requires=biunivers-runtime.service$' deploy/systemd/biunivers-host.service
 grep -q '^After=biunivers-runtime.service$' deploy/systemd/biunivers-host.service
 grep -q 'BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE' deploy/bin/biunivers-runtime
+if grep -Eq '^(PrivateMounts|PrivateTmp|ProtectSystem|NoNewPrivileges)=' \
+  deploy/systemd/biunivers-runtime.service; then
+  echo "Compute Runtime unit must keep FUSE mounts visible and permit fusermount3." >&2
+  exit 1
+fi
 if grep -Eq -- '--privileged|/var/run/docker.sock|/dev/fuse|SYS_ADMIN' deploy/bin/biunivers-host; then
   echo "Host launcher must not receive Docker, FUSE, privileged, or SYS_ADMIN access." >&2
   exit 1

@@ -19,11 +19,11 @@ TimeoutStopSec=45s
 RuntimeDirectory=biunivers
 RuntimeDirectoryMode=0700
 UMask=0077
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/biunivers /var/cache/biunivers /run/biunivers
+# Do not add PrivateMounts, ProtectSystem, PrivateTmp or NoNewPrivileges here.
+# PVLogFS mounts must remain visible to the host Docker daemon, and fusermount3
+# may need its installed privilege transition. Compute Runtime is the trusted
+# execution boundary; the Host container remains unprivileged.
 
 [Install]
 WantedBy=multi-user.target

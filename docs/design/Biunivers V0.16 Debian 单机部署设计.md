@@ -58,9 +58,9 @@ socket 通信，继续使用随机令牌做双重约束。
         └── release.json
 
 /etc/biunivers/
-├── biunivers.env               # 普通部署配置与 S3 凭据，0600
+├── biunivers.env               # 普通部署配置与 S3 凭据，0640 root:biunivers
 ├── release                     # 当前固定版本和 Host 镜像 digest
-└── runtime-token               # 随机 256 位令牌，0600
+└── runtime-token               # 随机 256 位令牌，0640 root:biunivers
 
 /var/lib/biunivers/
 ├── data/                       # RefStore、BWA secret、桌面状态
@@ -77,6 +77,9 @@ socket 通信，继续使用随机令牌做双重约束。
 首版使用系统用户 `biunivers`。安装器把它加入 `docker` 组，并只为所需目录授予读写权限。
 这是 Compute Runtime 使用宿主 Docker daemon 所需的高权限边界，文档必须明确说明；普通
 Host 容器仍以同一数值 UID/GID 的非 root 用户运行。
+
+配置和令牌必须让以 `biunivers` 身份运行的包装器读取，因此使用 `root:biunivers 0640`，而不是
+不可读的 `root:root 0600`；其他本地用户没有读取权限。
 
 ## 4. systemd 拓扑
 
@@ -248,5 +251,10 @@ V0.16 先交付一个可重复安装、systemd 可管理、失败可恢复的 De
 - `deploy/systemd` 固定 Host 先停、Runtime 后停的依赖关系；
 - `scripts/verify-debian-release.sh` 检查 shell、systemd unit 和 Host 特权边界。
 
-下一段实现安装器、release record 生成、目录权限初始化和干净 Debian 验证；之后再接 GitHub tag
-发布流水线及更新事务。
+第二段也已落地：安装器会验证 checksum、双镜像 digest 与 RefStore schema，创建系统用户和
+标准目录，通过内部 create-only CLI 完成首次 genesis，安装 systemd unit，并执行 Host 与 File
+Service 两级健康门禁。安装器支持隔离 staging 验收和同一不可变版本续装；发现不同活动版本时
+会拒绝覆盖，留给更新事务处理。
+
+下一段实现 GitHub tag 发布流水线和正式 Release 资产；之后实现带离线状态备份的更新事务，
+最后在干净 Debian 12/13 虚拟机完成真实安装验收。

@@ -49,7 +49,7 @@ cp -a dist/server "$release_dir/app/dist/"
 cp -a generated "$release_dir/app/"
 cp crates/pvlogfs/target/release/biunivers-pvlogfs "$release_dir/bin/"
 cp crates/workspace-cow/target/release/biunivers-workspace-cow-scan "$release_dir/bin/"
-cp -a deploy/bin "$release_dir/deploy/"
+cp -a deploy/. "$release_dir/deploy/"
 
 (
   cd "$release_dir/app"
