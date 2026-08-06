@@ -82,6 +82,64 @@ if [[ -n "$diagnostic_digest" && ! "$diagnostic_digest" =~ ^sha256:[0-9a-f]{64}$
   exit 1
 fi
 
+# Resolve the registry content digest for an image reference. This is the
+# top-level manifest digest that Docker records in RepoDigests after a pull,
+# which is what install.sh validates against. Using the caller-provided digest
+# avoids network access when one is already known.
+resolve_image_digest() {
+  local image_ref="$1"
+  "$node_bin" --input-type=module - "$image_ref" <<'NODE'
+import crypto from "node:crypto";
+const ref = process.argv[2];
+const lastColon = ref.lastIndexOf(':');
+const lastSlash = ref.lastIndexOf('/');
+const tag = (lastColon > lastSlash) ? ref.slice(lastColon + 1) : "latest";
+const registryRepo = (lastColon > lastSlash) ? ref.slice(0, lastColon) : ref;
+const firstSlash = registryRepo.indexOf('/');
+if (firstSlash === -1) throw new Error("Invalid image reference: " + ref);
+const registry = registryRepo.slice(0, firstSlash);
+const repository = registryRepo.slice(firstSlash + 1);
+
+const tokenUrl = `https://${registry}/token?scope=repository:${repository}:pull`;
+let token = "";
+try {
+  const tokenRes = await fetch(tokenUrl);
+  if (tokenRes.ok) {
+    const body = await tokenRes.json();
+    token = body.token || "";
+  }
+} catch (_) {
+  token = "";
+}
+
+const headers = {
+  Accept: [
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+  ].join(","),
+};
+if (token) headers.Authorization = `Bearer ${token}`;
+const manifestUrl = `https://${registry}/v2/${repository}/manifests/${tag}`;
+const manifestRes = await fetch(manifestUrl, { headers });
+if (!manifestRes.ok) {
+  const text = await manifestRes.text();
+  throw new Error(`Registry returned ${manifestRes.status}: ${text}`);
+}
+const body = new Uint8Array(await manifestRes.arrayBuffer());
+const digest = "sha256:" + crypto.createHash("sha256").update(body).digest("hex");
+process.stdout.write(`${digest}\n`);
+NODE
+}
+
+if [[ -z "$host_digest" ]]; then
+  host_digest="$(resolve_image_digest "$host_image")" || exit 1
+fi
+if [[ -z "$diagnostic_digest" ]]; then
+  diagnostic_digest="$(resolve_image_digest "$diagnostic_image")" || exit 1
+fi
+
 VERSION="$version" HOST_IMAGE="$host_image" HOST_DIGEST="$host_digest" \
 DIAGNOSTIC_IMAGE="$diagnostic_image" DIAGNOSTIC_DIGEST="$diagnostic_digest" \
 COMMIT="$(git rev-parse HEAD)" NODE_VERSION="$($node_bin --version)" \
@@ -106,7 +164,7 @@ chmod 0755 "$release_dir/node/bin/node" "$release_dir/bin/"* "$release_dir/deplo
 mkdir -p "$output_root"
 asset="$output_root/biunivers-runtime-$version-linux-x64.tar.zst"
 tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-  -C "$staging" -cf - "$(basename "$release_dir")" | zstd -19 -T0 -o "$asset"
+  -C "$staging" -cf - "$(basename "$release_dir")" | zstd -12 -T0 -o "$asset"
 (
   cd "$output_root"
   sha256sum "$(basename "$asset")" > SHA256SUMS

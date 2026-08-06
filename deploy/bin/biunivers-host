@@ -69,6 +69,10 @@ if docker container inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
   docker rm "$CONTAINER_NAME" >/dev/null
 fi
 
+# Override the image's Dockerfile HEALTHCHECK. The host image's default check
+# targets port 8080, but deployments may configure BIUNIVERS_DESKTOP_PORT and
+# BIUNIVERS_APP_PORT to other ports. Use the container's shell so the env vars
+# passed through --env-file are expanded at health-check time.
 exec docker run --rm \
   --name "$CONTAINER_NAME" \
   --network biunivers-bwa \
@@ -83,4 +87,9 @@ exec docker run --rm \
   -p "$app_bind:$app_port:$app_port" \
   --mount "type=bind,src=$STATE_ROOT,dst=$STATE_ROOT" \
   --mount "type=bind,src=$RUN_ROOT,dst=$RUN_ROOT" \
+  --health-interval 30s \
+  --health-timeout 3s \
+  --health-start-period 5s \
+  --health-retries 3 \
+  --health-cmd 'node -e "fetch(\"http://127.0.0.1:${BIUNIVERS_DESKTOP_PORT:-8080}/health\").then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));" && node -e "fetch(\"http://127.0.0.1:${BIUNIVERS_APP_PORT:-8081}/health\").then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"' \
   "$BIUNIVERS_HOST_IMAGE"

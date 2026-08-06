@@ -24,6 +24,31 @@ for file in "$release_dir/$asset" "$release_dir/$installer" "$release_dir/SHA256
   [[ -f "$file" ]] || { echo "Missing acceptance input: $file" >&2; exit 1; }
 done
 
+# Parse the last occurrence of KEY=value from the environment file. This mirrors
+# the dotenv subset used by Node --env-file and the install/update scripts.
+read_env_value() {
+  local file="$1" key="$2" default="${3:-}" line value
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n 1)" || true
+  value="${line#*=}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    value="${value:1:-1}"
+  elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+    value="${value:1:-1}"
+  fi
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "$default"
+  else
+    printf '%s\n' "$value"
+  fi
+}
+
+desktop_bind="$(read_env_value "$environment_file" BIUNIVERS_DESKTOP_BIND 127.0.0.1)"
+app_bind="$(read_env_value "$environment_file" BIUNIVERS_APP_BIND 127.0.0.1)"
+desktop_port="$(read_env_value "$environment_file" BIUNIVERS_DESKTOP_PORT 8090)"
+app_port="$(read_env_value "$environment_file" BIUNIVERS_APP_PORT 8091)"
+
 ssh_command=(ssh -i "$key" -p "$ssh_port" -o BatchMode=yes \
   -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="$known_hosts" \
   biunivers-test@127.0.0.1)
@@ -46,10 +71,10 @@ verify_remote() {
     test \"\$(readlink /opt/biunivers/current)\" = 'releases/$version'
     sudo systemctl is-active --quiet biunivers-runtime.service
     sudo systemctl is-active --quiet biunivers-host.service
-    test -S /run/biunivers/runtime.sock
-    curl --fail --silent http://127.0.0.1:8080/health >/dev/null
-    curl --fail --silent http://127.0.0.1:8081/health >/dev/null
-    curl --fail --silent -H 'Sec-Fetch-Site: same-origin' http://127.0.0.1:8080/api/v1/control/file-service | grep -q '\"mode\":\"ready\"'
+    sudo -u biunivers test -S /run/biunivers/runtime.sock
+    curl --fail --silent "http://$desktop_bind:$desktop_port/health" >/dev/null
+    curl --fail --silent "http://$app_bind:$app_port/health" >/dev/null
+    curl --fail --silent -H 'Sec-Fetch-Site: same-origin' "http://$desktop_bind:$desktop_port/api/v1/control/file-service" | grep -q '\"mode\":\"ready\"'
     sudo docker network inspect biunivers-bwa >/dev/null
     test \"\$(sudo docker inspect --format '{{.HostConfig.Privileged}}' biunivers-host)\" = false
     test \"\$(sudo docker inspect --format '{{.Config.User}}' biunivers-host)\" != '0'
@@ -60,26 +85,33 @@ verify_remote() {
 
 verify_remote
 before_status="$("${ssh_command[@]}" \
-  "curl --fail --silent -H 'Sec-Fetch-Site: same-origin' http://127.0.0.1:8080/api/v1/control/file-service")"
+  "curl --fail --silent -H 'Sec-Fetch-Site: same-origin' http://$desktop_bind:$desktop_port/api/v1/control/file-service")"
+
+before_uptime_seconds=$("${ssh_command[@]}" "awk '{print int(\$1)}' /proc/uptime")
+[[ "$before_uptime_seconds" =~ ^[0-9]+$ ]] || before_uptime_seconds=0
 
 echo "Rebooting Debian $debian_version VM..."
 "${ssh_command[@]}" sudo systemctl reboot >/dev/null 2>&1 || true
 went_down=false
-for _ in $(seq 1 60); do
-  if ! "${ssh_command[@]}" true >/dev/null 2>&1; then
+for _ in $(seq 1 300); do
+  if ! current_uptime=$("${ssh_command[@]}" "awk '{print int(\$1)}' /proc/uptime" 2>/dev/null); then
+    went_down=true
+    break
+  fi
+  if [[ "$current_uptime" =~ ^[0-9]+$ && "$current_uptime" -lt "$before_uptime_seconds" ]]; then
     went_down=true
     break
   fi
   sleep 1
 done
 [[ "$went_down" == true ]] || { echo "VM did not go down for reboot." >&2; exit 1; }
-for _ in $(seq 1 120); do
-  if "${ssh_command[@]}" true >/dev/null 2>&1; then break; fi
+for _ in $(seq 1 300); do
+  if "${ssh_command[@]}" "curl --fail --silent http://$desktop_bind:$desktop_port/health" >/dev/null 2>&1; then break; fi
   sleep 2
 done
 verify_remote
 after_status="$("${ssh_command[@]}" \
-  "curl --fail --silent -H 'Sec-Fetch-Site: same-origin' http://127.0.0.1:8080/api/v1/control/file-service")"
+  "curl --fail --silent -H 'Sec-Fetch-Site: same-origin' http://$desktop_bind:$desktop_port/api/v1/control/file-service")"
 [[ "$after_status" == "$before_status" ]] || {
   echo "File Service status changed across reboot." >&2
   exit 1

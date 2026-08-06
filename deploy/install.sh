@@ -418,6 +418,16 @@ else
   fi
 fi
 
+# After a successful first-time initialization, prevent the Runtime from
+# re-running genesis on every restart. The env file remains authoritative
+# for other settings; we only flip the one-shot initialization flag.
+if ! grep -Eq '^[[:space:]]*BIUNIVERS_FILE_INITIALIZE=[[:space:]]*false[[:space:]]*(#.*)?$' "$config_root/biunivers.env"; then
+  sed -i 's/^[[:space:]]*BIUNIVERS_FILE_INITIALIZE=.*/BIUNIVERS_FILE_INITIALIZE=false/' "$config_root/biunivers.env"
+  if ! grep -Eq '^[[:space:]]*BIUNIVERS_FILE_INITIALIZE=' "$config_root/biunivers.env"; then
+    printf '\nBIUNIVERS_FILE_INITIALIZE=false\n' >> "$config_root/biunivers.env"
+  fi
+fi
+
 # The active version changes only after S3 and RefStore validation succeeds.
 activate_release
 
