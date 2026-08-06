@@ -260,4 +260,9 @@ Service 两级健康门禁。安装器支持隔离 staging 验收和同一不可
 再进入 Debian 12 容器构建 Runtime 和 checksum，最后创建 GitHub Release。Release 重跑可以
 补齐中断的资产，但正式交付后禁止用不同源码覆盖同名 tag。
 
-下一段实现带离线状态备份的更新事务，最后在干净 Debian 12/13 虚拟机完成真实安装验收。
+第四段也已落地：`biunivers-update` 只接受更高稳定 SemVer，在停服后把旧 data 原子移入备份，
+复制出新版本工作副本，并切换 unit、release record 和 symlink。健康门禁失败会恢复旧 data 和
+程序控制状态，同时保留 `failed-data`；成功则保留升级前 data 和 `COMMITTED` 证据。
+
+最后一段是在干净 Debian 12/13 虚拟机完成真实安装、重启、更新和失败回滚验收，再决定合并与
+V0.16 里程碑发布。

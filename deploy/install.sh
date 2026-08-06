@@ -196,6 +196,7 @@ for required in \
   bin/biunivers-workspace-cow-scan \
   deploy/bin/biunivers-runtime \
   deploy/bin/biunivers-host \
+  deploy/bin/biunivers-update \
   deploy/systemd/biunivers-runtime.service \
   deploy/systemd/biunivers-host.service \
   deploy/biunivers.env.example; do
@@ -310,6 +311,10 @@ install -m 0644 "$release_target/deploy/systemd/biunivers-runtime.service" \
   "$unit_root/biunivers-runtime.service"
 install -m 0644 "$release_target/deploy/systemd/biunivers-host.service" \
   "$unit_root/biunivers-host.service"
+command_root="$(root_path /usr/local/sbin)"
+mkdir -p "$command_root"
+install -m 0755 "$release_target/deploy/bin/biunivers-update" \
+  "$command_root/biunivers-update"
 
 if [[ "$stage_only" == true ]]; then
   echo "Biunivers $version staged successfully below $install_root."

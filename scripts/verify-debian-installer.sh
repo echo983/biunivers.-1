@@ -67,6 +67,7 @@ test "$(readlink "$target/opt/biunivers/current")" = "releases/$version"
 test -x "$target/opt/biunivers/releases/$version/deploy/bin/biunivers-runtime"
 test -f "$target/etc/systemd/system/biunivers-runtime.service"
 test -f "$target/etc/systemd/system/biunivers-host.service"
+test -x "$target/usr/local/sbin/biunivers-update"
 grep -q "BIUNIVERS_HOST_IMAGE=ghcr.io/echo983/biunivers@sha256:$digest_one" \
   "$target/etc/biunivers/release"
 grep -q "BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE=ghcr.io/echo983/biunivers-runtime-diagnostic@sha256:$digest_two" \

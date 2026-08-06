@@ -69,6 +69,7 @@ sudo systemctl restart biunivers-host
 sudo systemctl stop biunivers-host
 sudo journalctl -u biunivers-runtime -u biunivers-host --no-pager -n 200
 curl http://127.0.0.1:8080/health
+sudo biunivers-update --version v0.16.1
 ```
 
 Host 依赖 Runtime。正常关机时 systemd 先停 Host、后停 Runtime；Runtime 会受控处置运行中的
@@ -91,3 +92,6 @@ bash deploy/install.sh \
 ```
 
 `--root` 只能与 `--stage-only` 一起使用，不能用于正式 chroot 安装。
+
+更新事务、离线状态副本和失败自动回滚见
+[Debian 更新与失败回滚](<Debian 更新与失败回滚.md>)。

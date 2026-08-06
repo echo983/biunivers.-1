@@ -6,6 +6,7 @@ cd "$(dirname "$0")/.."
 for file in \
   deploy/bin/biunivers-runtime \
   deploy/bin/biunivers-host \
+  deploy/bin/biunivers-update \
   deploy/systemd/biunivers-runtime.service \
   deploy/systemd/biunivers-host.service \
   deploy/biunivers.env.example \
@@ -16,6 +17,7 @@ done
 
 bash -n deploy/bin/biunivers-runtime
 bash -n deploy/bin/biunivers-host
+bash -n deploy/bin/biunivers-update
 bash -n deploy/install.sh
 bash -n scripts/build-debian-release.sh
 
