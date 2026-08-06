@@ -47,6 +47,7 @@ jobs:
           npm run test:debian-release
           npm run test:debian-installer
           npm run test:debian-updater
+          npm run test:debian-vm-harness
           npm run test:release-workflow
 
       - name: Verify PVLog core and vectors

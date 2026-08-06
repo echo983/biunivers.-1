@@ -209,6 +209,8 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [Debian 单机安装](<runbooks/Debian 单机安装.md>) | 施工期手册 | 本地 Release 构建、配置、安装、systemd 管理、诊断和隔离 staging 验证 |
 | [GitHub Stable Release](<runbooks/GitHub Stable Release.md>) | 施工期手册 | tag 门禁、双 GHCR 镜像、Debian 12 Runtime、匿名拉取、Release 资产与失败重跑 |
 | [Debian 更新与失败回滚](<runbooks/Debian 更新与失败回滚.md>) | 施工期手册 | 稳定版解析、离线 data 副本、原子切换、两级健康门禁和失败状态恢复 |
+| [Debian KVM 部署验收](<runbooks/Debian KVM 部署验收.md>) | 待真实执行 | 官方 Debian 12/13 cloud image、KVM、干净安装、权限检查与 reboot 恢复 |
+| [V0.16 Debian 部署验收计划](<acceptance/V0.16 Debian 部署验收计划.md>) | 待真实环境 | 已通过自动门禁和仍需真实证明的安装、FUSE、更新及回滚项目 |
 
 ## 第三方应用生态 V1：发布候选
 
