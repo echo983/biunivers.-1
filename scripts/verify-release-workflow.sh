@@ -17,6 +17,9 @@ grep -Fq 'contents: write' "$workflow"
 grep -Fq 'sha256sum --check SHA256SUMS' "$workflow"
 grep -Fq 'gh release create' "$workflow"
 grep -Fq 'Verify anonymous image access' "$workflow"
+grep -Fq 'name: Verify release source' "$workflow"
+grep -Fq 'needs: quality' "$workflow"
+grep -Fq 'npm run test:pvlog' "$workflow"
 
 if grep -Eq 'ghcr\.io/[^[:space:]]+:(latest|main)' "$workflow"; then
   echo "Stable Release workflow must not publish or consume floating latest/main artifacts." >&2

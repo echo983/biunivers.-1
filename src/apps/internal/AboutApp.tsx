@@ -16,7 +16,8 @@ export function AboutApp() {
         Wormhole 文件交换、固定快照 Workspace、隔离计算与 COW 提交、
         变更审阅和原子导回、Workspace Application 容器应用与平行状态，
         应用默认环境与 Instance 覆盖、main 向既有 Workspace 的原子内容补充，
-        Open Resource v1.1 多资源交付、第三方静态应用闭环，以及单一主人控制面。
+        Open Resource v1.1 多资源交付、第三方静态应用闭环、Debian 单机 Release
+        与失败可回滚更新，以及单一主人控制面。
       </p>
       <dl>
         <div>
@@ -45,6 +46,10 @@ export function AboutApp() {
         <div>
           <dt>控制</dt>
           <dd>单一主人 · 桌面同源 · 应用能力隔离</dd>
+        </div>
+        <div>
+          <dt>部署</dt>
+          <dd>Debian 12/13 · systemd · 固定 Release · 事务更新</dd>
         </div>
       </dl>
     </article>

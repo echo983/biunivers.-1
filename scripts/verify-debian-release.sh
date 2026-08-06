@@ -26,7 +26,7 @@ grep -q '^User=biunivers$' deploy/systemd/biunivers-host.service
 grep -q '^Requires=biunivers-runtime.service$' deploy/systemd/biunivers-host.service
 grep -q '^After=biunivers-runtime.service$' deploy/systemd/biunivers-host.service
 grep -q 'BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE' deploy/bin/biunivers-runtime
-if grep -Eq '^(PrivateMounts|PrivateTmp|ProtectSystem|NoNewPrivileges)=' \
+if grep -Eq '^(PrivateMounts|PrivateTmp|ProtectSystem|ProtectHome|NoNewPrivileges)=' \
   deploy/systemd/biunivers-runtime.service; then
   echo "Compute Runtime unit must keep FUSE mounts visible and permit fusermount3." >&2
   exit 1

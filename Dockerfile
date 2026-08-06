@@ -13,7 +13,8 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
-RUN node -e "import('hash-wasm')"
+RUN node -e "import('hash-wasm')" && \
+  node -e "const Database=require('better-sqlite3'); const db=new Database(':memory:'); db.prepare('SELECT 1').get(); db.close()"
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/generated ./generated
 COPY --from=build /app/docs/developer-kit/v1/biunivers.app.schema.json \

@@ -25,6 +25,9 @@ describe("AboutApp", () => {
       screen.getByText("单一主人 · 桌面同源 · 应用能力隔离"),
     ).toBeVisible();
     expect(
+      screen.getByText("Debian 12/13 · systemd · 固定 Release · 事务更新"),
+    ).toBeVisible();
+    expect(
       screen.getByText(
         "Static App v1 · Workspace Application v1 · 默认环境与实例覆盖",
       ),

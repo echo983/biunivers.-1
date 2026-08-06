@@ -1,6 +1,6 @@
 # GitHub Stable Release
 
-状态：V0.16 施工期运行手册  
+状态：V0.16 发布候选运行手册
 日期：2026-08-06
 
 ## 发布入口
@@ -68,7 +68,7 @@ OCI 镜像带 `org.opencontainers.image.source`、version 和 revision label，�
 
 ```bash
 version=v0.16.0
-base="https://github.com/echo983/biunivers.-1/releases/download/$version"
+base="https://github.com/echo983/biunivers/releases/download/$version"
 curl -fLO "$base/SHA256SUMS"
 curl -fLO "$base/biunivers-install-$version.sh"
 sha256sum --check --ignore-missing SHA256SUMS

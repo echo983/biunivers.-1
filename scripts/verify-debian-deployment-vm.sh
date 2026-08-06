@@ -54,7 +54,7 @@ verify_remote() {
     test \"\$(sudo docker inspect --format '{{.HostConfig.Privileged}}' biunivers-host)\" = false
     test \"\$(sudo docker inspect --format '{{.Config.User}}' biunivers-host)\" != '0'
     ! sudo docker inspect --format '{{json .HostConfig.Binds}}' biunivers-host | grep -q '/var/run/docker.sock'
-    ! grep -Eq '^(PrivateMounts|PrivateTmp|ProtectSystem|NoNewPrivileges)=' /etc/systemd/system/biunivers-runtime.service
+    ! grep -Eq '^(PrivateMounts|PrivateTmp|ProtectSystem|ProtectHome|NoNewPrivileges)=' /etc/systemd/system/biunivers-runtime.service
   "
 }
 

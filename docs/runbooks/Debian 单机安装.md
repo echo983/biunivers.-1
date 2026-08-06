@@ -1,6 +1,6 @@
 # Debian 单机安装
 
-状态：V0.16 施工期运行手册  
+状态：V0.16 发布候选运行手册
 日期：2026-08-06
 
 ## 支持范围
@@ -75,7 +75,7 @@ sudo biunivers-update --version v0.16.1
 Host 依赖 Runtime。正常关机时 systemd 先停 Host、后停 Runtime；Runtime 会受控处置运行中的
 BWA。不要手工删除 `/var/lib/biunivers/runtime/runs` 中的 Upper。
 
-Compute Runtime unit 有意不启用 `PrivateMounts`、`ProtectSystem`、`PrivateTmp` 或
+Compute Runtime unit 有意不启用 `PrivateMounts`、`ProtectSystem`、`ProtectHome`、`PrivateTmp` 或
 `NoNewPrivileges`：PVLogFS/overlay mount 必须对宿主 Docker daemon 可见，`fusermount3` 也可能
 需要发行版安装的权限转换。Host 容器仍不获得 Docker socket、FUSE、`SYS_ADMIN` 或 privileged。
 
