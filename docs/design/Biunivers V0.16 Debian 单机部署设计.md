@@ -268,5 +268,6 @@ Service 两级健康门禁。安装器支持隔离 staging 验收和同一不可
 V0.16 里程碑发布。
 
 KVM 验收夹具已经落地，使用 Debian 官方 genericcloud 镜像和同目录 SHA-512，隔离保存在
-`secret/`。当前开发机有 KVM 设备但尚未安装 QEMU/cloud-image-utils；真实 Release 也尚未
-产生。因此最后阶段保持“等待真实环境”，不以静态脚本冒充部署已经验收。
+`secret/`。Debian 12 与 Debian 13 VM 已真实完成镜像校验、KVM 启动、cloud-init 和 SSH 基线；
+正式 GHCR 镜像与 GitHub Release 尚未产生。因此最后阶段保持“等待真实 Release”，不以 VM
+启动成功冒充 Biunivers 已完成干净安装验收。
