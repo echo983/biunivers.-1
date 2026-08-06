@@ -44,5 +44,9 @@ export BIUNIVERS_PVLOGFS_BINARY="$INSTALL_ROOT/current/bin/biunivers-pvlogfs"
 export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$INSTALL_ROOT/current/bin/biunivers-workspace-cow-scan"
 export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE
 
+# Load the operational env file with Node's parser (same as genesis/verify CLIs).
+# Shell overrides above (paths, auth token) are already exported and will not be
+# overwritten by --env-file.
 exec "$INSTALL_ROOT/current/node/bin/node" \
+  --env-file="$CONFIG_ROOT/biunivers.env" \
   "$INSTALL_ROOT/current/app/dist/server/computeRuntime/computeRuntimeCli.js"

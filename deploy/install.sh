@@ -373,6 +373,17 @@ fi
 # The active version changes only after S3 and RefStore validation succeeds.
 activate_release
 
+# Make sure the BWA bridge exists before any container tries to join it. The
+# Compute Runtime also calls ensure() on this network, but creating it here
+# prevents the Host container from crash-looping with "network not found"
+# if Runtime fails before it reaches its own network setup.
+if ! docker network inspect biunivers-bwa >/dev/null 2>&1; then
+  docker network create \
+    --driver bridge \
+    --label io.biunivers.managed=bwa.v1 \
+    biunivers-bwa
+fi
+
 systemctl daemon-reload
 systemctl enable biunivers-host.service >/dev/null
 systemctl stop biunivers-host.service >/dev/null 2>&1 || true

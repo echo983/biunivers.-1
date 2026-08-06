@@ -11,13 +11,16 @@ Type=simple
 User=biunivers
 Group=biunivers
 SupplementaryGroups=docker
-EnvironmentFile=/etc/biunivers/biunivers.env
+# The env file is loaded by Node itself via --env-file inside bin/biunivers-runtime.
+# This matches the genesis/verify CLIs and avoids systemd EnvironmentFile's
+# slightly different quoting/comment parsing (e.g. inline '#' handling).
 ExecStart=/opt/biunivers/current/deploy/bin/biunivers-runtime
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=45s
 RuntimeDirectory=biunivers
 RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
 UMask=0077
 # Do not add PrivateMounts, ProtectSystem, ProtectHome, PrivateTmp or
 # NoNewPrivileges here.

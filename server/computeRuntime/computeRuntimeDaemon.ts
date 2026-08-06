@@ -47,7 +47,11 @@ export async function startComputeRuntimeDaemon(options: {
     !fileRuntime.refStore
   ) {
     fileRuntime.close();
-    throw new Error("Compute Runtime File Service is not ready.");
+    const details =
+      fileRuntime.status.mode === "offline"
+        ? `${fileRuntime.status.code}: ${fileRuntime.status.message}`
+        : "File Service is disabled";
+    throw new Error(`Compute Runtime File Service is not ready (${details}).`);
   }
 
   try {

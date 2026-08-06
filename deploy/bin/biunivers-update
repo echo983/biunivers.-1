@@ -381,6 +381,11 @@ mv -Tf "$opt_root/current.update" "$current_link"
 
 if [[ "$test_mode" != true ]]; then
   systemctl daemon-reload
+  docker network inspect biunivers-bwa >/dev/null 2>&1 || \
+    docker network create \
+      --driver bridge \
+      --label io.biunivers.managed=bwa.v1 \
+      biunivers-bwa
   systemctl start biunivers-runtime.service
   systemctl start biunivers-host.service
 fi
