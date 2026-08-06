@@ -1,0 +1,408 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository="${BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers.-1}"
+requested_version=""
+offline_release_dir=""
+install_root="/"
+test_mode=false
+
+usage() {
+  printf '%s\n' \
+    "Usage: biunivers-update [--version vMAJOR.MINOR.PATCH] [options]" \
+    "" \
+    "Options:" \
+    "  --version VERSION     Install this stable version instead of latest." \
+    "  --release-dir PATH    Use already downloaded Release assets." \
+    "  --repository OWNER/REPO  GitHub repository (default: $repository)." \
+    "  --help                Show this help."
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --version)
+      [[ $# -ge 2 ]] || { echo "--version requires a value." >&2; exit 2; }
+      requested_version="$2"
+      shift 2
+      ;;
+    --release-dir)
+      [[ $# -ge 2 ]] || { echo "--release-dir requires a path." >&2; exit 2; }
+      offline_release_dir="$2"
+      shift 2
+      ;;
+    --repository)
+      [[ $# -ge 2 ]] || { echo "--repository requires a value." >&2; exit 2; }
+      repository="$2"
+      shift 2
+      ;;
+    --root)
+      [[ "${BIUNIVERS_UPDATE_TEST_MODE:-}" == 1 && $# -ge 2 ]] || {
+        echo "--root is reserved for the isolated updater test." >&2
+        exit 2
+      }
+      install_root="${2%/}"
+      [[ -n "$install_root" ]] || install_root="/"
+      shift 2
+      ;;
+    --test-mode)
+      [[ "${BIUNIVERS_UPDATE_TEST_MODE:-}" == 1 ]] || {
+        echo "--test-mode is unavailable outside the updater test." >&2
+        exit 2
+      }
+      test_mode=true
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -n "$requested_version" && ! "$requested_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "--version must be a stable vMAJOR.MINOR.PATCH value." >&2
+  exit 2
+fi
+if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+  echo "--repository must be OWNER/REPO." >&2
+  exit 2
+fi
+if [[ -n "$offline_release_dir" && ! -d "$offline_release_dir" ]]; then
+  echo "Release directory does not exist: $offline_release_dir" >&2
+  exit 2
+fi
+if [[ "$test_mode" != true && "$(id -u)" -ne 0 ]]; then
+  echo "biunivers-update must run as root." >&2
+  exit 1
+fi
+
+root_path() {
+  local path="$1"
+  if [[ "$install_root" == "/" ]]; then
+    printf '%s\n' "$path"
+  else
+    printf '%s%s\n' "$install_root" "$path"
+  fi
+}
+
+opt_root="$(root_path /opt/biunivers)"
+config_root="$(root_path /etc/biunivers)"
+state_root="$(root_path /var/lib/biunivers)"
+unit_root="$(root_path /etc/systemd/system)"
+command_root="$(root_path /usr/local/sbin)"
+release_record="$config_root/release"
+current_link="$opt_root/current"
+data_root="$state_root/data"
+
+for required in "$release_record" "$config_root/biunivers.env" "$config_root/runtime-token"; do
+  [[ -r "$required" ]] || { echo "Installed Biunivers state is incomplete: $required" >&2; exit 1; }
+done
+desktop_port="$(awk -F= '$1 == "BIUNIVERS_DESKTOP_PORT" { print $2 }' "$config_root/biunivers.env" | tail -n 1)"
+: "${desktop_port:=8080}"
+if [[ ! "$desktop_port" =~ ^[0-9]+$ ]] || (( desktop_port < 1 || desktop_port > 65535 )); then
+  echo "BIUNIVERS_DESKTOP_PORT must be an integer from 1 to 65535." >&2
+  exit 1
+fi
+if [[ ! -L "$current_link" ]]; then
+  echo "Biunivers current release link is missing or not a symlink." >&2
+  exit 1
+fi
+old_link="$(readlink "$current_link")"
+if [[ ! "$old_link" =~ ^releases/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+  echo "Biunivers current release link is invalid: $old_link" >&2
+  exit 1
+fi
+old_version="${BASH_REMATCH[1]}"
+old_release="$opt_root/$old_link"
+old_node="$old_release/node/bin/node"
+[[ -x "$old_node" ]] || { echo "Installed Node runtime is missing." >&2; exit 1; }
+
+if [[ -z "$requested_version" ]]; then
+  [[ -z "$offline_release_dir" ]] || {
+    echo "--release-dir requires an explicit --version." >&2
+    exit 2
+  }
+  releases_json="$(mktemp)"
+  trap 'rm -f -- "${releases_json:-}"; rm -rf -- "${download_root:-}" "${extract_root:-}"' EXIT
+  curl --fail --location --show-error \
+    --header 'Accept: application/vnd.github+json' \
+    --output "$releases_json" \
+    "https://api.github.com/repos/$repository/releases?per_page=100"
+  requested_version="$("$old_node" --input-type=module - "$releases_json" <<'NODE'
+import { readFileSync } from "node:fs";
+const releases = JSON.parse(readFileSync(process.argv[2], "utf8"));
+const versions = releases
+  .filter((release) => !release.draft && !release.prerelease)
+  .map((release) => release.tag_name)
+  .filter((tag) => /^v\d+\.\d+\.\d+$/.test(tag))
+  .sort((left, right) => {
+    const a = left.slice(1).split(".").map(Number);
+    const b = right.slice(1).split(".").map(Number);
+    return b[0] - a[0] || b[1] - a[1] || b[2] - a[2];
+  });
+if (versions.length === 0) throw new Error("No stable Biunivers Release exists.");
+process.stdout.write(versions[0]);
+NODE
+)"
+fi
+version="$requested_version"
+
+comparison="$("$old_node" --input-type=module - "$old_version" "$version" <<'NODE'
+const parse = (value) => value.slice(1).split(".").map(Number);
+const [oldVersion, newVersion] = process.argv.slice(2);
+const oldParts = parse(oldVersion);
+const newParts = parse(newVersion);
+let result = 0;
+for (let index = 0; index < 3; index += 1) {
+  if (newParts[index] > oldParts[index]) { result = 1; break; }
+  if (newParts[index] < oldParts[index]) { result = -1; break; }
+}
+process.stdout.write(String(result));
+NODE
+)"
+if [[ "$comparison" == 0 ]]; then
+  echo "Biunivers $version is already installed."
+  exit 0
+fi
+if [[ "$comparison" != 1 ]]; then
+  echo "Refusing to downgrade from $old_version to $version." >&2
+  exit 1
+fi
+
+release_name="biunivers-runtime-$version-linux-x64"
+asset_name="$release_name.tar.zst"
+download_root=""
+extract_root=""
+if [[ -n "$offline_release_dir" ]]; then
+  release_source="$offline_release_dir"
+else
+  download_root="$(mktemp -d)"
+  release_source="$download_root"
+  release_url="https://github.com/$repository/releases/download/$version"
+  curl --fail --location --show-error --output "$release_source/SHA256SUMS" \
+    "$release_url/SHA256SUMS"
+  curl --fail --location --show-error --output "$release_source/$asset_name" \
+    "$release_url/$asset_name"
+fi
+trap 'rm -f -- "${releases_json:-}"; rm -rf -- "${download_root:-}" "${extract_root:-}"' EXIT
+
+checksum_file="$release_source/SHA256SUMS"
+asset_file="$release_source/$asset_name"
+[[ -f "$checksum_file" && -f "$asset_file" ]] || {
+  echo "Release assets are incomplete in $release_source." >&2
+  exit 1
+}
+expected_checksum="$(awk -v name="$asset_name" '$2 == name || $2 == "*" name { print $1 }' "$checksum_file")"
+[[ "$expected_checksum" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "SHA256SUMS has no unique valid checksum for $asset_name." >&2
+  exit 1
+}
+actual_checksum="$(sha256sum "$asset_file" | awk '{ print $1 }')"
+[[ "$actual_checksum" == "$expected_checksum" ]] || {
+  echo "Release checksum verification failed for $asset_name." >&2
+  exit 1
+}
+
+mkdir -p "$opt_root/releases"
+new_release="$opt_root/releases/$version"
+extract_root="$(mktemp -d "$opt_root/releases/.update-$version.XXXXXX")"
+zstd -dc "$asset_file" | tar -xf - -C "$extract_root"
+extracted="$extract_root/$release_name"
+for required in \
+  release.json node/bin/node app/dist/server/computeRuntime/computeRuntimeCli.js \
+  bin/biunivers-pvlogfs bin/biunivers-workspace-cow-scan \
+  deploy/bin/biunivers-runtime deploy/bin/biunivers-host deploy/bin/biunivers-update \
+  deploy/systemd/biunivers-runtime.service deploy/systemd/biunivers-host.service; do
+  [[ -e "$extracted/$required" ]] || { echo "Release is missing $required." >&2; exit 1; }
+done
+
+metadata_output="$("$extracted/node/bin/node" --input-type=module - \
+  "$extracted/release.json" "$version" <<'NODE'
+import { readFileSync } from "node:fs";
+const [path, requestedVersion] = process.argv.slice(2);
+const value = JSON.parse(readFileSync(path, "utf8"));
+const digest = /^sha256:[0-9a-f]{64}$/;
+const image = /^ghcr\.io\/[a-z0-9._/-]+:v\d+\.\d+\.\d+$/;
+if (
+  value.schemaVersion !== 1 || value.version !== requestedVersion ||
+  value.platform !== "linux" || value.architecture !== "x64" ||
+  !image.test(value.hostImage) || !digest.test(value.hostDigest) ||
+  !image.test(value.diagnosticImage) || !digest.test(value.diagnosticDigest) ||
+  !Number.isInteger(value.refStoreSchema?.minimum) ||
+  !Number.isInteger(value.refStoreSchema?.maximum)
+) throw new Error("Release metadata is incomplete, incompatible, or not digest-pinned.");
+process.stdout.write([
+  value.hostImage, value.hostDigest,
+  value.diagnosticImage, value.diagnosticDigest,
+  String(value.refStoreSchema.minimum), String(value.refStoreSchema.maximum),
+].join("\n"));
+NODE
+)"
+mapfile -t release_values <<< "$metadata_output"
+host_tag="${release_values[0]}"
+host_digest="${release_values[1]}"
+diagnostic_tag="${release_values[2]}"
+diagnostic_digest="${release_values[3]}"
+minimum_schema="${release_values[4]}"
+maximum_schema="${release_values[5]}"
+host_reference="${host_tag%:*}@$host_digest"
+diagnostic_reference="${diagnostic_tag%:*}@$diagnostic_digest"
+
+if [[ "$test_mode" == true ]]; then
+  current_schema=6
+else
+  current_schema="$(
+    cd "$old_release/app"
+    "$old_node" --input-type=module - "$data_root/file-service/file-service.sqlite" <<'NODE'
+import Database from "better-sqlite3";
+const database = new Database(process.argv[2], { readonly: true, fileMustExist: true });
+try { process.stdout.write(String(database.pragma("user_version", { simple: true }))); }
+finally { database.close(); }
+NODE
+  )"
+fi
+if (( current_schema < minimum_schema || current_schema > maximum_schema )); then
+  echo "Release $version does not accept RefStore schema $current_schema." >&2
+  exit 1
+fi
+
+if [[ "$test_mode" != true ]]; then
+  image_tags=("$host_tag" "$diagnostic_tag")
+  image_references=("$host_reference" "$diagnostic_reference")
+  for index in 0 1; do
+    docker pull "${image_tags[$index]}" >/dev/null
+    tag_id="$(docker image inspect --format '{{.Id}}' "${image_tags[$index]}")"
+    digest_id="$(docker image inspect --format '{{.Id}}' "${image_references[$index]}" 2>/dev/null || true)"
+    [[ -n "$digest_id" && "$tag_id" == "$digest_id" ]] || {
+      echo "Pulled tag does not match ${image_references[$index]}." >&2
+      exit 1
+    }
+  done
+fi
+
+if [[ -e "$new_release" ]]; then
+  [[ -f "$new_release/release.json" ]] && \
+    cmp --silent "$extracted/release.json" "$new_release/release.json" || {
+      echo "Existing $version directory differs from the verified Release." >&2
+      exit 1
+    }
+else
+  mv "$extracted" "$new_release"
+fi
+
+data_bytes="$(du -sb "$data_root" | awk '{ print $1 }')"
+available_bytes="$(df -B1 --output=avail "$state_root" | tail -n 1 | tr -d '[:space:]')"
+if [[ "$test_mode" == true ]]; then
+  required_bytes=$(( data_bytes + 1024 ))
+else
+  required_bytes=$(( data_bytes + 64 * 1024 * 1024 ))
+fi
+if (( available_bytes < required_bytes )); then
+  echo "Update requires at least $required_bytes free bytes for an offline state copy." >&2
+  exit 1
+fi
+
+backup_id="$(date -u +%Y%m%dT%H%M%SZ)-${old_version}-to-${version}"
+backup_root="$state_root/backups/$backup_id"
+counter=0
+while [[ -e "$backup_root" ]]; do
+  counter=$((counter + 1))
+  backup_root="$state_root/backups/$backup_id-$counter"
+done
+mkdir -p "$backup_root/config"
+cp -a "$release_record" "$backup_root/config/release"
+cp -a "$unit_root/biunivers-runtime.service" "$backup_root/config/"
+cp -a "$unit_root/biunivers-host.service" "$backup_root/config/"
+printf '%s\n' "$old_link" > "$backup_root/config/current-link"
+
+transaction_started=false
+rollback_update() {
+  local failure_status="$1"
+  trap - ERR INT TERM
+  if [[ "$transaction_started" != true ]]; then
+    exit "$failure_status"
+  fi
+  echo "Update failed; restoring $old_version..." >&2
+  if [[ "$test_mode" != true ]]; then
+    systemctl stop biunivers-host.service >/dev/null 2>&1 || true
+    systemctl stop biunivers-runtime.service >/dev/null 2>&1 || true
+  fi
+  if [[ -d "$backup_root/data" ]]; then
+    if [[ -d "$data_root" ]]; then
+      mv "$data_root" "$backup_root/failed-data"
+    fi
+    mv "$backup_root/data" "$data_root"
+  fi
+  cp -a "$backup_root/config/release" "$release_record"
+  cp -a "$backup_root/config/biunivers-runtime.service" "$unit_root/"
+  cp -a "$backup_root/config/biunivers-host.service" "$unit_root/"
+  ln -sfn "$old_link" "$opt_root/current.rollback"
+  mv -Tf "$opt_root/current.rollback" "$current_link"
+  if [[ "$test_mode" != true ]]; then
+    install -m 0755 "$old_release/deploy/bin/biunivers-update" "$command_root/biunivers-update"
+    systemctl daemon-reload
+    systemctl start biunivers-runtime.service || true
+    systemctl start biunivers-host.service || true
+  fi
+  printf '%s\n' "ROLLED_BACK" > "$backup_root/result"
+  echo "Biunivers was restored to $old_version. Failed data remains at $backup_root/failed-data." >&2
+  exit "$failure_status"
+}
+trap 'rollback_update $?' ERR
+trap 'rollback_update 130' INT
+trap 'rollback_update 143' TERM
+
+transaction_started=true
+if [[ "$test_mode" != true ]]; then
+  systemctl stop biunivers-host.service
+  systemctl stop biunivers-runtime.service
+fi
+mv "$data_root" "$backup_root/data"
+cp -a --reflink=auto "$backup_root/data" "$data_root"
+
+install -m 0644 "$new_release/deploy/systemd/biunivers-runtime.service" \
+  "$unit_root/biunivers-runtime.service"
+install -m 0644 "$new_release/deploy/systemd/biunivers-host.service" \
+  "$unit_root/biunivers-host.service"
+mkdir -p "$command_root"
+install -m 0755 "$new_release/deploy/bin/biunivers-update" "$command_root/biunivers-update"
+printf 'BIUNIVERS_VERSION=%q\n' "$version" > "$release_record"
+printf 'BIUNIVERS_HOST_IMAGE=%q\n' "$host_reference" >> "$release_record"
+printf 'BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE=%q\n' "$diagnostic_reference" >> "$release_record"
+chmod 0640 "$release_record"
+ln -sfn "releases/$version" "$opt_root/current.update"
+mv -Tf "$opt_root/current.update" "$current_link"
+
+if [[ "$test_mode" != true ]]; then
+  systemctl daemon-reload
+  systemctl start biunivers-runtime.service
+  systemctl start biunivers-host.service
+fi
+
+healthy=false
+if [[ "$test_mode" == true ]]; then
+  [[ "${BIUNIVERS_UPDATE_TEST_HEALTH:-success}" == success ]] && healthy=true
+else
+  for _ in $(seq 1 60); do
+    if curl --fail --silent "http://127.0.0.1:$desktop_port/health" >/dev/null && \
+      curl --fail --silent -H 'Sec-Fetch-Site: same-origin' \
+        "http://127.0.0.1:$desktop_port/api/v1/control/file-service" | \
+        grep -q '"mode":"ready"'; then
+      healthy=true
+      break
+    fi
+    sleep 1
+  done
+fi
+[[ "$healthy" == true ]] || { echo "New version failed its health gate." >&2; false; }
+
+transaction_started=false
+trap - ERR INT TERM
+printf '%s\n' "COMMITTED" > "$backup_root/result"
+echo "Biunivers updated from $old_version to $version."
+echo "Pre-update state is retained at $backup_root/data."

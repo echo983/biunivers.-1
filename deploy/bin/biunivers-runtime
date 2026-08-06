@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly INSTALL_ROOT="${BIUNIVERS_INSTALL_ROOT:-/opt/biunivers}"
+readonly CONFIG_ROOT="${BIUNIVERS_CONFIG_ROOT:-/etc/biunivers}"
+readonly STATE_ROOT="${BIUNIVERS_STATE_ROOT:-/var/lib/biunivers}"
+readonly CACHE_ROOT="${BIUNIVERS_CACHE_ROOT:-/var/cache/biunivers}"
+readonly RUN_ROOT="${BIUNIVERS_RUN_ROOT:-/run/biunivers}"
+readonly TOKEN_FILE="$CONFIG_ROOT/runtime-token"
+readonly RELEASE_FILE="$CONFIG_ROOT/release"
+
+if [[ ! -r "$TOKEN_FILE" ]]; then
+  echo "Biunivers Runtime token is missing or unreadable: $TOKEN_FILE" >&2
+  exit 1
+fi
+if [[ ! -r "$RELEASE_FILE" ]]; then
+  echo "Biunivers release record is missing: $RELEASE_FILE" >&2
+  exit 1
+fi
+
+# The installer owns this shell-format file. Values are validated again below.
+# shellcheck disable=SC1090
+source "$RELEASE_FILE"
+: "${BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE:?BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE is missing from $RELEASE_FILE}"
+if [[ ! "$BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE" =~ ^ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}$ ]]; then
+  echo "BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE must be an immutable GHCR sha256 reference." >&2
+  exit 1
+fi
+
+token="$(tr -d '[:space:]' < "$TOKEN_FILE")"
+if [[ ! "$token" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "Biunivers Runtime token must contain 64 lowercase hexadecimal characters." >&2
+  exit 1
+fi
+
+export BIUNIVERS_DATA_DIR="${BIUNIVERS_DATA_DIR:-$STATE_ROOT/data}"
+export BIUNIVERS_FILE_INITIALIZE="${BIUNIVERS_FILE_INITIALIZE:-false}"
+export BIUNIVERS_BWA_ENABLED="${BIUNIVERS_BWA_ENABLED:-true}"
+export BIUNIVERS_RUNTIME_ROOT="${BIUNIVERS_RUNTIME_ROOT:-$STATE_ROOT/runtime/runs}"
+export BIUNIVERS_RUNTIME_CACHE="${BIUNIVERS_RUNTIME_CACHE:-$CACHE_ROOT/chunks}"
+export BIUNIVERS_RUNTIME_SOCKET="${BIUNIVERS_RUNTIME_SOCKET:-$RUN_ROOT/runtime.sock}"
+export BIUNIVERS_RUNTIME_AUTH_TOKEN="$token"
+export BIUNIVERS_PVLOGFS_BINARY="$INSTALL_ROOT/current/bin/biunivers-pvlogfs"
+export BIUNIVERS_WORKSPACE_COW_SCANNER_BINARY="$INSTALL_ROOT/current/bin/biunivers-workspace-cow-scan"
+export BIUNIVERS_DIAGNOSTIC_EXECUTOR_IMAGE
+
+exec "$INSTALL_ROOT/current/node/bin/node" \
+  "$INSTALL_ROOT/current/app/dist/server/computeRuntime/computeRuntimeCli.js"

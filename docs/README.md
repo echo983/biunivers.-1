@@ -198,6 +198,20 @@ Static App Protocol v1 的安装校验要求第三方仓库携带逐字一致的
 | [BWA 默认环境与 Workspace 内容补充设计](<design/BWA 默认环境与 Workspace 内容补充.md>) | 已完成 | 最小继承模型、secret 分域、固定 Run 环境、双 Ref CAS 和非目标 |
 | [BWA 默认环境与 Workspace 内容补充验收](<acceptance/BWA 默认环境与 Workspace 内容补充验收.md>) | 已通过 | 真实界面、Codex 模型覆盖、递归目录、自动改名、权限和并发保护 |
 
+## V0.16：Debian 单机部署
+
+发布候选版本：`v0.16.0`。代码、Release 构建器、安装器、systemd、更新事务和 KVM 夹具已
+完成；Debian 12/13 基线已通过，正式安装验收等待首次 GHCR/GitHub Release 资产。
+
+| 文档 | 状态 | 内容 |
+| --- | --- | --- |
+| [V0.16 Debian 单机部署设计](<design/Biunivers V0.16 Debian 单机部署设计.md>) | 发布候选 | 支持范围、目录布局、systemd 拓扑、Release 资产、安装、更新和失败回滚边界 |
+| [Debian 单机安装](<runbooks/Debian 单机安装.md>) | 发布候选手册 | 本地 Release 构建、配置、安装、systemd 管理、诊断和隔离 staging 验证 |
+| [GitHub Stable Release](<runbooks/GitHub Stable Release.md>) | 发布候选手册 | tag 门禁、双 GHCR 镜像、Debian 12 Runtime、匿名拉取、Release 资产与失败重跑 |
+| [Debian 更新与失败回滚](<runbooks/Debian 更新与失败回滚.md>) | 发布候选手册 | 稳定版解析、离线 data 副本、原子切换、两级健康门禁和失败状态恢复 |
+| [Debian KVM 部署验收](<runbooks/Debian KVM 部署验收.md>) | KVM 基线通过 | 官方 Debian 12/13 cloud image、KVM、干净安装、权限检查与 reboot 恢复 |
+| [V0.16 Debian 部署验收计划](<acceptance/V0.16 Debian 部署验收计划.md>) | 发布候选评审完成 | 已通过自动门禁和仍需真实证明的安装、FUSE、更新及回滚项目 |
+
 ## 第三方应用生态 V1：发布候选
 
 | 文档 | 状态 | 内容 |

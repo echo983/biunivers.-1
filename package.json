@@ -1,7 +1,7 @@
 {
   "name": "biunivers",
   "private": true,
-  "version": "0.15.0",
+  "version": "0.16.0",
   "type": "module",
   "engines": {
     "node": ">=24 <25"
@@ -16,6 +16,12 @@
     "test:pvlog": "cargo test --manifest-path crates/pvlog-core/Cargo.toml && node scripts/verify-pvlog-vectors.mjs",
     "build:pvlog-wasm": "wasm-pack build crates/pvlog-core --target nodejs --out-dir ../../generated/pvlog-core-wasm",
     "test:e2e": "playwright test",
+    "test:debian-release": "bash scripts/verify-debian-release.sh",
+    "test:debian-installer": "bash scripts/verify-debian-installer.sh",
+    "test:debian-updater": "bash scripts/verify-debian-updater.sh",
+    "test:debian-vm-harness": "bash scripts/verify-debian-vm-harness.sh",
+    "test:release-workflow": "bash scripts/verify-release-workflow.sh",
+    "build:debian-release": "bash scripts/build-debian-release.sh",
     "preview": "vite preview",
     "start": "node dist/server/index.js",
     "start:compute-runtime": "node dist/server/computeRuntime/computeRuntimeCli.js"

@@ -1,0 +1,29 @@
+[Unit]
+Description=Biunivers Compute Runtime
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60s
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=biunivers
+Group=biunivers
+SupplementaryGroups=docker
+EnvironmentFile=/etc/biunivers/biunivers.env
+ExecStart=/opt/biunivers/current/deploy/bin/biunivers-runtime
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+RuntimeDirectory=biunivers
+RuntimeDirectoryMode=0700
+UMask=0077
+# Do not add PrivateMounts, ProtectSystem, ProtectHome, PrivateTmp or
+# NoNewPrivileges here.
+# PVLogFS mounts must remain visible to the host Docker daemon, and fusermount3
+# may need its installed privilege transition. Compute Runtime is the trusted
+# execution boundary; the Host container remains unprivileged.
+
+[Install]
+WantedBy=multi-user.target
