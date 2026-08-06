@@ -8,4 +8,5 @@ test-results/
 *.log
 target/
 /secret/
+/release/
 .DS_Store
