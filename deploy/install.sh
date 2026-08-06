@@ -351,7 +351,7 @@ if [[ ! -e "$database" ]]; then
   mkdir -p "$(dirname "$database")"
   chown -R biunivers:biunivers "$(dirname "$database")"
   chmod 0755 "$(dirname "$database")"
-  if ! runuser -u biunivers -- env HOME="$state_root" TMPDIR=/tmp \
+  if ! runuser -u biunivers -- env HOME="$state_root" TMPDIR=/tmp BIUNIVERS_DATA_DIR="$state_root/data" \
     "$release_target/node/bin/node" \
     --env-file="$config_root/biunivers.env" \
     "$release_target/app/dist/server/files/fileServiceGenesisCli.js"; then
@@ -360,7 +360,7 @@ if [[ ! -e "$database" ]]; then
     exit 1
   fi
 else
-  if ! runuser -u biunivers -- env HOME="$state_root" TMPDIR=/tmp \
+  if ! runuser -u biunivers -- env HOME="$state_root" TMPDIR=/tmp BIUNIVERS_DATA_DIR="$state_root/data" \
     "$release_target/node/bin/node" \
     --env-file="$config_root/biunivers.env" \
     "$release_target/app/dist/server/files/fileServiceVerifyCli.js"; then

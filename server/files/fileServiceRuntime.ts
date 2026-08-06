@@ -165,13 +165,7 @@ function errorCode(error: unknown): string {
 }
 
 function safeMessage(error: unknown): string {
-  const code = errorCode(error);
-  if (
-    error instanceof Error &&
-    ["REFSTORE_MISSING", "REFSTORE_CORRUPT", "REF_ALREADY_EXISTS"].includes(
-      code,
-    )
-  ) {
+  if (error instanceof Error && error.message) {
     return error.message;
   }
   return "File Service storage validation failed.";
