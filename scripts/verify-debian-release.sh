@@ -21,6 +21,9 @@ bash -n deploy/bin/biunivers-update
 bash -n deploy/install.sh
 bash -n scripts/build-debian-release.sh
 
+grep -Fq 'fileServiceVerifyCli.js' deploy/install.sh
+grep -Fq 'A complete Biunivers environment file is required' deploy/install.sh
+
 grep -q '^User=biunivers$' deploy/systemd/biunivers-runtime.service
 grep -q '^User=biunivers$' deploy/systemd/biunivers-host.service
 grep -q '^Requires=biunivers-runtime.service$' deploy/systemd/biunivers-host.service

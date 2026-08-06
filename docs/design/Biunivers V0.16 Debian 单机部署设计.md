@@ -155,18 +155,21 @@ digest。诊断执行器也是 Compute Runtime 的必需依赖，不能留给部
 4. 下载指定稳定版本的 Runtime 包和校验文件并验证 SHA-256；
 5. 拉取 Host 与诊断执行器 tag、核对两个 digest；
 6. 创建系统用户、目录、令牌和 systemd unit；
-7. 若用户传入 `--env-file`，校验权限后安装为 `biunivers.env`；否则生成不含真实 secret 的模板，
-   明确提示填写后再启动；
-8. 新数据目录在服务启动前执行一次显式 genesis 初始化，完成后固定改回
-   `BIUNIVERS_FILE_INITIALIZE=false`；已有 RefStore 不得再次初始化；
+7. 正式安装必须传入完整 `--env-file`，或复用系统中已经存在的 `biunivers.env`；缺少配置时
+   在修改系统前失败，只有 `--stage-only` 可以生成占位模板；
+8. 新数据目录在服务启动前执行一次显式 genesis 初始化，以真实 create-only 对象完成 S3
+   写入和回读验证；已有 RefStore 不得再次初始化，而是读取并以 `If-None-Match: *` 条件重申
+   当前 HEAD，在不新增对象的前提下验证当前凭据同时具备读写权限；
 9. 执行 `systemctl daemon-reload`，启动两个服务；
 10. 等待 `/health` 和 File Service 状态；失败时输出对应 `journalctl` 命令并返回非零。
 
 默认只监听 loopback，避免一个没有入口访问控制的桌面被意外暴露到公网。部署者完成反向代理、
 HTTPS 和访问控制后，才按配置扩大监听范围。
 
-安装器不通过写入测试对象探测 S3。Host 的真实只读初始化与 File Service 状态已经能发现多数
-配置和读取故障；永久写入探测不是首版高必要项目。
+安装器不写入随机探测垃圾。首次 genesis 写入的都是 File Service 的正式不可变对象，它同时
+承担 S3 写权限、条件创建和回读验证；已有 RefStore 的重装只验证其当前状态，不产生新对象。
+因此“安装成功”必须等价于 File Service `ready` 且 `writable: true`，不能交付只能显示桌面的
+半功能状态。
 
 ## 7. 更新与失败回滚
 

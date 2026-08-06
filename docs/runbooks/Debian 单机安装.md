@@ -53,12 +53,15 @@ sudo bash deploy/install.sh \
 2. 安装 Docker、FUSE 和必要工具；
 3. 验证 Runtime checksum、Release 元数据和两个 OCI digest；
 4. 创建 `biunivers` 系统用户及标准目录；
-5. 对空数据目录执行一次 create-only File Service genesis；
+5. 对空数据目录执行一次 create-only File Service genesis，真实验证 S3 写入与回读；
+   已有 RefStore 则读取并条件重申当前 HEAD，以无新增对象方式验证读写权限；
 6. 安装并启动 Host、Compute Runtime systemd 服务；
 7. 检查 `/health` 与 File Service `ready`。
 
-未传 `--env-file` 时，安装器只安装程序并生成 `/etc/biunivers/biunivers.env` 模板，不会用占位
-凭据初始化。编辑模板后，使用相同版本重新执行安装器即可继续；同一不可变版本的续装是幂等的。
+正式安装未传 `--env-file` 且系统中没有既有配置时，安装器会在修改系统前直接拒绝执行。
+`--stage-only` 隔离验证仍会生成模板，但不会联网或启动服务。同一不可变版本的续装是幂等的。
+S3/genesis 验证失败时安装器返回非零、不启动服务，并提示检查 endpoint、bucket、prefix、
+namespace 以及 `GetObject`、`PutObject` 权限。
 如果已有另一个活动版本，安装器会拒绝覆盖，必须走后续的 `biunivers-update` 更新事务。
 
 ## 管理与诊断

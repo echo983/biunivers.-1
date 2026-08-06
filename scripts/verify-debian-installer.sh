@@ -30,6 +30,7 @@ cp "$(command -v node)" "$fixture/node/bin/node"
 cp -a deploy/. "$fixture/deploy/"
 touch \
   "$fixture/app/dist/server/files/fileServiceGenesisCli.js" \
+  "$fixture/app/dist/server/files/fileServiceVerifyCli.js" \
   "$fixture/bin/biunivers-pvlogfs" \
   "$fixture/bin/biunivers-workspace-cow-scan"
 chmod 0755 "$fixture/node/bin/node" "$fixture/bin/"*

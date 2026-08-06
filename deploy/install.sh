@@ -13,7 +13,7 @@ usage() {
     "Usage: biunivers-install --version vMAJOR.MINOR.PATCH [options]" \
     "" \
     "Options:" \
-    "  --env-file PATH       Install an existing Biunivers environment file." \
+    "  --env-file PATH       Complete environment file; required for a fresh install." \
     "  --release-dir PATH    Use already downloaded Release assets." \
     "  --repository OWNER/REPO  GitHub repository (default: $repository)." \
     "  --root PATH           Alternate root; only valid with --stage-only." \
@@ -79,6 +79,12 @@ if [[ "$install_root" != "/" && "$stage_only" != true ]]; then
 fi
 if [[ -n "$environment_source" && ! -f "$environment_source" ]]; then
   echo "Environment file does not exist: $environment_source" >&2
+  exit 2
+fi
+if [[ "$stage_only" != true && -z "$environment_source" && \
+  ! -f /etc/biunivers/biunivers.env ]]; then
+  echo "A complete Biunivers environment file is required for installation." >&2
+  echo "Pass it with: --env-file /path/to/biunivers.env" >&2
   exit 2
 fi
 if [[ -n "$offline_release_dir" && ! -d "$offline_release_dir" ]]; then
@@ -192,6 +198,7 @@ for required in \
   release.json \
   node/bin/node \
   app/dist/server/files/fileServiceGenesisCli.js \
+  app/dist/server/files/fileServiceVerifyCli.js \
   bin/biunivers-pvlogfs \
   bin/biunivers-workspace-cow-scan \
   deploy/bin/biunivers-runtime \
@@ -279,13 +286,10 @@ mv -Tf "$opt_root/current.new" "$opt_root/current"
 if [[ -n "$environment_source" ]]; then
   install -m 0640 "$environment_source" "$config_root/biunivers.env"
 elif [[ ! -e "$config_root/biunivers.env" ]]; then
+  # Only isolated --stage-only verification reaches this branch.
   install -m 0640 "$release_target/deploy/biunivers.env.example" \
     "$config_root/biunivers.env"
-  environment_created=true
-else
-  environment_created=false
 fi
-: "${environment_created:=false}"
 
 if [[ ! -e "$config_root/runtime-token" ]]; then
   if command -v openssl >/dev/null; then
@@ -332,17 +336,25 @@ fi
 
 database="$state_root/data/file-service/file-service.sqlite"
 if [[ ! -e "$database" ]]; then
-  if [[ "$environment_created" == true ]]; then
-    echo "Biunivers files were installed, but configuration still contains placeholders."
-    echo "Edit /etc/biunivers/biunivers.env, then rerun this installer with the same version."
-    exit 0
-  fi
   mkdir -p "$(dirname "$database")"
   chown biunivers:biunivers "$(dirname "$database")"
-  runuser -u biunivers -- \
+  if ! runuser -u biunivers -- \
     "$release_target/node/bin/node" \
     --env-file="$config_root/biunivers.env" \
-    "$release_target/app/dist/server/files/fileServiceGenesisCli.js"
+    "$release_target/app/dist/server/files/fileServiceGenesisCli.js"; then
+    echo "S3/File Service initialization failed." >&2
+    echo "Check endpoint, bucket, prefix, namespace and GetObject/PutObject permissions." >&2
+    exit 1
+  fi
+else
+  if ! runuser -u biunivers -- \
+    "$release_target/node/bin/node" \
+    --env-file="$config_root/biunivers.env" \
+    "$release_target/app/dist/server/files/fileServiceVerifyCli.js"; then
+    echo "Existing RefStore or its S3 objects could not be verified." >&2
+    echo "No service was started; check the S3 configuration and storage availability." >&2
+    exit 1
+  fi
 fi
 
 systemctl daemon-reload
