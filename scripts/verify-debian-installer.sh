@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-grep -Fq 'BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers}' deploy/install.sh
+grep -Fq 'BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers.-1}' deploy/install.sh
 
 for command in node tar zstd sha256sum; do
   command -v "$command" >/dev/null || { echo "Missing verification command: $command" >&2; exit 1; }

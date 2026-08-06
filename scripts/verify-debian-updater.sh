@@ -3,7 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-grep -Fq 'BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers}' deploy/bin/biunivers-update
+grep -Fq 'BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers.-1}' deploy/bin/biunivers-update
 
 test_root="$(mktemp -d)"
 trap 'rm -rf -- "$test_root"' EXIT

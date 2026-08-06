@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repository="${BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers}"
+repository="${BIUNIVERS_GITHUB_REPOSITORY:-echo983/biunivers.-1}"
 version=""
 environment_source=""
 offline_release_dir=""
