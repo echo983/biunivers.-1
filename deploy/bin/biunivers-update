@@ -90,6 +90,27 @@ root_path() {
   fi
 }
 
+# Parse one variable from /etc/biunivers/biunivers.env. This mirrors the simple
+# dotenv subset used by Node --env-file: comments only count at line start,
+# values may contain # characters, and surrounding whitespace/quotes are stripped.
+read_env_value() {
+  local file="$1" key="$2" default="${3:-}" line value
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n 1)" || true
+  value="${line#*=}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    value="${value:1:-1}"
+  elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+    value="${value:1:-1}"
+  fi
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "$default"
+  else
+    printf '%s\n' "$value"
+  fi
+}
+
 opt_root="$(root_path /opt/biunivers)"
 config_root="$(root_path /etc/biunivers)"
 state_root="$(root_path /var/lib/biunivers)"
@@ -102,12 +123,18 @@ data_root="$state_root/data"
 for required in "$release_record" "$config_root/biunivers.env" "$config_root/runtime-token"; do
   [[ -r "$required" ]] || { echo "Installed Biunivers state is incomplete: $required" >&2; exit 1; }
 done
-desktop_port="$(awk -F= '$1 == "BIUNIVERS_DESKTOP_PORT" { print $2 }' "$config_root/biunivers.env" | tail -n 1)"
-: "${desktop_port:=8080}"
-if [[ ! "$desktop_port" =~ ^[0-9]+$ ]] || (( desktop_port < 1 || desktop_port > 65535 )); then
-  echo "BIUNIVERS_DESKTOP_PORT must be an integer from 1 to 65535." >&2
-  exit 1
-fi
+desktop_port="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_DESKTOP_PORT 8090)"
+app_port="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_APP_PORT 8091)"
+desktop_bind="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_DESKTOP_BIND 127.0.0.1)"
+app_bind="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_APP_BIND 127.0.0.1)"
+for key_port in "BIUNIVERS_DESKTOP_PORT:$desktop_port" "BIUNIVERS_APP_PORT:$app_port"; do
+  key="${key_port%%:*}"
+  port="${key_port#*:}"
+  if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    echo "$key must be an integer from 1 to 65535." >&2
+    exit 1
+  fi
+done
 if [[ ! -L "$current_link" ]]; then
   echo "Biunivers current release link is missing or not a symlink." >&2
   exit 1
@@ -395,9 +422,10 @@ if [[ "$test_mode" == true ]]; then
   [[ "${BIUNIVERS_UPDATE_TEST_HEALTH:-success}" == success ]] && healthy=true
 else
   for _ in $(seq 1 60); do
-    if curl --fail --silent "http://127.0.0.1:$desktop_port/health" >/dev/null && \
+    if curl --fail --silent "http://$desktop_bind:$desktop_port/health" >/dev/null && \
+      curl --fail --silent "http://$app_bind:$app_port/health" >/dev/null && \
       curl --fail --silent -H 'Sec-Fetch-Site: same-origin' \
-        "http://127.0.0.1:$desktop_port/api/v1/control/file-service" | \
+        "http://$desktop_bind:$desktop_port/api/v1/control/file-service" | \
         grep -q '"mode":"ready"'; then
       healthy=true
       break

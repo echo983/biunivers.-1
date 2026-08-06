@@ -101,6 +101,41 @@ root_path() {
   fi
 }
 
+# Parse the last occurrence of KEY=value from /etc/biunivers/biunivers.env.
+# This intentionally mirrors the simple dotenv subset used by Node --env-file
+# and docker run --env-file: comments only count when the line starts with #,
+# values may contain # characters, and surrounding whitespace/quotes are stripped.
+read_env_value() {
+  local file="$1" key="$2" default="${3:-}" line value
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n 1)" || true
+  value="${line#*=}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    value="${value:1:-1}"
+  elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+    value="${value:1:-1}"
+  fi
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "$default"
+  else
+    printf '%s\n' "$value"
+  fi
+}
+
+# Return 0 when something is already listening on the given TCP port.
+is_port_in_use() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -H -ln "sport = :$port" 2>/dev/null | grep -q .
+  elif command -v netstat >/dev/null 2>&1; then
+    netstat -ln 2>/dev/null | grep -Eq ":${port}[[:space:]]"
+  else
+    # No tool available to verify; assume free so the install can proceed.
+    return 1
+  fi
+}
+
 opt_root="$(root_path /opt/biunivers)"
 config_root="$(root_path /etc/biunivers)"
 state_root="$(root_path /var/lib/biunivers)"
@@ -315,6 +350,19 @@ if [[ ! -e "$config_root/runtime-token" ]]; then
 fi
 chmod 0640 "$config_root/biunivers.env" "$config_root/runtime-token"
 
+desktop_port="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_DESKTOP_PORT 8090)"
+app_port="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_APP_PORT 8091)"
+desktop_bind="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_DESKTOP_BIND 127.0.0.1)"
+app_bind="$(read_env_value "$config_root/biunivers.env" BIUNIVERS_APP_BIND 127.0.0.1)"
+for key_port in "BIUNIVERS_DESKTOP_PORT:$desktop_port" "BIUNIVERS_APP_PORT:$app_port"; do
+  key="${key_port%%:*}"
+  port="${key_port#*:}"
+  if [[ ! "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+    echo "$key must be an integer from 1 to 65535." >&2
+    exit 1
+  fi
+done
+
 release_record="$config_root/release"
 umask 077
 printf 'BIUNIVERS_VERSION=%q\n' "$version" > "$release_record"
@@ -384,23 +432,28 @@ if ! docker network inspect biunivers-bwa >/dev/null 2>&1; then
     biunivers-bwa
 fi
 
+for key_port in "BIUNIVERS_DESKTOP_PORT:$desktop_port" "BIUNIVERS_APP_PORT:$app_port"; do
+  key="${key_port%%:*}"
+  port="${key_port#*:}"
+  if is_port_in_use "$port"; then
+    echo "$key=$port is already in use on this machine." >&2
+    echo "Edit $config_root/biunivers.env and choose a free port, then re-run the installer." >&2
+    exit 1
+  fi
+done
+
 systemctl daemon-reload
 systemctl enable biunivers-host.service >/dev/null
 systemctl stop biunivers-host.service >/dev/null 2>&1 || true
 systemctl restart biunivers-runtime.service
 systemctl start biunivers-host.service
 
-desktop_port="$(awk -F= '$1 == "BIUNIVERS_DESKTOP_PORT" { print $2 }' "$config_root/biunivers.env" | tail -n 1)"
-: "${desktop_port:=8080}"
-if [[ ! "$desktop_port" =~ ^[0-9]+$ ]] || (( desktop_port < 1 || desktop_port > 65535 )); then
-  echo "BIUNIVERS_DESKTOP_PORT must be an integer from 1 to 65535." >&2
-  exit 1
-fi
 healthy=false
 for _ in $(seq 1 60); do
-  if curl --fail --silent "http://127.0.0.1:$desktop_port/health" >/dev/null && \
+  if curl --fail --silent "http://$desktop_bind:$desktop_port/health" >/dev/null && \
+    curl --fail --silent "http://$app_bind:$app_port/health" >/dev/null && \
     curl --fail --silent -H 'Sec-Fetch-Site: same-origin' \
-      "http://127.0.0.1:$desktop_port/api/v1/control/file-service" | \
+      "http://$desktop_bind:$desktop_port/api/v1/control/file-service" | \
       grep -q '"mode":"ready"'; then
     healthy=true
     break
@@ -413,4 +466,4 @@ if [[ "$healthy" != true ]]; then
   exit 1
 fi
 
-echo "Biunivers $version is running on 127.0.0.1:$desktop_port."
+echo "Biunivers $version is running on $desktop_bind:$desktop_port (desktop) and $app_bind:$app_port (app)."

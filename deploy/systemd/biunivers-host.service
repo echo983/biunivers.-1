@@ -8,7 +8,8 @@ Type=simple
 User=biunivers
 Group=biunivers
 SupplementaryGroups=docker
-EnvironmentFile=/etc/biunivers/biunivers.env
+# The Host wrapper reads /etc/biunivers/biunivers.env itself. Avoid systemd
+# EnvironmentFile because its comment/quoting rules differ from Node and Docker.
 ExecStart=/opt/biunivers/current/deploy/bin/biunivers-host
 ExecStop=-/usr/bin/docker stop --time 20 biunivers-host
 Restart=on-failure

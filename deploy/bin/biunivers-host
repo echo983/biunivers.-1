@@ -4,9 +4,30 @@ set -euo pipefail
 readonly CONFIG_ROOT="${BIUNIVERS_CONFIG_ROOT:-/etc/biunivers}"
 readonly STATE_ROOT="${BIUNIVERS_STATE_ROOT:-/var/lib/biunivers}"
 readonly RUN_ROOT="${BIUNIVERS_RUN_ROOT:-/run/biunivers}"
+readonly ENV_FILE="$CONFIG_ROOT/biunivers.env"
 readonly RELEASE_FILE="$CONFIG_ROOT/release"
 readonly TOKEN_FILE="$CONFIG_ROOT/runtime-token"
 readonly CONTAINER_NAME="${BIUNIVERS_HOST_CONTAINER_NAME:-biunivers-host}"
+
+# Parse one variable from the dotenv file. This keeps the Host wrapper independent
+# of systemd EnvironmentFile parsing, which differs from Node and Docker dotenv rules.
+read_env_value() {
+  local file="$1" key="$2" default="${3:-}" line value
+  line="$(grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n 1)" || true
+  value="${line#*=}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  if [[ "${value:0:1}" == '"' && "${value: -1}" == '"' ]]; then
+    value="${value:1:-1}"
+  elif [[ "${value:0:1}" == "'" && "${value: -1}" == "'" ]]; then
+    value="${value:1:-1}"
+  fi
+  if [[ -z "$value" ]]; then
+    printf '%s\n' "$default"
+  else
+    printf '%s\n' "$value"
+  fi
+}
 
 if [[ ! -r "$RELEASE_FILE" ]]; then
   echo "Biunivers release record is missing: $RELEASE_FILE" >&2
@@ -32,10 +53,10 @@ if [[ ! "$token" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-desktop_bind="${BIUNIVERS_DESKTOP_BIND:-127.0.0.1}"
-app_bind="${BIUNIVERS_APP_BIND:-127.0.0.1}"
-desktop_port="${BIUNIVERS_DESKTOP_PORT:-8080}"
-app_port="${BIUNIVERS_APP_PORT:-8081}"
+desktop_bind="${BIUNIVERS_DESKTOP_BIND:-"$(read_env_value "$ENV_FILE" BIUNIVERS_DESKTOP_BIND 127.0.0.1)"}"
+app_bind="${BIUNIVERS_APP_BIND:-"$(read_env_value "$ENV_FILE" BIUNIVERS_APP_BIND 127.0.0.1)"}"
+desktop_port="${BIUNIVERS_DESKTOP_PORT:-"$(read_env_value "$ENV_FILE" BIUNIVERS_DESKTOP_PORT 8090)"}"
+app_port="${BIUNIVERS_APP_PORT:-"$(read_env_value "$ENV_FILE" BIUNIVERS_APP_PORT 8091)"}"
 runtime_socket="${BIUNIVERS_RUNTIME_SOCKET:-$RUN_ROOT/runtime.sock}"
 data_dir="${BIUNIVERS_DATA_DIR:-$STATE_ROOT/data}"
 
